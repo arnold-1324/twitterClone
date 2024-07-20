@@ -1,6 +1,7 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import multer from 'multer';
-import dotenv from "dotenv"
+import dotenv from "dotenv";
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -18,6 +19,8 @@ export const s3 = new S3Client({
     secretAccessKey: secretAccessKey
   }
 });
+
+export const generateFileName = (bytes=32) => crypto.randomBytes(bytes).toString('hex')
 
 
 

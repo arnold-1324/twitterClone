@@ -3,8 +3,8 @@ import Notification from "../models/notification.model.js";
 import bcrypt from "bcryptjs";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { s3 } from "../lib/utils/uploader.js";
-import crypto from 'crypto';
+import { s3,generateFileName } from "../lib/utils/uploader.js";
+
 
 
 
@@ -107,12 +107,11 @@ export const getSuggestedUser=async(req,res)=>{
     }
 }
 
-const generateFileName = (bytes=32) => crypto.randomBytes(bytes).toString('hex')
+
 
 export const UpdateUserProfile = async (req, res) => {
     try {
       const { fullName, username, email, currentPassword, newPassword, bio } = req.body;
-      const profileImg = req.file ? req.file.location : null;
       const userId = req.user._id;
        
       const user = await User.findById(userId);
@@ -136,7 +135,7 @@ export const UpdateUserProfile = async (req, res) => {
         user.password = await bcrypt.hash(newPassword, salt);
       }
        const fileName = generateFileName();
-      const params = {
+       const params = {
         Bucket: process.env.BUCKET_NAME,
         Key: fileName,
         Body:req.file.buffer,

@@ -15,6 +15,13 @@ password:{
     required:true,
     minLength:6,
 },
+resetPasswordToken: {
+    type: String,
+    default: '', 
+  },
+  resetPasswordExpires: {
+    type: Date
+  },
 email:{
     type:String,
     required:true,

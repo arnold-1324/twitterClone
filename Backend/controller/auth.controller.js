@@ -1,11 +1,11 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import nodemailer from 'nodemailer';
 import { generateTokenAndCookies } from "../lib/utils/generateToken.js";
 
 export const signUp=async(req,res)=>{
   try {
-
-   
     const {fullName,username,email,password}=req.body;
  
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -103,6 +103,84 @@ export const Logout= async(req,res)=>{
 
   }
 }
+
+
+export const PasswordRest= async(req,res)=>{
+    try {
+      
+      const { email } =req.body;
+      const user=await User.findOne({email});
+      if(!user) return res.status(400).json({error:"User not found"});
+
+      const token = (bytes=32)=> crypto.randomBytes(bytes).toString('hex');
+      user.resetPasswordToken = token;
+      user.resetPasswordExpires = Date.now() + 3600000;
+
+      await user.save();
+      
+      const transpoter = nodemailer.createTransport({
+        service:"Gmail",
+        auth:{
+          user:process.env.EMAILID,
+          pass:process.env.EMAILIDPASS
+        },
+      });
+
+      const mailOptions = {
+        to: user.email,
+        from: process.env.EMAILID,
+        subject: 'Password Reset',
+        text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n
+              Please click on the following link, or paste this into your browser to complete the process:\n\n
+              http://${req.headers.host}/reset/${token}\n\n
+              If you did not request this, please ignore this email and your password will remain unchanged.\n`,
+      };
+
+      transpoter.sendMail(mailOptions, (err) => {
+        if (err) {
+          return res.status(500).send('Error sending email');
+        }
+        res.status(200).send('Recovery email sent');
+      });
+
+ } catch (error) {
+  console.log("Error in passwordrest controller",error.message);
+    res.status(500).json({error:"Internal Server Error"});
+ }
+}
+
+export const UpdatePassword = async(req,res)=>{
+ try{
+
+  const user = await User.findOne({
+    resetPasswordToken: req.params.token,
+    resetPasswordExpires: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    return res.status(400).send('Password reset token is invalid or has expired.');
+  }
+
+  const {password} =req.body;
+  const salt = await bcrypt.getSalt(10);
+  const hashedPassword = await bcrypt.hash(password,salt);
+
+  user.password = hashedPassword;
+  user.resetPasswordToken = "";
+  user.resetPasswordExpires = undefined;
+
+  await user.save();
+  return  res.status(200).send('Password has been reset');
+
+ }catch(error){
+  console.log("Error in updatePassword controller",error.message);
+  res.status(500).json({error:"Internal Server Error"});
+
+ }
+}
+
+
+
 
 export const getUser=async(req,res)=>{
 

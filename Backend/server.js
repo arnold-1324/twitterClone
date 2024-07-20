@@ -6,6 +6,7 @@ import multer from "multer";
 
 import AuthRoutes from "./routers/auth.routers.js";
 import UserRoutes from "./routers/user.routers.js";
+import PostRouters from "./routers/post.routers.js";
 import connectmongoDB from "./DB/ConnectMongodb.js";
 
 dotenv.config();
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended:true}));
 
 app.use("/api/auth",AuthRoutes);
 app.use("/api/users",UserRoutes);
+app.use("/api/posts",PostRouters);
 
 
 
