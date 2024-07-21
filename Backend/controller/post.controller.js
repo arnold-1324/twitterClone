@@ -1,6 +1,9 @@
 import { s3, generateFileName } from "../lib/utils/uploader.js"
-import { PutObjectCommand } from "@aws-sdk/client-s3";
 import Post from "../models/post.model.js";
+import User from "../models/user.model.js";
+import Notification from "../models/notification.model.js"
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 
 export const NewPost = async(req,res)=>{
@@ -35,46 +38,97 @@ export const NewPost = async(req,res)=>{
     }
 }
 
-export const likePost = async(req,res)=>{
-    try {
-        const { postId } = req.params;
-    
-        
-        const post = await Post.findByIdAndUpdate(
-          postId,
-          { $inc: { likes: 1 } },
-          { new: true }
-        );
-    
-        if (!post) {
-          return res.status(404).json({ message: 'Post not found' });
-        }
-    
-        res.status(200).json(post);
-      } catch (error) {
-        res.status(500).json({ message: error.message });
-        console.log("Error in likePost:", error.message);
-      }
-}
+export const likePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user._id;
 
-export const addReply = async(req,res)=>{
-    try {
-        const { postId } = req.params;
-    const { userId, text, userProfileImg, username } = req.body;
+    // Find the post by ID
+    const post = await Post.findById(postId);
 
-    if (!userId || !text) {
-      return res.status(400).json({ message: 'User ID and text are required.' });
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
     }
 
-    
+    // Check if the user has already liked the post
+    const isLiked = post.likes.includes(userId);
+
+    if (isLiked) {
+      // If already liked, remove the like
+      await Post.findByIdAndUpdate(
+        postId,
+        { $pull: { likes: userId } },
+        { new: true }
+      );
+      res.status(200).json({ message: 'Post unliked successfully' });
+    } else {
+      // If not liked, add the like
+      await Post.findByIdAndUpdate(
+        postId,
+        { $push: { likes: userId } },
+        { new: true }
+      );
+
+      // Optionally, create a notification for the post owner
+      const newNotification = new Notification({
+        type: 'like',
+        from: userId,
+        to: post.postedBy,
+        postId: post._id,
+      });
+      await newNotification.save();
+
+      res.status(200).json({ message: 'Post liked successfully' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+    console.log('Error in likePost:', error.message);
+  }
+};
+
+export const addReply = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { text } = req.body;
+    const userId = req.user._id;
+
+    // Validate the required fields
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID required.' });
+    }
+    if (!text) {
+      return res.status(400).json({ message: 'Text required.' });
+    }
+
+    // Fetch the user with selected fields
+    const user = await User.findById(userId).select('profileImg username');
+   
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get the signed URL for the user's profile image
+    const getObjectParams = {
+      Bucket: process.env.BUCKET_NAME,
+      Key: user.profileImg,
+    };
+    const command = new GetObjectCommand(getObjectParams);
+    const profileImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+
+    // Find the post by ID and add the new reply
     const post = await Post.findByIdAndUpdate(
       postId,
       {
         $push: {
-          replies: { userId, text, userProfileImg, username },
-        },
+          replies: {
+            userId,
+            text,
+            ProfileImg: profileImgUrl,
+            username: user.username
+          }
+        }
       },
-      { new: true }
+      { new: true, runValidators: true } // Return the updated document
     );
 
     if (!post) {
@@ -82,11 +136,11 @@ export const addReply = async(req,res)=>{
     }
 
     res.status(200).json(post);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-        console.log("Error in addReply:", error.message);
-    }
-}
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+    console.log("Error in addReply:", error.message);
+  }
+};
 
 export const EditPost = async(req,res)=>{
    

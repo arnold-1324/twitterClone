@@ -1,7 +1,10 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { s3 } from '../lib/utils/uploader.js'
 import nodemailer from 'nodemailer';
+import { generateFileName } from "../lib/utils/uploader.js";
 import { generateTokenAndCookies } from "../lib/utils/generateToken.js";
 
 export const signUp=async(req,res)=>{
@@ -112,7 +115,8 @@ export const PasswordRest= async(req,res)=>{
       const user=await User.findOne({email});
       if(!user) return res.status(400).json({error:"User not found"});
 
-      const token = (bytes=32)=> crypto.randomBytes(bytes).toString('hex');
+     const token = generateFileName();
+      
       user.resetPasswordToken = token;
       user.resetPasswordExpires = Date.now() + 3600000;
 
@@ -136,12 +140,8 @@ export const PasswordRest= async(req,res)=>{
               If you did not request this, please ignore this email and your password will remain unchanged.\n`,
       };
 
-      transpoter.sendMail(mailOptions, (err) => {
-        if (err) {
-          return res.status(500).send('Error sending email');
-        }
-        res.status(200).send('Recovery email sent');
-      });
+      transpoter.sendMail(mailOptions);
+      res.status(200).send('Recovery email sent');
 
  } catch (error) {
   console.log("Error in passwordrest controller",error.message);
@@ -186,6 +186,13 @@ export const getUser=async(req,res)=>{
 
   try{
     const user= await User.findById(req.user._id).select("-password");
+    const getObjectParams = {
+      Bucket: process.env.BUCKET_NAME,
+      Key: user.profileImg,
+     } 
+     const command = new GetObjectCommand(getObjectParams);
+     const url = await getSignedUrl(s3,command, { expiresIn: 3600 });
+     user.profileImg=url;
     res.status(200).json(user);
   }catch(error){
      console.log("Error in getUser controller",error.message);

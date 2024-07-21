@@ -17,10 +17,11 @@ password:{
 },
 resetPasswordToken: {
     type: String,
-    default: '', 
+    default: '',
   },
   resetPasswordExpires: {
-    type: Date
+    type: Date,
+    default: Date.now,
   },
 email:{
     type:String,
