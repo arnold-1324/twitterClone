@@ -8,7 +8,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export const NewPost = async(req,res)=>{
     try {
-        const { text } = req.body;
+        const { caption } = req.body;
         const userId = req.user._id;
         const fileName = generateFileName();
         const params = {
@@ -23,7 +23,7 @@ export const NewPost = async(req,res)=>{
 
         const newPost= new Post ({
             postedBy:userId,
-            text,
+            caption,
             img:fileName
         })
         if(newPost){
@@ -88,59 +88,65 @@ export const likePost = async (req, res) => {
 
 export const addReply = async (req, res) => {
   try {
+    
+    const { comment } = req.body;
     const { postId } = req.params;
-    const { text } = req.body;
     const userId = req.user._id;
 
-    // Validate the required fields
+    
     if (!userId) {
       return res.status(400).json({ message: 'User ID required.' });
     }
-    if (!text) {
-      return res.status(400).json({ message: 'Text required.' });
+    if (!comment) {
+      return res.status(400).json({ message: 'Comment required.' });
     }
 
-    // Fetch the user with selected fields
     const user = await User.findById(userId).select('profileImg username');
-   
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Get the signed URL for the user's profile image
-    const getObjectParams = {
-      Bucket: process.env.BUCKET_NAME,
-      Key: user.profileImg,
-    };
-    const command = new GetObjectCommand(getObjectParams);
-    const profileImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+  
+    const profileImg = user.profileImg;
+    console.log(profileImg);
 
-    // Find the post by ID and add the new reply
+  
     const post = await Post.findByIdAndUpdate(
       postId,
       {
         $push: {
           replies: {
             userId,
-            text,
-            ProfileImg: profileImgUrl,
-            username: user.username
-          }
-        }
+            comment,
+            ProfileImg: profileImg, 
+            username: user.username,
+          },
+        },
       },
-      { new: true, runValidators: true } // Return the updated document
+      { new: true } 
     );
 
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-
+    let profileImgUrl="";
+    if(profileImg!=""){
+      const getObjectParams = {
+        Bucket: process.env.BUCKET_NAME,
+        Key: user.profileImg,
+      };
+      const command = new GetObjectCommand(getObjectParams);
+       profileImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    }
+    post.replies[post.replies.length - 1].ProfileImg =profileImgUrl;
+   
     res.status(200).json(post);
   } catch (error) {
     res.status(500).json({ message: error.message });
-    console.log("Error in addReply:", error.message);
+    console.error("Error in addReply:", error.message);
   }
 };
+
 
 export const EditPost = async(req,res)=>{
    

@@ -6,7 +6,7 @@ const postSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
       },
-      text: {
+      caption: {
         type: String,
         maxLength: 280,
       },
@@ -27,12 +27,13 @@ const postSchema = new mongoose.Schema({
           ref: 'User',
           required: true,
         },
-        text: {
+        comment: {
           type: String,
           required: true,
         },
         ProfileImg: {
           type: String,
+          default:"",
         },
         username: {
           type: String,
