@@ -1,8 +1,8 @@
-import { s3, generateFileName } from "../lib/utils/uploader.js"
+import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
-import Notification from "../models/notification.model.js"
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import Notification from "../models/notification.model.js";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 
@@ -43,33 +43,19 @@ export const likePost = async (req, res) => {
     const { postId } = req.params;
     const userId = req.user._id;
 
-    // Find the post by ID
+    
     const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
 
-    if (!post) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
-
-    // Check if the user has already liked the post
+    
     const isLiked = post.likes.includes(userId);
-
     if (isLiked) {
-      // If already liked, remove the like
-      await Post.findByIdAndUpdate(
-        postId,
-        { $pull: { likes: userId } },
-        { new: true }
-      );
+      await Post.findByIdAndUpdate(postId, { $pull: { likes: userId } }, { new: true });
       res.status(200).json({ message: 'Post unliked successfully' });
     } else {
-      // If not liked, add the like
-      await Post.findByIdAndUpdate(
-        postId,
-        { $push: { likes: userId } },
-        { new: true }
-      );
-
-      // Optionally, create a notification for the post owner
+      await Post.findByIdAndUpdate(postId, { $push: { likes: userId } }, { new: true });
+      
+      
       const newNotification = new Notification({
         type: 'like',
         from: userId,
@@ -82,9 +68,10 @@ export const likePost = async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
-    console.log('Error in likePost:', error.message);
+    console.error('Error in likePost:', error.message);
   }
 };
+
 
 export const addReply = async (req, res) => {
   try {
