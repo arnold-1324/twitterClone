@@ -2,8 +2,9 @@ import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import mongoose from "mongoose";
 
 
 export const NewPost = async(req,res)=>{
@@ -24,7 +25,7 @@ export const NewPost = async(req,res)=>{
         const newPost= new Post ({
             postedBy:userId,
             caption,
-            img:fileName
+            images:fileName
         })
         if(newPost){
          
@@ -135,36 +136,143 @@ export const addReply = async (req, res) => {
 };
 
 
-export const EditPost = async(req,res)=>{
-   
-    try {
-        const { postId } = req.params;
-        const userId = req.user._id;
-        const { text } = req.body; 
+export const EditPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user._id;
+    const { caption } = req.body;
+    const newFile = req.file;
+
     
-       
-        const post = await Post.findById(postId);
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
     
-        
-        if (!post) {
-          return res.status(404).json({ message: 'Post not found' });
-        }
-    
-        
-        if (post.postedBy.toString() !== userId.toString()) {
-          return res.status(403).json({ error: "You can't edit others' posts" });
-        }
-    
-        
-        post.text = text || post.text;
-        post.img = img || post.img;
-    
-        
-        const updatedPost = await post.save();
-    
-        res.status(200).json(updatedPost);
-      } catch (error) {
-        res.status(500).json({ message: error.message });
+    if (post.postedBy.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "You can't edit others' posts" });
+    }
+
+    let newFileName = post.images;
+
+    if (newFile) {
+      
+      if (post.images) {
+        const deleteParams = {
+          Bucket: process.env.BUCKET_NAME,
+          Key: post.images,
+        };
+        console.log("Deleting file from S3 with Key:", deleteParams.Key);
+        const deleteCommand = new DeleteObjectCommand(deleteParams);
+        await s3.send(deleteCommand);
       }
+
+      
+      newFileName = generateFileName();
+      if (!newFileName) {
+        throw new Error('Failed to generate a new file name for S3 upload.');
+      }
+      const uploadParams = {
+        Bucket: process.env.BUCKET_NAME,
+        Key: newFileName,
+        Body: newFile.buffer,
+        ContentType: newFile.mimetype,
+      };
+      console.log("Uploading new file to S3 with Key:", uploadParams.Key);
+      const uploadCommand = new PutObjectCommand(uploadParams);
+      await s3.send(uploadCommand);
+    }
+
+  
+    post.caption = caption || post.caption;
+    post.images = newFileName;
+
+   
+    const updatedPost = await post.save();
+    let updatedPostImg = "";
+
+    if (updatedPost) {
+      
+      if (updatedPost.images) {
+        const getObjectParams = {
+          Bucket: process.env.BUCKET_NAME,
+          Key: updatedPost.images,
+        };
+        console.log("Generating signed URL for S3 object with Key:", getObjectParams.Key);
+        const command = new GetObjectCommand(getObjectParams);
+        updatedPostImg = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      }
+    }
+
+    updatedPost.images = updatedPostImg;
+    res.status(200).json(updatedPost);
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+    console.error('Error in EditPost:', error);
+  }
+};
+
+export const DeletePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user._id;
+
+   
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    if (post.postedBy.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "You can't delete others' posts" });
+    }
+
+    if (!post.images) {
+      return res.status(400).json({ error: "No image found for the post" });
+    }
+
     
-}
+    const deleteParams = {
+      Bucket: process.env.BUCKET_NAME,
+      Key: post.images, 
+    };
+
+    console.log('Deleting file from S3 with Key:', deleteParams.Key);
+    const deleteCommand = new DeleteObjectCommand(deleteParams);
+    await s3.send(deleteCommand);
+
+
+    await Post.findByIdAndDelete(postId);
+
+    return res.status(200).json({ message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+
+
+
+// export const deletePostsCollection = async (req, res) => {
+//   try {
+    
+//     const collectionExists = await mongoose.connection.db
+//       .listCollections({ name: Post.collection.collectionName })
+//       .hasNext();
+
+//     if (!collectionExists) {
+//       return res.status(404).json({ message: 'Posts collection does not exist' });
+//     }
+
+//     await Post.collection.drop();
+
+//     return res.status(200).json({ message: 'Posts collection deleted successfully' });
+//   } catch (error) {
+//     console.error('Error deleting posts collection:', error);
+//     return res.status(500).json({ error: 'Internal server error' });
+//   }
+// };
