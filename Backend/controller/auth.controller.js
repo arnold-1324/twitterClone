@@ -1,17 +1,20 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from '../lib/utils/uploader.js'
-import nodemailer from 'nodemailer';
-import { generateFileName } from "../lib/utils/uploader.js";
 import { generateTokenAndCookies } from "../lib/utils/generateToken.js";
+import { sendResetPasswordEmail, sendVerificationEmail,sendWelcomeEmail,sendPasswordResetSuccessEmail } from "../lib/utils/Mailtrap/email.js"
+
 
 export const signUp=async(req,res)=>{
   try {
-    const {fullName,username,email,password}=req.body;
+    const {fullName,username,email,password,confirmPassword}=req.body;
  
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+    if(password!=confirmPassword)return res.status(400).json({ Error:"Password doest match"});
 
     if(!emailRegex.test(email)){
         return res.status(400).json({ Error:"Invalid email format"});
@@ -30,27 +33,28 @@ export const signUp=async(req,res)=>{
 
     const salt= await bcrypt.genSalt(10);
     const hashedPassword= await bcrypt.hash(password,salt);
-
+    const verificationToken = Math.floor(100000+ Math.random()*900000).toString();
     const newUser= new User({
         fullName,
         username,
         email,
-        password:hashedPassword
+        password:hashedPassword,
+        verificationToken,
+        verificationTokenExpiresAt:Date.now()+24*60*60*1000
     })
 
     if(newUser){
       generateTokenAndCookies(newUser._id,res);
-      await newUser.save();
+      await newUser.save();  //saving user data to database
 
+      await sendVerificationEmail(newUser.email,verificationToken);  //sending email to the user for verification
       res.status(201).json({
-        _id:newUser._id,
-        fullName: newUser.fullName,
-        username:newUser.username,
-        email:newUser.email,
-        followers: newUser.followers,
-        following:newUser.following,
-        profileImg:newUser.profileImg,
-        coverImg:newUser.coverImg,
+        sucess:true,
+        message: "User created sucessfully",
+        user:{
+          ...newUser._doc,
+          password:undefined,
+        },
 
       })
     }else{
@@ -108,77 +112,112 @@ export const Logout= async(req,res)=>{
 }
 
 
-export const PasswordRest= async(req,res)=>{
-    try {
-      
-      const { email } =req.body;
-      const user=await User.findOne({email});
-      if(!user) return res.status(400).json({error:"User not found"});
+export const verifyEmail = async(req,res)=>{
+ const { code } = req.body;
+ try{
+const user = await User.findOne({
+  verificationToken:code,
+  verificationTokenExpiresAt: { $gt:Date.now()}
+})
 
-     const token = generateFileName();
-      
-      user.resetPasswordToken = token;
-      user.resetPasswordExpires = Date.now() + 3600000;
+if(!user){
+  return res.status(400).json({sucess:false,message:"Invalid or expired verification code"})
+}
+user.isVerfied = true;
+user.verificationToken=undefined;
+user.verificationTokenExpiresAt=undefined;
+await user.save();
 
-      await user.save();
-      
-      const transpoter = nodemailer.createTransport({
-        service:"Gmail",
-        auth:{
-          user:process.env.EMAILID,
-          pass:process.env.EMAILIDPASS
-        },
-      });
-
-      const mailOptions = {
-        to: user.email,
-        from: process.env.EMAILID,
-        subject: 'Password Reset',
-        text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n
-              Please click on the following link, or paste this into your browser to complete the process:\n\n
-              http://${req.headers.host}/reset/${token}\n\n
-              If you did not request this, please ignore this email and your password will remain unchanged.\n`,
-      };
-
-      transpoter.sendMail(mailOptions);
-      res.status(200).send('Recovery email sent');
-
- } catch (error) {
-  console.log("Error in passwordrest controller",error.message);
-    res.status(500).json({error:"Internal Server Error"});
- }
+await sendWelcomeEmail(user.email,user.fullName);
+res.status(200).json({
+  success:true,
+  message:"Email verified successfully",
+  user:{
+    ...user._doc,
+    password:undefined,
+  },
+})
+ }catch(error){
+  console.log("Error in verifyEmail controller",error.message);
+  res.status(500).json({error:"Internal Server Error"});
+ } 
 }
 
-export const UpdatePassword = async(req,res)=>{
- try{
+export const forgotPassword = async(req,res)=>{
+  const { email } = req.body;
+  try{
+    const user = await User.findOne({email});
+    if(!user){
+      return res.status(400).json({ success:true, message:"User not found"});
+    }
 
-  const user = await User.findOne({
-    resetPasswordToken: req.params.token,
-    resetPasswordExpires: { $gt: Date.now() },
+    const resetToken = crypto.randomBytes(20).toString("hex");
+    const resetTokenExpiresAt=Date.now() + 1*60*60*1000;
+
+    user.resetPasswordToken=resetToken;
+    user.resetPasswordExpires=resetTokenExpiresAt;
+
+    await user.save();
+    await sendResetPasswordEmail(user.email,`${process.env.CLIENT_URL}reset-password/${resetToken}`);
+
+    res.status(200).json({ sucess:true,message:"Password reset link send to your email",
+      user:{
+        ...user._doc,
+        password:undefined,
+      },
   });
 
-  if (!user) {
-    return res.status(400).send('Password reset token is invalid or has expired.');
-  }
-
-  const {password} =req.body;
-  const salt = await bcrypt.getSalt(10);
-  const hashedPassword = await bcrypt.hash(password,salt);
-
-  user.password = hashedPassword;
-  user.resetPasswordToken = "";
-  user.resetPasswordExpires = undefined;
-
-  await user.save();
-  return  res.status(200).send('Password has been reset');
-
- }catch(error){
-  console.log("Error in updatePassword controller",error.message);
+  }catch(error){
+    console.log("Error in forgotPassword controller",error.message);
   res.status(500).json({error:"Internal Server Error"});
-
- }
+  }
 }
 
+export const ResetPassword = async (req, res) => {
+  const { resetToken } = req.params;
+  const { password, confirmPassword } = req.body;
+
+  try {
+    
+    if (password !== confirmPassword) {
+      return res.status(400).json({ success: false, error: "Passwords do not match" });
+    }
+
+
+    const user = await User.findOne({
+      resetPasswordToken: resetToken,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: "Invalid or expired reset token" });
+    }
+
+
+    const salt = await bcrypt.genSalt(10);
+    const NewhashedPassword = await bcrypt.hash(password, salt);
+
+  
+    user.password = NewhashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+
+    await user.save();
+
+
+    await sendPasswordResetSuccessEmail(user.email);
+
+   
+    return res.status(200).json({ success: true, message: "Password has been reset successfully" });
+
+  } catch (error) {
+
+    console.log("Error in ResetPassword controller", error.message);
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
 
 
 

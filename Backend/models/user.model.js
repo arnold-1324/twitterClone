@@ -15,14 +15,19 @@ password:{
     required:true,
     minLength:6,
 },
-resetPasswordToken: {
-    type: String,
-    default: '',
-  },
-  resetPasswordExpires: {
-    type: Date,
-    default: Date.now,
-  },
+lastLogin:{
+    type:Date,
+    default:Date.now
+},
+isVerfied:{
+    type:Boolean,
+    default:false
+},
+resetPasswordToken: String,
+resetPasswordExpires: Date,
+verificationToken: String,
+verificationTokenExpiresAt: Date,
+
 email:{
     type:String,
     required:true,
