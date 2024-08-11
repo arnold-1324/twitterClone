@@ -5,48 +5,60 @@ const postSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
-      },
-      caption: {
+    },
+    caption: {
         type: String,
         maxLength: 280,
-      },
-      images: {
+    },
+    images: [{
         type: String,
-      },
-      likes: [{
+    }],
+    likes: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-      }],
-      retweets: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      }],
-      replies: [{
+    }],
+    retweets: [{
         userId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'User',
-          required: true,
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true,
         },
         comment: {
-          type: String,
-          required: true,
+            type: String,
+            default: "",
         },
-        ProfileImg: {
-          type: String,
-          default:"",
+        createdAt: {
+            type: Date,
+            default: Date.now,
+        },
+    }],
+    replies: [{
+        userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true,
+        },
+        comment: {
+            type: String,
+            required: true,
+        },
+        profileImg: {
+            type: String,
+            default: "",
         },
         username: {
-          type: String,
+            type: String,
+            required: true,
         },
-      }],
-      createdAt: {
-        type: Date,
-        default: Date.now,
-      },
-    }, {
-      timestamps: true,
-    });
-    
- const Post = mongoose.model('Post',postSchema);
+        createdAt: {
+            type: Date,
+            default: Date.now,
+        },
+    }],
+}, {
+    timestamps: true,
+});
 
- export default Post;
+const Post = mongoose.model('Post', postSchema);
+
+export default Post;
