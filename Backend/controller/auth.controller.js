@@ -45,9 +45,9 @@ export const signUp=async(req,res)=>{
 
     if(newUser){
       generateTokenAndCookies(newUser._id,res);
-      await newUser.save();  //saving user data to database
+      await newUser.save();  
+      await sendVerificationEmail(newUser.email,verificationToken);  
 
-      await sendVerificationEmail(newUser.email,verificationToken);  //sending email to the user for verification
       res.status(201).json({
         sucess:true,
         message: "User created sucessfully",
@@ -80,16 +80,15 @@ try{
 
     generateTokenAndCookies(user._id,res);
 
-    res.status(200).json({
-        _id: user._id,
-        fullName: user.fullName,
-        username: user.username,
-        email:user.email,
-        followers: user.followers,
-        following:user.following,
-        profileImg:user.profileImg,
-        coverImg:user.coverImg,
-    });
+    res.status(201).json({
+      sucess:true,
+      message: "User created sucessfully",
+      user:{
+        ...user._doc,
+        password:undefined,
+      },
+
+    })
 
 }catch(error){
     console.log("Error in login controller",error.message);
