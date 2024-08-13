@@ -257,22 +257,26 @@ export const DeletePost = async (req, res) => {
 
 
 
-// export const deletePostsCollection = async (req, res) => {
-//   try {
+export const deletePostsUsersCollection = async (req, res) => {
+  try {
     
-//     const collectionExists = await mongoose.connection.db
-//       .listCollections({ name: Post.collection.collectionName })
-//       .hasNext();
+    const collectionExists = await mongoose.connection.db
+      .listCollections({ name: Post.collection.collectionName })
+      .hasNext();
 
-//     if (!collectionExists) {
-//       return res.status(404).json({ message: 'Posts collection does not exist' });
-//     }
+      
 
-//     await Post.collection.drop();
+    if (!collectionExists) {
+      return res.status(404).json({ message: 'Posts collection does not exist' });
+    }
 
-//     return res.status(200).json({ message: 'Posts collection deleted successfully' });
-//   } catch (error) {
-//     console.error('Error deleting posts collection:', error);
-//     return res.status(500).json({ error: 'Internal server error' });
-//   }
-// };
+    await Post.collection.drop();
+    await User.collection.drop();
+    await Notification.collection.drop();
+
+    return res.status(200).json({ message: 'Postsand User  collection were deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting posts collection:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
