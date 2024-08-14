@@ -17,21 +17,20 @@ const postSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
     }],
-    retweets: [{
-        userId: {
+    retweetData: {
+        isRetweet: {
+            type: Boolean,
+            default: false,
+        },
+        originalPost: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
+            ref: 'Post',
         },
         comment: {
             type: String,
-            default: "",
+            maxLength: 280,
         },
-        createdAt: {
-            type: Date,
-            default: Date.now,
-        },
-    }],
+    },
     replies: [{
         userId: {
             type: mongoose.Schema.Types.ObjectId,
