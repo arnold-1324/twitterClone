@@ -49,13 +49,7 @@ const userSchema = new mongoose.Schema({
             default: [],
         }
     ],
-    followRequests: [
-        {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          default: [],
-        }
-      ],
+
 
     profileImg: {
         type: String,
@@ -67,21 +61,10 @@ const userSchema = new mongoose.Schema({
         default: "",
     },
 
-    accountPrivacy: {
-        type: String,
-        enum: ["public", "private"],
-        default: "public",
-    },
+ 
 
-    isAccountFrozen: {
-        type: Boolean,
-        default: false,
-    },
-
-    accountFreezeUntil: {
-        type: Date,
-        default: null,
-    },
+  
+  
 
 }, { timestamps: true });
 

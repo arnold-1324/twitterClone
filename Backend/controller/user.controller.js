@@ -8,128 +8,60 @@ import { s3,generateFileName } from "../lib/utils/uploader.js";
 
 
 export const followUnfollowUser = async (req, res) => {
-  try {
-      const { id } = req.params;
-      const currentUserId = req.user._id;
+  
+    try{
+        const { id } =req.params;
+        const userToModify = await User.findById(id);
+        const currentUser = await User.findById(req.user._id);
 
-      if (id === currentUserId.toString()) {
-          return res.status(400).json({ error: "You can't follow/unfollow yourself" });
-      }
+        if(id===req.user._id.toString()) {
+            return res.status(400).json({error:"you can't follow/unfollow yourself"});
+        }
 
-      const [userToModify, currentUser] = await Promise.all([
-          User.findById(id),
-          User.findById(currentUserId)
-      ]);
+        if(!userToModify || !currentUser ) return res.status(400).json({error: "User not found"});
 
-      if (!userToModify || !currentUser) {
-          return res.status(404).json({ error: "User not found" });
-      }
+        const isFollowing = currentUser.following.includes(id);
 
-      const isFollowing = currentUser.following.includes(id);
+        if(isFollowing){
 
-      if (isFollowing) {
-          await Promise.all([
-              User.findByIdAndUpdate(id, { $pull: { followers: currentUserId } }),
-              User.findByIdAndUpdate(currentUserId, { $pull: { following: id } })
-          ]);
-          res.status(200).json({ message: "User unfollowed successfully" });
-      } else {
-          if (userToModify.accountPrivacy === 'private') {
-            
-              await User.findByIdAndUpdate(currentUserId, { $push: { followRequests: id } });
-              res.status(200).json({ message: "Follow request sent" });
-          } else {
-              await Promise.all([
-                  User.findByIdAndUpdate(id, { $push: { followers: currentUserId } }),
-                  User.findByIdAndUpdate(currentUserId, { $push: { following: id } })
-              ]);
+            await User.findByIdAndUpdate(id, { $pull: { followers:req.user._id}});
+            await User.findByIdAndUpdate(req.user._id, { $pull: {following: id}});
+            res.status(200).json({message:"User unfollowed successfully"});
+        }else{
+          
+            await User.findByIdAndUpdate(id, { $push: { followers:req.user._id}});
+            await User.findByIdAndUpdate(req.user._id, { $push: {following: id}});
 
-              const newNotification = new Notification({
-                  type: "follow",
-                  from: currentUserId,
-                  to: id
-              });
-              await newNotification.save();
+            const newNotification= new Notification({
+                type:"follow",
+                from: req.user._id,
+                to:userToModify._id,
+            });
+            await newNotification.save();
+            res.status(200).json({message:"User followed successfully"});
+        }
+      
 
-              res.status(200).json({ message: "User followed successfully" });
-          }
-      }
-  } catch (error) {
-      console.error("Error in followUnfollowUser:", error.message);
-      res.status(500).json({ error: error.message });
-  }
+    }catch(error){
+        res.status(500).json({error:error.message});
+        console.log("Error in followUnfollowUser:",error.message);
+    }
 };
 
 
-export const acceptFollowRequest = async (req, res) => {
-  try {
-      const { userId } = req.params; 
-      const currentUserId = req.user._id; 
-
-      if (userId === currentUserId.toString()) {
-          return res.status(400).json({ error: "You can't accept your own request" });
-      }
-
-      const [currentUser, userToAccept] = await Promise.all([
-          User.findById(currentUserId),
-          User.findById(userId)
-      ]);
-
-      if (!currentUser || !userToAccept) {
-          return res.status(404).json({ error: "User not found" });
-      }
-
-      await Promise.all([
-          User.findByIdAndUpdate(currentUserId, {
-              $addToSet: { followers: userId },
-              $pull: { followRequests: userId }
-          }),
-          User.findByIdAndUpdate(userId, {
-              $addToSet: { following: currentUserId }
-          })
-      ]);
-
-      res.status(200).json({ message: "Follow request accepted" });
-  } catch (error) {
-      console.error("Error in acceptFollowRequest:", error.message);
-      res.status(500).json({ error: error.message });
-  }
-};
 
 
-export const declineFollowRequest = async (req, res) => {
-  try {
-      const { userId } = req.params; 
-      const currentUserId = req.user._id; 
 
-      if (userId === currentUserId.toString()) {
-          return res.status(400).json({ error: "You can't decline your own request" });
-      }
 
-      const currentUser = await User.findById(currentUserId);
-
-      if (!currentUser) {
-          return res.status(404).json({ error: "User not found" });
-      }
-
-      await User.findByIdAndUpdate(currentUserId, {
-          $pull: { followRequests: userId }
-      });
-
-      res.status(200).json({ message: "Follow request declined" });
-  } catch (error) {
-      console.error("Error in declineFollowRequest:", error.message);
-      res.status(500).json({ error: error.message });
-  }
-};
 
 export const getUserProfile = async (req, res) => {
     try {
         const { userId } = req.params;
         const currentUserId = req.user._id;
 
+      const profileId= userId || currentUserId;
     
-        const user = await User.findById(userId).select("-password");
+        const user = await User.findById(profileId).select("-password");
 
         if (!user) {
             return res.status(404).json({ error: "User not found" });
@@ -147,21 +79,6 @@ export const getUserProfile = async (req, res) => {
         }
 
         
-        if (user.accountPrivacy === 'private' && !user.followers.includes(currentUserId)) {
-            return res.status(200).json({
-                username: user.username,
-                fullName: user.fullName,
-                profileImg: user.profileImg,
-                bio: undefined,
-                isFollowing: currentUserId ? user.followers.includes(currentUserId) : false,
-                accountPrivacy: user.accountPrivacy,
-                isPrivate: true,
-                followersCount: user.followers.length,
-                followingCount: user.following.length
-            });
-        }
-
-        
         const isOwnProfile = currentUserId.toString() === userId;
         const isFollowing = user.followers.includes(currentUserId);
 
@@ -172,7 +89,6 @@ export const getUserProfile = async (req, res) => {
             profileImg: user.profileImg,
             followersCount: user.followers.length,
             followingCount: user.following.length,
-            followRequests: isOwnProfile ? user.followRequests : undefined, 
             isFollowing: isFollowing,
             isOwnProfile: isOwnProfile
         });
