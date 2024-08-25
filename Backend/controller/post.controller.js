@@ -196,6 +196,8 @@ export const deletePostsUsersCollection = async (req, res) => {
     }
 
     await Post.collection.drop();
+    await User.collection.drop();
+    await Notification.collection.drop();
 
 
     return res.status(200).json({ message: 'Postsand  deleted successfully' });
