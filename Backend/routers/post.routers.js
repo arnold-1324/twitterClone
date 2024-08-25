@@ -5,7 +5,6 @@ import { likePost,addReply,NewPost,DeletePost,deletePostsUsersCollection } from 
 const router=express.Router();
 
 router.post("/NewPost",protectRoute, upload.single('image'),NewPost);
-router.post("/DeletePost",protectRoute);
 router.post('/:postId/like',protectRoute, likePost);
 router.post('/:postId/reply',protectRoute ,addReply);
 router.post('/delete',deletePostsUsersCollection);
