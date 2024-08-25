@@ -45,8 +45,8 @@ export const signUp=async(req,res)=>{
 
     if(newUser){
       generateTokenAndCookies(newUser._id,res);
+      //await sendVerificationEmail(newUser.email,verificationToken);  
       await newUser.save();  
-      await sendVerificationEmail(newUser.email,verificationToken);  
 
       res.status(201).json({
         sucess:true,
@@ -122,7 +122,7 @@ const user = await User.findOne({
 if(!user){
   return res.status(400).json({sucess:false,message:"Invalid or expired verification code"})
 }
-user.isVerfied = true;
+user.isVerified = true;
 user.verificationToken=undefined;
 user.verificationTokenExpiresAt=undefined;
 await user.save();
@@ -220,21 +220,3 @@ export const ResetPassword = async (req, res) => {
 
 
 
-export const getUser=async(req,res)=>{
-
-  try{
-    const user= await User.findById(req.user._id).select("-password");
-    const getObjectParams = {
-      Bucket: process.env.BUCKET_NAME,
-      Key: user.profileImg,
-     } 
-     const command = new GetObjectCommand(getObjectParams);
-     const url = await getSignedUrl(s3,command, { expiresIn: 3600 });
-     user.profileImg=url;
-    res.status(200).json(user);
-  }catch(error){
-     console.log("Error in getUser controller",error.message);
-    res.status(500).json({error:"Internal Server Error"});
-
-  }
-}
