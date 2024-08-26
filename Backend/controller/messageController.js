@@ -115,6 +115,39 @@ export const getMessages = async (req, res) => {
     }
 };
 
+export const getConversation = async (req, res) => {
+    const userId = req.user._id;
+
+    try {
+        const conversations = await Conversation.find({ participants: userId })
+            .populate({
+                path: "participants",
+                select: "username profilePic",
+                match: { _id: { $ne: userId } }
+            })
+            .sort({ updatedAt: -1 });
+
+        for (const conversation of conversations) {
+            const otherParticipant = conversation.participants.find(p => p._id.toString() !== userId.toString());
+
+            if (otherParticipant?.profilePic) {
+                const profilePicParams = {
+                    Bucket: process.env.BUCKET_NAME,
+                    Key: otherParticipant.profilePic,
+                };
+                const profilePicCommand = new GetObjectCommand(profilePicParams);
+                otherParticipant.profilePic = await getSignedUrl(s3, profilePicCommand, { expiresIn: 3600 });
+            }
+
+            conversation.lastMessage = conversation.lastMessage || {};
+        }
+
+        res.status(200).json(conversations);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+        console.log("Error in getConversation:", error.message);
+    }
+};
 
 export const editMessage = async (req, res) => {
     const { messageId, newText } = req.body;
