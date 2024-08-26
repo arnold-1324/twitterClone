@@ -18,6 +18,4 @@ router.post("/reset-password/:resetToken",ResetPassword)
 
 
 
-
-
 export default router;
