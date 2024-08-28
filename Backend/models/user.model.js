@@ -49,7 +49,10 @@ const userSchema = new mongoose.Schema({
             default: [],
         }
     ],
-
+    isFrozen: {
+        type: Boolean,
+        default: false,
+    },
 
     profileImg: {
         type: String,

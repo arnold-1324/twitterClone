@@ -5,6 +5,8 @@ import Notification from "../models/notification.model.js";
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import mongoose from "mongoose";
+import Message from "../models/message.model.js";
+import Conversation from "../models/conversation.model.js";
 
 
 export const NewPost = async(req,res)=>{
@@ -30,6 +32,13 @@ export const NewPost = async(req,res)=>{
         if(newPost){
          
           await newPost.save();
+          const getObjectParams = {
+            Bucket: process.env.BUCKET_NAME,
+            Key: newPost.images,
+          };
+          const command = new GetObjectCommand(getObjectParams);
+          const postImg = await getSignedUrl(s3, command, { expiresIn: 3600 });
+          newPost.images = postImg;
           res.status(201).json(newPost);
         }
 
@@ -135,9 +144,6 @@ export const addReply = async (req, res) => {
   }
 };
 
-
-
-
 export const DeletePost = async (req, res) => {
   try {
     const { postId } = req.params;
@@ -179,9 +185,6 @@ export const DeletePost = async (req, res) => {
 };
 
 
-
-
-
 export const deletePostsUsersCollection = async (req, res) => {
   try {
     
@@ -198,11 +201,107 @@ export const deletePostsUsersCollection = async (req, res) => {
     await Post.collection.drop();
     await User.collection.drop();
     await Notification.collection.drop();
+    await Message.collection.drop();
+    await Conversation.collection.drop();
 
 
-    return res.status(200).json({ message: 'Postsand  deleted successfully' });
+    return res.status(200).json({ message: 'Posts,user,notification,msg,Convo  deleted successfully' });
   } catch (error) {
     console.error('Error deleting posts collection:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const getPost = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id).populate('replies.user'); // Assuming 'replies.user' is how you reference replied users
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+ 
+    const getObjectParams = {
+      Bucket: process.env.BUCKET_NAME,
+      Key: post.images,
+    };
+    const command = new GetObjectCommand(getObjectParams);
+    const postImg = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    post.images = postImg;
+
+    for (const reply of post.replies) {
+      if (reply.user && reply.user.profileImage) {
+        const userProfileImgParams = {
+          Bucket: process.env.BUCKET_NAME,
+          Key: reply.user.profileImage,
+        };
+        const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
+        const profileImgUrl = await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 3600 });
+        reply.user.profileImage = profileImgUrl;
+      }
+    }
+
+    return res.status(200).json(post);
+
+  } catch (error) {
+    console.error('Error in getPost controller:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getFeedPosts = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const following = user.following;
+
+   
+    const feedPosts = await Post.find({ postedBy: { $in: following } }).sort({ createdAt: -1 });
+
+ 
+    for (let post of feedPosts) {
+      if (post.images) {
+        const getObjectParams = {
+          Bucket: process.env.BUCKET_NAME,
+          Key: post.images,
+        };
+        const command = new GetObjectCommand(getObjectParams);
+        const postImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+        post.images = postImgUrl;
+      }
+    }
+
+    res.status(200).json(feedPosts);
+  } catch (err) {
+    console.error('Error in getFeedPosts controller:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getUserPosts = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const user = await User.findById(userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const userPosts = await Post.find({ postedBy: userId }).sort({ createdAt: -1 });
+    for (let post of userPosts) {
+      if (post.images) {
+        const getObjectParams = {
+          Bucket: process.env.BUCKET_NAME,
+          Key: post.images,
+        };
+        const command = new GetObjectCommand(getObjectParams);
+        const postImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+        post.images = postImgUrl;
+      }
+    }
+
+  }catch(error){
+    console.error('Error in getUserPosts controller:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
