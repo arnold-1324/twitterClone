@@ -126,16 +126,20 @@ export const addReply = async (req, res) => {
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-    let profileImgUrl="";
     if(profileImg!=""){
-      const getObjectParams = {
-        Bucket: process.env.BUCKET_NAME,
-        Key: user.profileImg,
-      };
-      const command = new GetObjectCommand(getObjectParams);
-       profileImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      for (const reply of post.replies) {
+        if (reply.user && reply.user.profileImage) {
+          const userProfileImgParams = {
+            Bucket: process.env.BUCKET_NAME,
+            Key: reply.user.profileImage,
+          };
+          const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
+          const profileImgUrl = await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 3600 });
+          reply.user.profileImage = profileImgUrl;
+        }
+      }
     }
-    post.replies[post.replies.length - 1].ProfileImg =profileImgUrl;
+    
    
     res.status(200).json(post);
   } catch (error) {
