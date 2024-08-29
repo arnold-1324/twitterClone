@@ -1,6 +1,7 @@
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
 import bcrypt from "bcryptjs";
+import Post from "../models/post.model.js"
 import { v2 as cloudinary } from "cloudinary";
 
 
@@ -115,61 +116,62 @@ export const getSuggestedUser=async(req,res)=>{
 
 
 
-export const UpdateUserProfile = async (req, res) => {
-    try {
-      const { fullName, username, email, currentPassword, newPassword, bio } = req.body;
-      let { profileImg } = req.body;
-      const userId = req.user._id;
-  
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-  
-      if (req.params.id && req.params.id !== userId.toString()) {
-        return res.status(400).json({ error: "You cannot update another user's profile" });
-      }
-  
-      if ((newPassword && !currentPassword) || (!newPassword && currentPassword)) {
-        return res.status(400).json({ error: "Please provide both current password and new password" });
-      }
-  
-      if (currentPassword && newPassword) {
-        const isMatch = await bcrypt.compare(currentPassword, user.password);
-        if (!isMatch) {
-          return res.status(400).json({ error: "Current password is incorrect" });
-        }
-        if (newPassword.length < 6) {
-          return res.status(400).json({ error: "Password must be at least 6 characters long" });
-        }
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(newPassword, salt);
-      }
-  
-        if(profileImg){
-          if(user.profileImg){
-            await cloudinary.uploader.destroy(user.profileImg.split("/").pop().split(".")[0]);
-          }
-          const uploadedNewProfileImg=await cloudinary.uploader.upload(profileImg);
-          profileImg=uploadedNewProfileImg.secure_url;
-          user.profileImg = profileImg;
-          console.log(profileImg);
-        }    
-  
- 
-  
-  
-      user.fullName = fullName || user.fullName;
-      user.username = username || user.username;
-      user.email = email || user.email;
-      user.bio = bio || user.bio;
-  
-      const updatedUser = await user.save();
+export const UpdateUserProfile = async (req, res) => { 
+ const { name, email, username, password, bio } = req.body;
+let { profileImg } = req.body;
+
+const userId = req.user._id;
+try {
+  let user = await User.findById(userId);
+  if (!user) return res.status(400).json({ error: "User not found" });
+console.log(bio);
+console.log(profileImg);
+  if (req.params.id !== userId.toString())
+    return res.status(400).json({ error: "You cannot update other user's profile" });
+
+  if (password) {
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    user.password = hashedPassword;
+  }
+    console.log(profileImg);
+  if (profileImg) {
+    if (user.profileImg) {
+      await cloudinary.uploader.destroy(user.profileImg.split("/").pop().split(".")[0]);
+    }
+
+    const uploadedResponse = await cloudinary.uploader.upload(profileImg);
+    profileImg = uploadedResponse.secure_url;
+  }
+
+  user.name = name || user.name;
+  user.email = email || user.email;
+  user.username = username || user.username;
+  user.profileImg = profileImg || user.profileImg;
+  user.bio = bio || user.bio;
+  console.log(bio);
+
+  user = await user.save();
 
   
-      return res.status(200).json(updatedUser);
-    } catch (error) {
-      console.error("Error in UpdateUserProfile:", error.message);
-      return res.status(500).json({ error: error.message });
-    }
+  await Post.updateMany(
+    { "replies.userId": userId },
+    {
+      $set: {
+        "replies.$[reply].username": user.username,
+        "replies.$[reply].profileImg": user.profileImg,
+      },
+    },
+    { arrayFilters: [{ "reply.userId": userId }] }
+  );
+
+  
+  user.password = null;
+
+  res.status(200).json(user);
+} catch (err) {
+  res.status(500).json({ error: err.message });
+  console.log("Error in updateUser: ", err.message);
+}
   };
+
