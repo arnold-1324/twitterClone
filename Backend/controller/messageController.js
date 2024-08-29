@@ -1,26 +1,19 @@
-import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import {v2 as cloudinary } from "cloudinary";
 import { getRecipientSocketId, io } from "../socket/socket.js";
 
 
 export const sendMessage = async (req, res) => {
     const { recipientId, message } = req.body;
     const senderId = req.user._id;
+    let fileUrl = req.body;
 
     try {
-        let fileUrl = "";
-        if (req.file) {
-            const params = {
-                Bucket: process.env.BUCKET_NAME,
-                Key: generateFileName(),
-                Body: req.file.buffer,
-                ContentType: req.file.mimetype,
-            };
-            const uploadResult = await s3.send(new PutObjectCommand(params));
-            fileUrl = uploadResult.Location || ""; 
+       
+        if (fileUrl) {
+            const uploadedImg=await cloudinary.uploader.upload(fileUrl);
+            fileUrl=uploadedImg.secure_url;
         }
 
         let conversation = await Conversation.findOneAndUpdate(
@@ -74,25 +67,7 @@ export const getMessages = async (req, res) => {
                                           select: 'username profilePic'
                                       });
 
-        for (const message of messages) {
-            if (message.sender.profilePic) {
-                const profilePicParams = {
-                    Bucket: process.env.BUCKET_NAME,
-                    Key: message.sender.profilePic,
-                };
-                const profilePicCommand = new GetObjectCommand(profilePicParams);
-                message.sender.profilePic = await getSignedUrl(s3, profilePicCommand, { expiresIn: 3600 });
-            }
-
-            if (message.img) {
-                const imgParams = {
-                    Bucket: process.env.BUCKET_NAME,
-                    Key: message.img,
-                };
-                const imgCommand = new GetObjectCommand(imgParams);
-                message.img = await getSignedUrl(s3, imgCommand, { expiresIn: 3600 });
-            }
-        }
+       
 
         await Message.updateMany(
             {
@@ -129,16 +104,6 @@ export const getConversation = async (req, res) => {
 
         for (const conversation of conversations) {
             const otherParticipant = conversation.participants.find(p => p._id.toString() !== userId.toString());
-
-            if (otherParticipant?.profilePic) {
-                const profilePicParams = {
-                    Bucket: process.env.BUCKET_NAME,
-                    Key: otherParticipant.profilePic,
-                };
-                const profilePicCommand = new GetObjectCommand(profilePicParams);
-                otherParticipant.profilePic = await getSignedUrl(s3, profilePicCommand, { expiresIn: 3600 });
-            }
-
             conversation.lastMessage = conversation.lastMessage || {};
         }
 
