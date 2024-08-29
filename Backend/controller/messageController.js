@@ -26,8 +26,7 @@ export const sendMessage = async (req, res) => {
             conversationId: conversation._id,
             sender: senderId,
             text: message,
-            img: fileUrl || "",
-            video: fileUrl || ""
+            img: fileUrl || ""
         });
 
         await newMessage.save();
@@ -142,13 +141,17 @@ export const editMessage = async (req, res) => {
 export const replyToMessage = async (req, res) => {
     const { recipientId, messageId, replyText } = req.body;
     const senderId = req.user._id;
+    let { replyImg } = req.body;
 
     try {
         const parentMessage = await Message.findById(messageId);
         if (!parentMessage) {
             return res.status(404).json({ error: "Parent message not found" });
         }
-
+        if(replyImg){
+            const uploadedImg=await cloudinary.uploader.upload(replyImg);
+            replyImg=uploadedImg.secure_url;
+        }
         const conversation = await Conversation.findOneAndUpdate(
             { participants: { $all: [senderId, recipientId] } },
             { $set: { lastMessage: { text: replyText, sender: senderId } } },
@@ -159,6 +162,7 @@ export const replyToMessage = async (req, res) => {
             conversationId: conversation._id,
             sender: senderId,
             text: replyText,
+            img:replyImg,
             replyTo: parentMessage._id
         });
 
