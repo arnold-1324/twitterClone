@@ -82,7 +82,7 @@ try{
 
     res.status(201).json({
       sucess:true,
-      message: "User created sucessfully",
+      message: "login  sucessfully",
       user:{
         ...user._doc,
         password:undefined,
