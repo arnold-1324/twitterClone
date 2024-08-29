@@ -1,9 +1,7 @@
-import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
-import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { v2 as cloudinary } from "cloudinary";
 import mongoose from "mongoose";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
@@ -13,32 +11,20 @@ export const NewPost = async(req,res)=>{
     try {
         const { caption } = req.body;
         const userId = req.user._id;
-        const fileName = generateFileName();
-        const params = {
-            Bucket: process.env.BUCKET_NAME,
-            Key: fileName,
-            Body:req.file.buffer,
-            ContentType:req.file.mimetype,
-        }
-        const command = new PutObjectCommand(params);
-        await s3.send(command);
+        let { PostImg } = req.body;
 
+        if( PostImg ){
+          const uploadedNewProfileImg=await cloudinary.uploader.upload(PostImg);
+          PostImg=uploadedNewProfileImg.secure_url;
+        }
 
         const newPost= new Post ({
             postedBy:userId,
             caption,
-            images:fileName
+            images:PostImg
         })
         if(newPost){
-         
           await newPost.save();
-          const getObjectParams = {
-            Bucket: process.env.BUCKET_NAME,
-            Key: newPost.images,
-          };
-          const command = new GetObjectCommand(getObjectParams);
-          const postImg = await getSignedUrl(s3, command, { expiresIn: 3600 });
-          newPost.images = postImg;
           res.status(201).json(newPost);
         }
 
@@ -107,45 +93,15 @@ export const addReply = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // Memoization object to store user profile images
-    const profileImgCache = {};
 
-    // Function to get or cache profile image URL
-    const getProfileImgUrl = async (profileImgKey) => {
-      if (profileImgCache[profileImgKey]) {
-        return profileImgCache[profileImgKey];
-      }
-
-      const userProfileImgParams = {
-        Bucket: process.env.BUCKET_NAME,
-        Key: profileImgKey,
-      };
-      const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
-      const profileImgUrl = await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 840 });
-
-      // Store in cache
-      profileImgCache[profileImgKey] = profileImgUrl;
-
-      return profileImgUrl;
-    };
-
-    // Add the current user's reply
     post.replies.push({
       userId,
       comment,
-      profileImg: profileImg ? await getProfileImgUrl(profileImg) : "", // Get or cache current user's profile image URL
+      profileImg: user.profileImg,
       username: user.username,
     });
 
-    // Update existing replies with profile image URLs
-    for (const reply of post.replies) {
-      if (reply.profileImg) {
-        reply.profileImg = await getProfileImgUrl(reply.profileImg);
-      }
-    }
-
     await post.save();
-
     res.status(200).json(post);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -168,21 +124,10 @@ export const DeletePost = async (req, res) => {
       return res.status(403).json({ error: "You can't delete others' posts" });
     }
 
-    if (!post.images) {
-      return res.status(400).json({ error: "No image found for the post" });
+    if (post.images) {
+      
+      await cloudinary.uploader.destroy(post.images.split("/").pop().split(".")[0]);
     }
-
-   
-
-    const deleteParams = {
-      Bucket: process.env.BUCKET_NAME,
-      Key: post.images 
-    };
-
-    const deleteCommand = new DeleteObjectCommand(deleteParams);
-    await s3.send(deleteCommand);
-    console.log('Deleting file from S3 with Key:', deleteParams.Key);
-
 
     await Post.findByIdAndDelete(postId);
 
@@ -224,29 +169,7 @@ export const deletePostsUsersCollection = async (req, res) => {
 export const getPost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id).populate('replies.user'); // Assuming 'replies.user' is how you reference replied users
-    if (!post) return res.status(404).json({ error: "Post not found" });
-
- 
-    const getObjectParams = {
-      Bucket: process.env.BUCKET_NAME,
-      Key: post.images,
-    };
-    const command = new GetObjectCommand(getObjectParams);
-    const postImg = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    post.images = postImg;
-
-    for (const reply of post.replies) {
-      if (reply.user && reply.user.profileImage) {
-        const userProfileImgParams = {
-          Bucket: process.env.BUCKET_NAME,
-          Key: reply.user.profileImage,
-        };
-        const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
-        const profileImgUrl = await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 3600 });
-        reply.user.profileImage = profileImgUrl;
-      }
-    }
-
+    if (!post) return res.status(404).json({ error: "Post not found" })
     return res.status(200).json(post);
 
   } catch (error) {
@@ -268,18 +191,6 @@ export const getFeedPosts = async (req, res) => {
    
     const feedPosts = await Post.find({ postedBy: { $in: following } }).sort({ createdAt: -1 });
 
- 
-    for (let post of feedPosts) {
-      if (post.images) {
-        const getObjectParams = {
-          Bucket: process.env.BUCKET_NAME,
-          Key: post.images,
-        };
-        const command = new GetObjectCommand(getObjectParams);
-        const postImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-        post.images = postImgUrl;
-      }
-    }
 
     res.status(200).json(feedPosts);
   } catch (err) {
@@ -297,17 +208,7 @@ export const getUserPosts = async (req, res) => {
     }
 
     const userPosts = await Post.find({ postedBy: userId }).sort({ createdAt: -1 });
-    for (let post of userPosts) {
-      if (post.images) {
-        const getObjectParams = {
-          Bucket: process.env.BUCKET_NAME,
-          Key: post.images,
-        };
-        const command = new GetObjectCommand(getObjectParams);
-        const postImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-        post.images = postImgUrl;
-      }
-    }
+    res.status(200).json(userPosts);
 
   }catch(error){
     console.error('Error in getUserPosts controller:', error);
