@@ -1,7 +1,7 @@
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
 import bcrypt from "bcryptjs";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { PutObjectCommand, GetObjectCommand,DeleteObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3,generateFileName } from "../lib/utils/uploader.js";
 
@@ -79,8 +79,7 @@ export const getUserProfile = async (req, res) => {
         }
 
         
-        const isOwnProfile = currentUserId.toString() === userId;
-        const isFollowing = user.followers.includes(currentUserId);
+    
 
         return res.status(200).json({
             username: user.username,
@@ -89,8 +88,7 @@ export const getUserProfile = async (req, res) => {
             profileImg: user.profileImg,
             followersCount: user.followers.length,
             followingCount: user.following.length,
-            isFollowing: isFollowing,
-            isOwnProfile: isOwnProfile
+
         });
 
     } catch (error) {
@@ -196,6 +194,14 @@ export const UpdateUserProfile = async (req, res) => {
       user.bio = bio || user.bio;
   
       const updatedUser = await user.save();
+
+      const getObjectParams = {
+                Bucket: process.env.BUCKET_NAME,
+                Key: updatedUser.profileImg,
+            };
+            const command = new GetObjectCommand(getObjectParams);
+            const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+            updatedUser.profileImg = url;
   
       return res.status(200).json(updatedUser);
     } catch (error) {
