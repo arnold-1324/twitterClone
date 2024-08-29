@@ -1,9 +1,7 @@
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
 import bcrypt from "bcryptjs";
-import { PutObjectCommand, GetObjectCommand,DeleteObjectCommand } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { s3,generateFileName } from "../lib/utils/uploader.js";
+import { v2 as cloudinary } from "cloudinary";
 
 
 
@@ -67,19 +65,6 @@ export const getUserProfile = async (req, res) => {
             return res.status(404).json({ error: "User not found" });
         }
 
-        
-        if (user.profileImg) {
-            const getObjectParams = {
-                Bucket: process.env.BUCKET_NAME,
-                Key: user.profileImg,
-            };
-            const command = new GetObjectCommand(getObjectParams);
-            const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-            user.profileImg = url;
-        }
-
-        
-    
 
         return res.status(200).json({
             username: user.username,
@@ -133,6 +118,7 @@ export const getSuggestedUser=async(req,res)=>{
 export const UpdateUserProfile = async (req, res) => {
     try {
       const { fullName, username, email, currentPassword, newPassword, bio } = req.body;
+      let { profileImg } = req.body;
       const userId = req.user._id;
   
       const user = await User.findById(userId);
@@ -160,48 +146,26 @@ export const UpdateUserProfile = async (req, res) => {
         user.password = await bcrypt.hash(newPassword, salt);
       }
   
-      let fileName = user.profileImg || "";
+        if(profileImg){
+          if(user.profileImg){
+            await cloudinary.uploader.destroy(user.profileImg.split("/").pop().split(".")[0]);
+          }
+          const uploadedNewProfileImg=await cloudinary.uploader.upload(profileImg);
+          profileImg=uploadedNewProfileImg.secure_url;
+          user.profileImg = profileImg;
+          console.log(profileImg);
+        }    
   
-      if (req.file) {
-        if (user.profileImg) {
-          const deleteParams = {
-            Bucket: process.env.BUCKET_NAME,
-            Key: user.profileImg,
-          };
+ 
   
-          const deleteCommand = new DeleteObjectCommand(deleteParams);
-          await s3.send(deleteCommand);
-          console.log("Deleted old profile image:", deleteParams.Key);
-        }
-  
-        fileName = generateFileName();
-        const uploadParams = {
-          Bucket: process.env.BUCKET_NAME,
-          Key: fileName,
-          Body: req.file.buffer,
-          ContentType: req.file.mimetype,
-        };
-  
-        const uploadCommand = new PutObjectCommand(uploadParams);
-        await s3.send(uploadCommand);
-        console.log("Uploaded new profile image:", fileName);
-      }
   
       user.fullName = fullName || user.fullName;
       user.username = username || user.username;
       user.email = email || user.email;
-      user.profileImg = fileName;
       user.bio = bio || user.bio;
   
       const updatedUser = await user.save();
 
-      const getObjectParams = {
-                Bucket: process.env.BUCKET_NAME,
-                Key: updatedUser.profileImg,
-            };
-            const command = new GetObjectCommand(getObjectParams);
-            const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-            updatedUser.profileImg = url;
   
       return res.status(200).json(updatedUser);
     } catch (error) {

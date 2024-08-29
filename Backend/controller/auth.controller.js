@@ -1,9 +1,6 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { s3 } from '../lib/utils/uploader.js'
 import { generateTokenAndCookies } from "../lib/utils/generateToken.js";
 import { sendResetPasswordEmail, sendVerificationEmail,sendWelcomeEmail,sendPasswordResetSuccessEmail } from "../lib/utils/Mailtrap/email.js"
 
