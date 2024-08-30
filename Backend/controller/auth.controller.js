@@ -80,6 +80,17 @@ try{
 
     generateTokenAndCookies(user._id,res);
 
+    if (user.profileImg) {
+      const getObjectParams = {
+          Bucket: process.env.BUCKET_NAME,
+          Key: user.profileImg,
+      };
+      const command = new GetObjectCommand(getObjectParams);
+      const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      user.profileImg = url;
+  }
+
+
     res.status(201).json({
       sucess:true,
       message: "login  sucessfully",
