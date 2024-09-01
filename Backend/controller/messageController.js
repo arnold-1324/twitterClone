@@ -1,19 +1,26 @@
+import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
-import {v2 as cloudinary } from "cloudinary";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getRecipientSocketId, io } from "../socket/socket.js";
 
 
 export const sendMessage = async (req, res) => {
     const { recipientId, message } = req.body;
     const senderId = req.user._id;
-    let fileUrl = req.body;
 
     try {
-       
-        if (fileUrl) {
-            const uploadedImg=await cloudinary.uploader.upload(fileUrl);
-            fileUrl=uploadedImg.secure_url;
+        let fileUrl = "";
+        if (req.file) {
+            const params = {
+                Bucket: process.env.BUCKET_NAME,
+                Key: generateFileName(),
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype,
+            };
+            const uploadResult = await s3.send(new PutObjectCommand(params));
+            fileUrl = uploadResult.Location || ""; 
         }
 
         let conversation = await Conversation.findOneAndUpdate(
@@ -26,7 +33,8 @@ export const sendMessage = async (req, res) => {
             conversationId: conversation._id,
             sender: senderId,
             text: message,
-            img: fileUrl || ""
+            img: fileUrl || "",
+            video: fileUrl || ""
         });
 
         await newMessage.save();
@@ -66,7 +74,25 @@ export const getMessages = async (req, res) => {
                                           select: 'username profilePic'
                                       });
 
-       
+        for (const message of messages) {
+            if (message.sender.profilePic) {
+                const profilePicParams = {
+                    Bucket: process.env.BUCKET_NAME,
+                    Key: message.sender.profilePic,
+                };
+                const profilePicCommand = new GetObjectCommand(profilePicParams);
+                message.sender.profilePic = await getSignedUrl(s3, profilePicCommand, { expiresIn: 3600 });
+            }
+
+            if (message.img) {
+                const imgParams = {
+                    Bucket: process.env.BUCKET_NAME,
+                    Key: message.img,
+                };
+                const imgCommand = new GetObjectCommand(imgParams);
+                message.img = await getSignedUrl(s3, imgCommand, { expiresIn: 3600 });
+            }
+        }
 
         await Message.updateMany(
             {
@@ -103,6 +129,16 @@ export const getConversation = async (req, res) => {
 
         for (const conversation of conversations) {
             const otherParticipant = conversation.participants.find(p => p._id.toString() !== userId.toString());
+
+            if (otherParticipant?.profilePic) {
+                const profilePicParams = {
+                    Bucket: process.env.BUCKET_NAME,
+                    Key: otherParticipant.profilePic,
+                };
+                const profilePicCommand = new GetObjectCommand(profilePicParams);
+                otherParticipant.profilePic = await getSignedUrl(s3, profilePicCommand, { expiresIn: 3600 });
+            }
+
             conversation.lastMessage = conversation.lastMessage || {};
         }
 
@@ -141,17 +177,13 @@ export const editMessage = async (req, res) => {
 export const replyToMessage = async (req, res) => {
     const { recipientId, messageId, replyText } = req.body;
     const senderId = req.user._id;
-    let { replyImg } = req.body;
 
     try {
         const parentMessage = await Message.findById(messageId);
         if (!parentMessage) {
             return res.status(404).json({ error: "Parent message not found" });
         }
-        if(replyImg){
-            const uploadedImg=await cloudinary.uploader.upload(replyImg);
-            replyImg=uploadedImg.secure_url;
-        }
+
         const conversation = await Conversation.findOneAndUpdate(
             { participants: { $all: [senderId, recipientId] } },
             { $set: { lastMessage: { text: replyText, sender: senderId } } },
@@ -162,7 +194,6 @@ export const replyToMessage = async (req, res) => {
             conversationId: conversation._id,
             sender: senderId,
             text: replyText,
-            img:replyImg,
             replyTo: parentMessage._id
         });
 
