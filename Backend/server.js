@@ -1,7 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
-import { v2 as cloudinary } from "cloudinary";
+
 
 
 import AuthRoutes from "./routers/auth.routers.js";
@@ -16,14 +16,9 @@ dotenv.config();
 const app=express();
 const PORT=process.env.PORT || 5000;
 
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key:process.env.API_KEY,
-    api_secret:process.env.SECRET_KEY,
-})
 
 app.use(cookieParser());
-app.use(express.json({ limit: "50mb"}));
+app.use(express.json());
 app.use(express.urlencoded({ extended:true}));
 
 app.use("/api/auth",AuthRoutes);
