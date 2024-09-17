@@ -45,17 +45,18 @@ export const signUp=async(req,res)=>{
 
     if(newUser){
       generateTokenAndCookies(newUser._id,res);
-      //await sendVerificationEmail(newUser.email,verificationToken);  
       await newUser.save();  
+      await sendVerificationEmail(newUser.email,verificationToken);  
 
       res.status(201).json({
         sucess:true,
         message: "User created sucessfully",
-        user:{
+        user: {
           ...newUser._doc,
-          password:undefined,
+          password: undefined,
+          verificationToken: undefined,
+          verificationTokenExpiresAt: undefined,
         },
-
       })
     }else{
         res.status(400).json({ error:"Invalid user data"});
@@ -83,9 +84,11 @@ try{
     res.status(201).json({
       sucess:true,
       message: "login  sucessfully",
-      user:{
-        ...user._doc,
-        password:undefined,
+      user: {
+        ...newUser._doc,
+        password: undefined,
+        verificationToken: undefined,
+        verificationTokenExpiresAt: undefined,
       },
 
     })
@@ -131,9 +134,11 @@ await sendWelcomeEmail(user.email,user.fullName);
 res.status(200).json({
   success:true,
   message:"Email verified successfully",
-  user:{
-    ...user._doc,
-    password:undefined,
+  user: {
+    ...newUser._doc,
+    password: undefined,
+    verificationToken: undefined,
+    verificationTokenExpiresAt: undefined,
   },
 })
  }catch(error){
@@ -160,9 +165,11 @@ export const forgotPassword = async(req,res)=>{
     await sendResetPasswordEmail(user.email,`${process.env.CLIENT_URL}reset-password/${resetToken}`);
 
     res.status(200).json({ sucess:true,message:"Password reset link send to your email",
-      user:{
-        ...user._doc,
-        password:undefined,
+      user: {
+        ...newUser._doc,
+        password: undefined,
+        verificationToken: undefined,
+        verificationTokenExpiresAt: undefined,
       },
   });
 
