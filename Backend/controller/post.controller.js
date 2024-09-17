@@ -83,17 +83,25 @@ export const likePost = async (req, res) => {
 };
 
 
+// Middleware to regenerate pre-signed URL on demand
+const getProfileImgUrl = async (profileImgKey) => {
+  const userProfileImgParams = {
+    Bucket: process.env.BUCKET_NAME,
+    Key: profileImgKey,
+  };
+  const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
+  return await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 840 });
+};
+
+// Function to handle adding replies
 export const addReply = async (req, res) => {
   try {
     const { comment } = req.body;
     const { postId } = req.params;
     const userId = req.user._id;
 
-    if (!userId) {
-      return res.status(400).json({ message: "User ID required." });
-    }
-    if (!comment) {
-      return res.status(400).json({ message: "Comment required." });
+    if (!userId || !comment) {
+      return res.status(400).json({ message: "User ID and Comment required." });
     }
 
     const user = await User.findById(userId).select("profileImg username");
@@ -101,57 +109,110 @@ export const addReply = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const profileImg = user.profileImg;
     const post = await Post.findById(postId);
     if (!post) {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // Memoization object to store user profile images
+    // Cache only the profile image key
     const profileImgCache = {};
-
-    // Function to get or cache profile image URL
-    const getProfileImgUrl = async (profileImgKey) => {
-      if (profileImgCache[profileImgKey]) {
-        return profileImgCache[profileImgKey];
-      }
-
-      const userProfileImgParams = {
-        Bucket: process.env.BUCKET_NAME,
-        Key: profileImgKey,
-      };
-      const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
-      const profileImgUrl = await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 840 });
-
-      // Store in cache
-      profileImgCache[profileImgKey] = profileImgUrl;
-
-      return profileImgUrl;
-    };
 
     // Add the current user's reply
     post.replies.push({
       userId,
       comment,
-      profileImg: profileImg ? await getProfileImgUrl(profileImg) : "", // Get or cache current user's profile image URL
+      profileImg: user.profileImg ? user.profileImg : "", // Store the profileImgKey, not URL
       username: user.username,
     });
 
-    // Update existing replies with profile image URLs
-    for (const reply of post.replies) {
-      if (reply.profileImg) {
-        reply.profileImg = await getProfileImgUrl(reply.profileImg);
-      }
-    }
-
     await post.save();
 
-    res.status(200).json(post);
+    // When rendering replies, regenerate the URL for each profile image
+    const repliesWithProfileUrls = await Promise.all(
+      post.replies.map(async (reply) => {
+        if (reply.profileImg) {
+          reply.profileImgUrl = await getProfileImgUrl(reply.profileImg); // Generate URL when rendering
+        }
+        return reply;
+      })
+    );
+
+    res.status(200).json({ replies: repliesWithProfileUrls });
   } catch (error) {
     res.status(500).json({ message: error.message });
-    console.error("Error in addReply:", error.message);
   }
 };
+
+
+// export const addReply = async (req, res) => {
+//   try {
+//     const { comment } = req.body;
+//     const { postId } = req.params;
+//     const userId = req.user._id;
+
+//     if (!userId) {
+//       return res.status(400).json({ message: "User ID required." });
+//     }
+//     if (!comment) {
+//       return res.status(400).json({ message: "Comment required." });
+//     }
+
+//     const user = await User.findById(userId).select("profileImg username");
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     const profileImg = user.profileImg;
+//     const post = await Post.findById(postId);
+//     if (!post) {
+//       return res.status(404).json({ message: "Post not found" });
+//     }
+
+//     // Memoization object to store user profile images
+//     const profileImgCache = {};
+
+//     // Function to get or cache profile image URL
+//     const getProfileImgUrl = async (profileImgKey) => {
+//       if (profileImgCache[profileImgKey]) {
+//         return profileImgCache[profileImgKey];
+//       }
+
+//       const userProfileImgParams = {
+//         Bucket: process.env.BUCKET_NAME,
+//         Key: profileImgKey,
+//       };
+//       const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
+//       const profileImgUrl = await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 840 });
+
+//       // Store in cache
+//       profileImgCache[profileImgKey] = profileImgUrl;
+
+//       return profileImgUrl;
+//     };
+
+//     // Add the current user's reply
+//     post.replies.push({
+//       userId,
+//       comment,
+//       profileImg: profileImg ? await getProfileImgUrl(profileImg) : "", // Get or cache current user's profile image URL
+//       username: user.username,
+//     });
+
+//     // Update existing replies with profile image URLs
+//     for (const reply of post.replies) {
+//       if (reply.profileImg) {
+//         reply.profileImg = await getProfileImgUrl(reply.profileImg);
+//       }
+//     }
+
+//     await post.save();
+
+//     res.status(200).json(post);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//     console.error("Error in addReply:", error.message);
+//   }
+// };
 
 export const DeletePost = async (req, res) => {
   try {
