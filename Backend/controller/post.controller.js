@@ -23,22 +23,15 @@ export const NewPost = async(req,res)=>{
         const command = new PutObjectCommand(params);
         await s3.send(command);
 
-
+        const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileName}`;
         const newPost= new Post ({
             postedBy:userId,
             caption,
-            images:fileName
+            images:publicUrl
         })
         if(newPost){
          
           await newPost.save();
-          const getObjectParams = {
-            Bucket: process.env.BUCKET_NAME,
-            Key: newPost.images,
-          };
-          const command = new GetObjectCommand(getObjectParams);
-          const postImg = await getSignedUrl(s3, command, { expiresIn: 3600 });
-          newPost.images = postImg;
           res.status(201).json(newPost);
         }
 
@@ -83,17 +76,9 @@ export const likePost = async (req, res) => {
 };
 
 
-// Middleware to regenerate pre-signed URL on demand
-const getProfileImgUrl = async (profileImgKey) => {
-  const userProfileImgParams = {
-    Bucket: process.env.BUCKET_NAME,
-    Key: profileImgKey,
-  };
-  const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
-  return await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 840 });
-};
 
-// Function to handle adding replies
+
+
 export const addReply = async (req, res) => {
   try {
     const { comment } = req.body;
@@ -114,30 +99,21 @@ export const addReply = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // Cache only the profile image key
-    const profileImgCache = {};
 
-    // Add the current user's reply
     post.replies.push({
       userId,
       comment,
-      profileImg: user.profileImg ? user.profileImg : "", // Store the profileImgKey, not URL
+      profileImg:user.profileImg,
       username: user.username,
     });
 
+    
+
     await post.save();
 
-    // When rendering replies, regenerate the URL for each profile image
-    const repliesWithProfileUrls = await Promise.all(
-      post.replies.map(async (reply) => {
-        if (reply.profileImg) {
-          reply.profileImgUrl = await getProfileImgUrl(reply.profileImg); // Generate URL when rendering
-        }
-        return reply;
-      })
-    );
+    
 
-    res.status(200).json({ replies: repliesWithProfileUrls });
+    res.status(200).json({replies:replies});
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
