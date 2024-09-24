@@ -85,7 +85,7 @@ try{
       sucess:true,
       message: "login  sucessfully",
       user: {
-        ...newUser._doc,
+        ...user._doc,
         password: undefined,
         verificationToken: undefined,
         verificationTokenExpiresAt: undefined,
