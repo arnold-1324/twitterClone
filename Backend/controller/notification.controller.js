@@ -23,8 +23,9 @@ export const getNotifications = async (req, res) => {
 
 export const deleteNotification = async (req, res) => {
     try {
-        const { notificationId } = req.body;  
-
+        const { id: notificationId } = req.params;  
+        const userId = req.user._id;
+        
         if (notificationId) {
             await Notification.findByIdAndDelete(notificationId);
             res.status(200).json({ message: "Notification deleted" });
