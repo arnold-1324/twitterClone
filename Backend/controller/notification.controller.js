@@ -1,7 +1,6 @@
 import Notification from "../models/notification.model.js";
-import { GetObjectCommand } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { s3 } from "../lib/utils/uploader.js";
+
+
 
 
 export const getNotifications = async (req, res) => {
@@ -11,19 +10,8 @@ export const getNotifications = async (req, res) => {
        
         const notifications = await Notification.find({ to: userId })
             .populate('from', 'username profileImg')  
-            .populate('post', 'caption')  
-        for (let notification of notifications) {
-            if (notification.from.profileImg) {
-                const getObjectParams = {
-                    Bucket: process.env.BUCKET_NAME,
-                    Key: notification.from.profileImg,
-                };
-                const command = new GetObjectCommand(getObjectParams);
-                const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-                notification.from.profileImg = url;
-            }
-        }
-
+            .populate('post', 'caption') ; 
+        
      
         await Notification.updateMany({ to: userId, read: false }, { read: true });
 

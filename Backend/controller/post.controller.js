@@ -2,8 +2,7 @@ import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
-import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import mongoose from "mongoose";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
@@ -75,18 +74,14 @@ export const likePost = async (req, res) => {
   }
 };
 
-
-
-
-
 export const addReply = async (req, res) => {
   try {
     const { comment } = req.body;
     const { postId } = req.params;
     const userId = req.user._id;
 
-    if (!userId || !comment) {
-      return res.status(400).json({ message: "User ID and Comment required." });
+    if ( !comment) {
+      return res.status(400).json({ message: " Comment required." });
     }
 
     const user = await User.findById(userId).select("profileImg username");
@@ -99,96 +94,24 @@ export const addReply = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-
-    post.replies.push({
-      userId,
-      comment,
+    const reply = { 
+      userId, 
+      comment, 
       profileImg:user.profileImg,
-      username: user.username,
-    });
+      username: user.username
+     };
 
+		post.replies.push(reply);
+		await post.save();
+
+		res.status(200).json(reply);
+  
     
-
-    await post.save();
-
-    
-
-    res.status(200).json({replies:replies});
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-
-// export const addReply = async (req, res) => {
-//   try {
-//     const { comment } = req.body;
-//     const { postId } = req.params;
-//     const userId = req.user._id;
-
-//     if (!userId) {
-//       return res.status(400).json({ message: "User ID required." });
-//     }
-//     if (!comment) {
-//       return res.status(400).json({ message: "Comment required." });
-//     }
-
-//     const user = await User.findById(userId).select("profileImg username");
-//     if (!user) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-
-//     const profileImg = user.profileImg;
-//     const post = await Post.findById(postId);
-//     if (!post) {
-//       return res.status(404).json({ message: "Post not found" });
-//     }
-
-//     // Memoization object to store user profile images
-//     const profileImgCache = {};
-
-//     // Function to get or cache profile image URL
-//     const getProfileImgUrl = async (profileImgKey) => {
-//       if (profileImgCache[profileImgKey]) {
-//         return profileImgCache[profileImgKey];
-//       }
-
-//       const userProfileImgParams = {
-//         Bucket: process.env.BUCKET_NAME,
-//         Key: profileImgKey,
-//       };
-//       const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
-//       const profileImgUrl = await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 840 });
-
-//       // Store in cache
-//       profileImgCache[profileImgKey] = profileImgUrl;
-
-//       return profileImgUrl;
-//     };
-
-//     // Add the current user's reply
-//     post.replies.push({
-//       userId,
-//       comment,
-//       profileImg: profileImg ? await getProfileImgUrl(profileImg) : "", // Get or cache current user's profile image URL
-//       username: user.username,
-//     });
-
-//     // Update existing replies with profile image URLs
-//     for (const reply of post.replies) {
-//       if (reply.profileImg) {
-//         reply.profileImg = await getProfileImgUrl(reply.profileImg);
-//       }
-//     }
-
-//     await post.save();
-
-//     res.status(200).json(post);
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//     console.error("Error in addReply:", error.message);
-//   }
-// };
 
 export const DeletePost = async (req, res) => {
   try {
@@ -213,7 +136,7 @@ export const DeletePost = async (req, res) => {
 
     const deleteParams = {
       Bucket: process.env.BUCKET_NAME,
-      Key: post.images 
+      Key: post.images.split('/').pop()
     };
 
     const deleteCommand = new DeleteObjectCommand(deleteParams);
@@ -260,36 +183,16 @@ export const deletePostsUsersCollection = async (req, res) => {
 
 export const getPost = async (req, res) => {
   try {
-    const post = await Post.findById(req.params.id).populate('replies.user'); // Assuming 'replies.user' is how you reference replied users
-    if (!post) return res.status(404).json({ error: "Post not found" });
+		const post = await Post.findById(req.params.id);
 
- 
-    const getObjectParams = {
-      Bucket: process.env.BUCKET_NAME,
-      Key: post.images,
-    };
-    const command = new GetObjectCommand(getObjectParams);
-    const postImg = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    post.images = postImg;
+		if (!post) {
+			return res.status(404).json({ error: "Post not found" });
+		}
 
-    for (const reply of post.replies) {
-      if (reply.user && reply.user.profileImage) {
-        const userProfileImgParams = {
-          Bucket: process.env.BUCKET_NAME,
-          Key: reply.user.profileImage,
-        };
-        const userProfileImgCommand = new GetObjectCommand(userProfileImgParams);
-        const profileImgUrl = await getSignedUrl(s3, userProfileImgCommand, { expiresIn: 3600 });
-        reply.user.profileImage = profileImgUrl;
-      }
-    }
-
-    return res.status(200).json(post);
-
-  } catch (error) {
-    console.error('Error in getPost controller:', error);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
+		res.status(200).json(post);
+	} catch (err) {
+		res.status(500).json({ error: err.message });
+	}
 };
 
 export const getFeedPosts = async (req, res) => {
@@ -304,20 +207,6 @@ export const getFeedPosts = async (req, res) => {
 
    
     const feedPosts = await Post.find({ postedBy: { $in: following } }).sort({ createdAt: -1 });
-
- 
-    for (let post of feedPosts) {
-      if (post.images) {
-        const getObjectParams = {
-          Bucket: process.env.BUCKET_NAME,
-          Key: post.images,
-        };
-        const command = new GetObjectCommand(getObjectParams);
-        const postImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-        post.images = postImgUrl;
-      }
-    }
-
     res.status(200).json(feedPosts);
   } catch (err) {
     console.error('Error in getFeedPosts controller:', err);
@@ -326,28 +215,17 @@ export const getFeedPosts = async (req, res) => {
 };
 
 export const getUserPosts = async (req, res) => {
-  try {
-    const userId = req.params.id;
-    const user = await User.findById(userId).select('-password');
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+  const { username } = req.params;
+	try {
+		const user = await User.findOne({ username });
+		if (!user) {
+			return res.status(404).json({ error: "User not found" });
+		}
 
-    const userPosts = await Post.find({ postedBy: userId }).sort({ createdAt: -1 });
-    for (let post of userPosts) {
-      if (post.images) {
-        const getObjectParams = {
-          Bucket: process.env.BUCKET_NAME,
-          Key: post.images,
-        };
-        const command = new GetObjectCommand(getObjectParams);
-        const postImgUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-        post.images = postImgUrl;
-      }
-    }
+		const posts = await Post.find({ postedBy: user._id }).sort({ createdAt: -1 });
 
-  }catch(error){
-    console.error('Error in getUserPosts controller:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+		res.status(200).json(posts);
+	} catch (error) {
+		res.status(500).json({ error: error.message });
+	}
 }

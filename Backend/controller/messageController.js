@@ -1,8 +1,7 @@
 import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getRecipientSocketId, io } from "../socket/socket.js";
 
 
@@ -11,34 +10,41 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user._id;
 
     try {
-        let fileUrl = "";
+        let publicUrl = ""; 
         if (req.file) {
+            const fileUrl = generateFileName(); 
             const params = {
                 Bucket: process.env.BUCKET_NAME,
-                Key: generateFileName(),
+                Key: fileUrl,
                 Body: req.file.buffer,
                 ContentType: req.file.mimetype,
             };
-            const uploadResult = await s3.send(new PutObjectCommand(params));
-            fileUrl = uploadResult.Location || ""; 
+
+            const command = new PutObjectCommand(params);
+           await s3.send(command);
+          
+            publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
         }
 
+        
         let conversation = await Conversation.findOneAndUpdate(
             { participants: { $all: [senderId, recipientId] } },
             { $set: { lastMessage: { text: message, sender: senderId } } },
             { new: true, upsert: true }
         );
 
+        
         const newMessage = new Message({
             conversationId: conversation._id,
             sender: senderId,
             text: message,
-            img: fileUrl || "",
-            video: fileUrl || ""
+            img: publicUrl, 
+            video: publicUrl  
         });
 
         await newMessage.save();
 
+       
         const recipientSocketId = getRecipientSocketId(recipientId);
         if (recipientSocketId) {
             io.to(recipientSocketId).emit("newMessage", newMessage);
@@ -47,8 +53,8 @@ export const sendMessage = async (req, res) => {
 
         res.status(201).json(newMessage);
     } catch (error) {
+        console.error("Error in sendMessage:", error.message);
         res.status(500).json({ error: error.message });
-        console.log("Error in sendMessage:", error.message);
     }
 };
 
@@ -74,25 +80,9 @@ export const getMessages = async (req, res) => {
                                           select: 'username profilePic'
                                       });
 
-        for (const message of messages) {
-            if (message.sender.profilePic) {
-                const profilePicParams = {
-                    Bucket: process.env.BUCKET_NAME,
-                    Key: message.sender.profilePic,
-                };
-                const profilePicCommand = new GetObjectCommand(profilePicParams);
-                message.sender.profilePic = await getSignedUrl(s3, profilePicCommand, { expiresIn: 3600 });
-            }
+       
 
-            if (message.img) {
-                const imgParams = {
-                    Bucket: process.env.BUCKET_NAME,
-                    Key: message.img,
-                };
-                const imgCommand = new GetObjectCommand(imgParams);
-                message.img = await getSignedUrl(s3, imgCommand, { expiresIn: 3600 });
-            }
-        }
+          
 
         await Message.updateMany(
             {
@@ -130,15 +120,7 @@ export const getConversation = async (req, res) => {
         for (const conversation of conversations) {
             const otherParticipant = conversation.participants.find(p => p._id.toString() !== userId.toString());
 
-            if (otherParticipant?.profilePic) {
-                const profilePicParams = {
-                    Bucket: process.env.BUCKET_NAME,
-                    Key: otherParticipant.profilePic,
-                };
-                const profilePicCommand = new GetObjectCommand(profilePicParams);
-                otherParticipant.profilePic = await getSignedUrl(s3, profilePicCommand, { expiresIn: 3600 });
-            }
-
+           
             conversation.lastMessage = conversation.lastMessage || {};
         }
 
