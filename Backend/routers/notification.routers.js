@@ -4,11 +4,11 @@ import { getNotifications,deleteNotification,deleteAllNotifications } from "../c
 
 const router = express.Router();
 
-router.get('/', protectRoute ,getNotifications);
+router.get('/', protectRoute ,getNotifications);  //working
 
-router.delete('/notifications/delete',protectRoute, deleteNotification);
+router.delete("/:id",protectRoute, deleteNotification);
 
-router.delete('/notifications/delete-all', protectRoute ,deleteAllNotifications);
+router.delete("/delete-all", protectRoute ,deleteAllNotifications);
 
 export default router;
 

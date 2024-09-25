@@ -42,7 +42,7 @@ export const NewPost = async(req,res)=>{
 
 export const likePost = async (req, res) => {
   try {
-    const { postId } = req.params;
+    const { id: postId } = req.params;
     const userId = req.user._id;
 
     
@@ -77,7 +77,7 @@ export const likePost = async (req, res) => {
 export const addReply = async (req, res) => {
   try {
     const { comment } = req.body;
-    const { postId } = req.params;
+    const { id: postId } = req.params;
     const userId = req.user._id;
 
     if ( !comment) {
@@ -115,7 +115,7 @@ export const addReply = async (req, res) => {
 
 export const DeletePost = async (req, res) => {
   try {
-    const { postId } = req.params;
+    const { id: postId } = req.params;
     const userId = req.user._id;
 
    
