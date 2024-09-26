@@ -21,12 +21,24 @@ export const getNotifications = async (req, res) => {
     }
 };
 
+
 export const deleteNotification = async (req, res) => {
     try {
         const { id: notificationId } = req.params;  
-        const userId = req.user._id;
-        
+        const userId = req.user._id;  
+
         if (notificationId) {
+            
+            const notification = await Notification.findById(notificationId);
+            if (!notification) {
+                return res.status(404).json({ message: "Notification not found" });
+            }
+
+          
+            if (notification.to.toString() !== userId.toString()) {
+                return res.status(403).json({ message: "You are not authorized to delete this notification" });
+            }
+
             await Notification.findByIdAndDelete(notificationId);
             res.status(200).json({ message: "Notification deleted" });
         } else {
@@ -37,15 +49,6 @@ export const deleteNotification = async (req, res) => {
     }
 };
 
-export const deleteAllNotifications = async (req, res) => {
-    try {
-        const userId = req.user._id;  
 
-        await Notification.deleteMany({ to: userId });
 
-        res.status(200).json({ message: "All notifications deleted" });
-    } catch (error) {
-        res.status(500).json({ message: "Error deleting all notifications", error });
-    }
-};
 
