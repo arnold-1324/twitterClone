@@ -56,10 +56,10 @@ export const followUnfollowUser = async (req, res) => {
 
 export const getUserProfile = async (req, res) => {
     try {
-        const { userId } = req.params;
+        const { username } = req.params;
         const currentUserId = req.user._id;
 
-      const profileId= userId || currentUserId;
+      const profileId= username || currentUserId;
     
         const user = await User.findById(profileId).select("-password");
 
