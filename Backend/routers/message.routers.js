@@ -13,13 +13,13 @@ import {
 const router = express.Router();
 
 
-router.post('/send', protectRoute, upload.single('media'), sendMessage);
+router.post('/send', protectRoute, upload.single('media'), sendMessage);  //working
 
-router.get('/:otherUserId', protectRoute, getMessages);
+router.get('/:otherUserId', protectRoute, getMessages);    //working
 
-router.get('/conversations', protectRoute, getConversation);
+router.get("/conversations", protectRoute, getConversation);  //
 
-router.put('/edit', protectRoute, editMessage);
+router.put('/edit', protectRoute, editMessage);    
 
 router.post('/reply', protectRoute, upload.single('image'), replyToMessage);
 

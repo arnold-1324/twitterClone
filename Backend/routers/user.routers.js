@@ -6,7 +6,7 @@ import { getUserProfile ,followUnfollowUser,getSuggestedUser,UpdateUserProfile,}
 
 const router = express.Router();
 
-router.get("/profile/:userId?",protectRoute,getUserProfile);
+router.get("/profile/:username?",protectRoute,getUserProfile);
 router.get("/suggested",protectRoute,getSuggestedUser);
 router.post("/follow/:id",protectRoute,followUnfollowUser);
 router.post("/update/:id", protectRoute, upload.single('image'), UpdateUserProfile);

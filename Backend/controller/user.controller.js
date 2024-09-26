@@ -1,8 +1,8 @@
 import User from "../models/user.model.js";
+import Post from "../models/post.model.js";
 import Notification from "../models/notification.model.js";
 import bcrypt from "bcryptjs";
-import { PutObjectCommand, GetObjectCommand,DeleteObjectCommand } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PutObjectCommand,DeleteObjectCommand } from "@aws-sdk/client-s3"
 import { s3,generateFileName } from "../lib/utils/uploader.js";
 
 
@@ -56,30 +56,16 @@ export const followUnfollowUser = async (req, res) => {
 
 export const getUserProfile = async (req, res) => {
     try {
-        const { userId } = req.params;
+        const { username } = req.params;
         const currentUserId = req.user._id;
 
-      const profileId= userId || currentUserId;
+      const profileId= username || currentUserId;
     
         const user = await User.findById(profileId).select("-password");
 
         if (!user) {
             return res.status(404).json({ error: "User not found" });
         }
-
-        
-        if (user.profileImg) {
-            const getObjectParams = {
-                Bucket: process.env.BUCKET_NAME,
-                Key: user.profileImg,
-            };
-            const command = new GetObjectCommand(getObjectParams);
-            const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-            user.profileImg = url;
-        }
-
-        
-    
 
         return res.status(200).json({
             username: user.username,
@@ -164,7 +150,7 @@ export const UpdateUserProfile = async (req, res) => {
       if (user.profileImg) {
         const deleteParams = {
           Bucket: process.env.BUCKET_NAME,
-          Key: user.profileImg.split('/').pop(),
+          Key: user.profileImg.split('/').pop()
         };
 
         const deleteCommand = new DeleteObjectCommand(deleteParams);
@@ -195,6 +181,17 @@ export const UpdateUserProfile = async (req, res) => {
     user.bio = bio || user.bio;
 
     const updatedUser = await user.save();
+
+    await Post.updateMany(
+			{ "replies.userId": userId },
+			{
+				$set: {
+					"replies.$[reply].username": user.username,
+					"replies.$[reply].profileImg": user.profileImg,
+				},
+			},
+			{ arrayFilters: [{ "reply.userId": userId }] }
+		);
 
     return res.status(200).json(updatedUser);
   } catch (error) {
