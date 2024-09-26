@@ -192,8 +192,8 @@ export const editMessage = async (req, res) => {
             { _id: messageId, sender: userId },
             { text: newText },
             { new: true }
-        );
-
+        ).populate('recipient'); 
+        
         if (!message) {
             return res.status(404).json({ error: "Message not found or not authorized" });
         }
