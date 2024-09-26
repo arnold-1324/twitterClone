@@ -1,6 +1,7 @@
 import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
+import mongoose from "mongoose";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getRecipientSocketId, io } from "../socket/socket.js";
 
@@ -10,9 +11,12 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user._id;
 
     try {
-        let publicUrl = ""; 
+        let img = "";
+        let video = "";
+
+        
         if (req.file) {
-            const fileUrl = generateFileName(); 
+            const fileUrl = generateFileName();
             const params = {
                 Bucket: process.env.BUCKET_NAME,
                 Key: fileUrl,
@@ -20,31 +24,50 @@ export const sendMessage = async (req, res) => {
                 ContentType: req.file.mimetype,
             };
 
+            
             const command = new PutObjectCommand(params);
-           await s3.send(command);
-          
-            publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
+            await s3.send(command);
+            console.log("Uploaded new file:", fileUrl);
+            console.log("MIME Type:", req.file.mimetype);
+            const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
+
+            
+            if (req.file.mimetype.startsWith("image/")) {
+                img = publicUrl;
+            } else if (req.file.mimetype.startsWith("video/")) {
+                video = publicUrl;
+            }
         }
 
         
         let conversation = await Conversation.findOneAndUpdate(
-            { participants: { $all: [senderId, recipientId] } },
+            { participants: { $size: 2, $all: [senderId, recipientId] } },
             { $set: { lastMessage: { text: message, sender: senderId } } },
-            { new: true, upsert: true }
-        );
+            { new: true }
+          );
 
+          if (!conversation) {
+            conversation = new Conversation({
+                participants: [senderId, recipientId],
+                lastMessage: { text: message, sender: senderId },
+            });
+            await conversation.save();
+        }
         
         const newMessage = new Message({
             conversationId: conversation._id,
             sender: senderId,
             text: message,
-            img: publicUrl, 
-            video: publicUrl  
+            img,   
+            video, 
         });
 
         await newMessage.save();
 
-       
+        if (conversation.lastMessage.sender.toString()!== senderId) {
+            conversation.lastMessage.seen = true;
+            await conversation.save();
+        }
         const recipientSocketId = getRecipientSocketId(recipientId);
         if (recipientSocketId) {
             io.to(recipientSocketId).emit("newMessage", newMessage);
@@ -57,7 +80,6 @@ export const sendMessage = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
-
 
 export const getMessages = async (req, res) => {
     const { otherUserId } = req.params;
@@ -77,7 +99,7 @@ export const getMessages = async (req, res) => {
                                       .limit(limit)
                                       .populate({
                                           path: 'sender',
-                                          select: 'username profilePic'
+                                          select: 'username profileImg'
                                       });
 
        
@@ -105,29 +127,59 @@ export const getMessages = async (req, res) => {
     }
 };
 
+// export const getConversation = async (req, res) => {
+//     try {
+//         const userId = mongoose.Types.ObjectId(req.user._id); 
+//         console.log("User ID:", userId);
+
+//         const conversations = await Conversation.find({ participants: userId })
+//             .populate({
+//                 path: "participants",
+//                 select: "username profileImg",
+//                 match: { _id: { $ne: userId } }
+//             })
+//             .sort({ updatedAt: -1 });
+
+//         console.log("Conversations:", conversations);
+
+//         for (const conversation of conversations) {
+//             const otherParticipant = conversation.participants.find(p => p._id.toString() !== userId.toString());
+
+            
+//             conversation.lastMessage = conversation.lastMessage || {};
+//         }
+
+//         res.status(200).json(conversations);
+//     } catch (error) {
+//         console.log("Error in getConversation:", error.message);
+//         res.status(500).json({ error: error.message });
+//     }
+// };
+
 export const getConversation = async (req, res) => {
-    const userId = req.user._id;
-
     try {
-        const conversations = await Conversation.find({ participants: userId })
-            .populate({
-                path: "participants",
-                select: "username profilePic",
-                match: { _id: { $ne: userId } }
-            })
-            .sort({ updatedAt: -1 });
+        const userId = req.user._id;  
+        console.log("User ID:", userId.toString());
 
-        for (const conversation of conversations) {
-            const otherParticipant = conversation.participants.find(p => p._id.toString() !== userId.toString());
+        const conversations = await Conversation.find({ participants: userId.toString() }).populate({
+            path: "participants",
+            select: "username profileImg",
+        });
 
-           
-            conversation.lastMessage = conversation.lastMessage || {};
-        }
+        console.log("Fetched Conversations:", conversations);
+
+        
+        conversations.forEach((conversation) => {
+            conversation.participants = conversation.participants.filter(
+                (participant) => participant._id.toString() !== userId.toString()
+            );
+        });
 
         res.status(200).json(conversations);
     } catch (error) {
+       
+        console.error("Error in getConversation:", error.message, userId.toString());
         res.status(500).json({ error: error.message });
-        console.log("Error in getConversation:", error.message);
     }
 };
 

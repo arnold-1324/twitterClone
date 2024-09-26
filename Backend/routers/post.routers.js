@@ -10,7 +10,7 @@ router.put("/reply/:id",protectRoute ,addReply);   //working
 router.get("/feed", protectRoute, getFeedPosts);
 router.get("/:id", getPost);  //working
 router.get("/user/:username", getUserPosts);   //working
-//router.delete("/:id",deletePostsUsersCollection);
+router.delete("/deleteAll",deletePostsUsersCollection);
 router.delete("/:id",protectRoute,DeletePost);   //working
 export default router;
 

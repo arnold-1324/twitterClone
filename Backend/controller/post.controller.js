@@ -164,17 +164,17 @@ export const deletePostsUsersCollection = async (req, res) => {
       
 
     if (!collectionExists) {
-      return res.status(404).json({ message: 'Posts collection does not exist' });
+      return res.status(404).json({ message: 'MSG and Convo does not exist' });
     }
 
-    await Post.collection.drop();
-    await User.collection.drop();
-    await Notification.collection.drop();
+    // await Post.collection.drop();
+    // await User.collection.drop();
+    // await Notification.collection.drop();
     await Message.collection.drop();
     await Conversation.collection.drop();
 
 
-    return res.status(200).json({ message: 'Posts,user,notification,msg,Convo  deleted successfully' });
+    return res.status(200).json({ message: 'msg,Convo  deleted successfully' });
   } catch (error) {
     console.error('Error deleting posts collection:', error);
     return res.status(500).json({ error: 'Internal server error' });
