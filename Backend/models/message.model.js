@@ -13,6 +13,10 @@ const messageSchema = new mongoose.Schema(
             enum: ["text", "image", "video"], 
             default: "text",
         },
+        iv: { 
+            type: String,
+            required: true,
+        },
         seen: {
             type: Boolean,
             default: false,

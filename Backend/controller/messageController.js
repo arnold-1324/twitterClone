@@ -4,7 +4,83 @@ import Message from "../models/message.model.js";
 import mongoose from "mongoose";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getRecipientSocketId, io } from "../socket/socket.js";
+import {encrypt,decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
 
+
+// export const sendMessage = async (req, res) => {
+//     const { recipientId, message } = req.body;
+//     const senderId = req.user._id;
+
+//     try {
+//         let img = "";
+//         let video = "";
+
+        
+//         if (req.file) {
+//             const fileUrl = generateFileName();
+//             const params = {
+//                 Bucket: process.env.BUCKET_NAME,
+//                 Key: fileUrl,
+//                 Body: req.file.buffer,
+//                 ContentType: req.file.mimetype,
+//             };
+
+            
+//             const command = new PutObjectCommand(params);
+//             await s3.send(command);
+//             console.log("Uploaded new file:", fileUrl);
+//             console.log("MIME Type:", req.file.mimetype);
+//             const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
+
+            
+//             if (req.file.mimetype.startsWith("image/")) {
+//                 img = publicUrl;
+//             } else if (req.file.mimetype.startsWith("video/")) {
+//                 video = publicUrl;
+//             }
+//         }
+
+        
+//         let conversation = await Conversation.findOneAndUpdate(
+//             { participants: { $size: 2, $all: [senderId, recipientId] } },
+//             { $set: { lastMessage: { text: message, sender: senderId } } },
+//             { new: true }
+//           );
+
+//           if (!conversation) {
+//             conversation = new Conversation({
+//                 participants: [senderId, recipientId],
+//                 lastMessage: { text: message, sender: senderId },
+//             });
+//             await conversation.save();
+//         }
+        
+//         const newMessage = new Message({
+//             conversationId: conversation._id,
+//             sender: senderId,
+//             text: message,
+//             img,   
+//             video, 
+//         });
+
+//         await newMessage.save();
+
+//         if (conversation.lastMessage.sender.toString()!== senderId) {
+//             conversation.lastMessage.seen = true;
+//             await conversation.save();
+//         }
+//         const recipientSocketId = getRecipientSocketId(recipientId);
+//         if (recipientSocketId) {
+//             io.to(recipientSocketId).emit("newMessage", newMessage);
+//             io.to(recipientSocketId).emit("stopTyping", { conversationId: conversation._id });
+//         }
+
+//         res.status(201).json(newMessage);
+//     } catch (error) {
+//         console.error("Error in sendMessage:", error.message);
+//         res.status(500).json({ error: error.message });
+//     }
+// };
 
 export const sendMessage = async (req, res) => {
     const { recipientId, message } = req.body;
@@ -14,7 +90,6 @@ export const sendMessage = async (req, res) => {
         let img = "";
         let video = "";
 
-        
         if (req.file) {
             const fileUrl = generateFileName();
             const params = {
@@ -24,14 +99,10 @@ export const sendMessage = async (req, res) => {
                 ContentType: req.file.mimetype,
             };
 
-            
             const command = new PutObjectCommand(params);
             await s3.send(command);
-            console.log("Uploaded new file:", fileUrl);
-            console.log("MIME Type:", req.file.mimetype);
             const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
 
-            
             if (req.file.mimetype.startsWith("image/")) {
                 img = publicUrl;
             } else if (req.file.mimetype.startsWith("video/")) {
@@ -40,34 +111,33 @@ export const sendMessage = async (req, res) => {
         }
 
         
+        const encryptedMessage = encrypt(message);
+
         let conversation = await Conversation.findOneAndUpdate(
             { participants: { $size: 2, $all: [senderId, recipientId] } },
-            { $set: { lastMessage: { text: message, sender: senderId } } },
+            { $set: { lastMessage: { text: encryptedMessage.encryptedData, sender: senderId } } },
             { new: true }
-          );
+        );
 
-          if (!conversation) {
+        if (!conversation) {
             conversation = new Conversation({
                 participants: [senderId, recipientId],
-                lastMessage: { text: message, sender: senderId },
+                lastMessage: { text: encryptedMessage.encryptedData, sender: senderId },
             });
             await conversation.save();
         }
-        
+
         const newMessage = new Message({
             conversationId: conversation._id,
             sender: senderId,
-            text: message,
-            img,   
-            video, 
+            text: encryptedMessage.encryptedData, 
+            img,
+            video,
+            iv: encryptedMessage.iv 
         });
 
         await newMessage.save();
 
-        if (conversation.lastMessage.sender.toString()!== senderId) {
-            conversation.lastMessage.seen = true;
-            await conversation.save();
-        }
         const recipientSocketId = getRecipientSocketId(recipientId);
         if (recipientSocketId) {
             io.to(recipientSocketId).emit("newMessage", newMessage);
@@ -81,6 +151,52 @@ export const sendMessage = async (req, res) => {
     }
 };
 
+
+// export const getMessages = async (req, res) => {
+//     const { otherUserId } = req.params;
+//     const userId = req.user._id;
+
+//     try {
+//         const conversation = await Conversation.findOne({ participants: { $all: [userId, otherUserId] } });
+//         if (!conversation) {
+//             return res.status(404).json({ error: "Conversation not found" });
+//         }
+
+//         const { page = 1, limit = 20 } = req.query; 
+
+//         const messages = await Message.find({ conversationId: conversation._id })
+//                                       .sort({ createdAt: 1 })
+//                                       .skip((page - 1) * limit)
+//                                       .limit(limit)
+//                                       .populate({
+//                                           path: 'sender',
+//                                           select: 'username profileImg'
+//                                       });
+
+       
+
+          
+
+//         await Message.updateMany(
+//             {
+//                 conversationId: conversation._id,
+//                 sender: { $ne: userId },
+//                 seen: false
+//             },
+//             { $set: { seen: true } }
+//         );
+
+//         const recipientSocketId = getRecipientSocketId(otherUserId);
+//         if (recipientSocketId) {
+//             io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
+//         }
+
+//         res.status(200).json(messages);
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//         console.log("Error in getMessages:", error.message);
+//     }
+// };
 export const getMessages = async (req, res) => {
     const { otherUserId } = req.params;
     const userId = req.user._id;
@@ -91,7 +207,7 @@ export const getMessages = async (req, res) => {
             return res.status(404).json({ error: "Conversation not found" });
         }
 
-        const { page = 1, limit = 20 } = req.query; 
+        const { page = 1, limit = 20 } = req.query;
 
         const messages = await Message.find({ conversationId: conversation._id })
                                       .sort({ createdAt: 1 })
@@ -103,8 +219,13 @@ export const getMessages = async (req, res) => {
                                       });
 
        
-
-          
+        const decryptedMessages = messages.map(msg => {
+            const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
+            return {
+                ...msg._doc,
+                text: decryptedText 
+            };
+        });
 
         await Message.updateMany(
             {
@@ -120,12 +241,13 @@ export const getMessages = async (req, res) => {
             io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
         }
 
-        res.status(200).json(messages);
+        res.status(200).json(decryptedMessages);
     } catch (error) {
         res.status(500).json({ error: error.message });
         console.log("Error in getMessages:", error.message);
     }
 };
+
 
 // export const getConversation = async (req, res) => {
 //     try {

@@ -25,6 +25,6 @@ router.post('/reply', protectRoute, upload.single('image'), replyToMessage);   /
 
 //router.put('/deleteforme',protectRoute, deleteFormeMessage); 
 
-router.delete('/deleteforeveryone', protectRoute, deleteMessage);    //working
+router.delete('/deleteforeveryone', protectRoute, deleteMessage);     //working
 
 export default router;
