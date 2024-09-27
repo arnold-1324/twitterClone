@@ -17,12 +17,14 @@ router.post('/send', protectRoute, upload.single('media'), sendMessage);  //work
 
 router.get('/:otherUserId', protectRoute, getMessages);    //working
 
-router.get("/conversations", protectRoute, getConversation);  //
+router.get("/conversations", protectRoute, getConversation);  
 
-router.put('/edit', protectRoute, editMessage);    
+router.put('/edit', protectRoute, editMessage);    //working
 
-router.post('/reply', protectRoute, upload.single('image'), replyToMessage);
+router.post('/reply', protectRoute, upload.single('image'), replyToMessage);   //working
 
-router.delete('/delete', protectRoute, deleteMessage);
+//router.put('/deleteforme',protectRoute, deleteFormeMessage); 
+
+router.delete('/deleteforeveryone', protectRoute, deleteMessage);    //working
 
 export default router;

@@ -158,13 +158,20 @@ export const getMessages = async (req, res) => {
 
 export const getConversation = async (req, res) => {
     try {
-        const userId = req.user._id;  
+        const userId = req.user._id;
         console.log("User ID:", userId.toString());
-
-        const conversations = await Conversation.find({ participants: userId.toString() }).populate({
-            path: "participants",
-            select: "username profileImg",
-        });
+  
+        const objectIdUser = mongoose.Types.ObjectId(userId);
+        
+        const conversations = await Conversation.find({ participants: objectIdUser })
+            .populate({
+                path: "participants",
+                select: "username profileImg",
+            })
+            .populate({
+                path: "lastMessage.sender", 
+                select: "username profileImg",
+            });
 
         console.log("Fetched Conversations:", conversations);
 
@@ -175,30 +182,43 @@ export const getConversation = async (req, res) => {
             );
         });
 
+        
         res.status(200).json(conversations);
     } catch (error) {
-       
         console.error("Error in getConversation:", error.message, userId.toString());
         res.status(500).json({ error: error.message });
     }
 };
+
 
 export const editMessage = async (req, res) => {
     const { messageId, newText } = req.body;
     const userId = req.user._id;
 
     try {
+        
         const message = await Message.findOneAndUpdate(
             { _id: messageId, sender: userId },
-            { text: newText },
+            { text: newText, edited: true }, 
             { new: true }
-        ).populate('recipient'); 
-        
+        )
+        .populate('sender', 'username profileImg')  
+        .populate('replyTo', 'text')  
+        .populate('reactions.user', 'username');  
+
         if (!message) {
             return res.status(404).json({ error: "Message not found or not authorized" });
         }
 
-        io.to(getRecipientSocketId(message.recipient)).emit("messageEdited", message);
+        
+        const conversation = await Conversation.findById(message.conversationId)
+            .populate('participants', 'username');  
+
+        
+        // const recipientSocketIds = getRecipientSocketIds(conversation.participants);
+        // recipientSocketIds.forEach(socketId => {
+        //     io.to(socketId).emit("messageEdited", message);
+        // });
 
         res.status(200).json(message);
     } catch (error) {
@@ -213,17 +233,20 @@ export const replyToMessage = async (req, res) => {
     const senderId = req.user._id;
 
     try {
-        const parentMessage = await Message.findById(messageId);
+        
+        const parentMessage = await Message.findById(messageId).populate('sender', 'username');
         if (!parentMessage) {
             return res.status(404).json({ error: "Parent message not found" });
         }
 
+        
         const conversation = await Conversation.findOneAndUpdate(
             { participants: { $all: [senderId, recipientId] } },
             { $set: { lastMessage: { text: replyText, sender: senderId } } },
             { new: true, upsert: true }
         );
 
+       
         const replyMessage = new Message({
             conversationId: conversation._id,
             sender: senderId,
@@ -231,14 +254,38 @@ export const replyToMessage = async (req, res) => {
             replyTo: parentMessage._id
         });
 
-        await replyMessage.save();
+        
+        const savedReplyMessage = await replyMessage.save();
+        const populatedReplyMessage = await savedReplyMessage.populate('sender', 'username profileImg');
 
-        const recipientSocketId = getRecipientSocketId(recipientId);
-        if (recipientSocketId) {
-            io.to(recipientSocketId).emit("newReply", replyMessage);
-        }
-
-        res.status(201).json(replyMessage);
+        
+        res.status(201).json({
+            messageId: populatedReplyMessage._id,
+            conversationId: populatedReplyMessage.conversationId,
+            sender: {
+                id: populatedReplyMessage.sender._id,
+                name: populatedReplyMessage.sender.username,
+                avatar: populatedReplyMessage.sender.profileImg 
+            },
+            text: populatedReplyMessage.text,
+            type: "text", 
+            replyTo: {
+                messageId: parentMessage._id,
+                text: parentMessage.text,
+                sender: {
+                    id: parentMessage.sender._id,
+                    name: parentMessage.sender.name
+                }
+            },
+            status: {
+                seen: false,
+                edited: false,
+                deletedFor: []
+            },
+            reactions: [],
+            createdAt: populatedReplyMessage.createdAt,
+            updatedAt: populatedReplyMessage.updatedAt
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
         console.log("Error in replyToMessage:", error.message);
@@ -247,7 +294,7 @@ export const replyToMessage = async (req, res) => {
 
 
 export const deleteMessage = async (req, res) => {
-    const { messageId } = req.params;
+    const { messageId } = req.body;
     const userId = req.user._id;
 
     try {
