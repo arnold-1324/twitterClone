@@ -13,9 +13,9 @@ import {
 const router = express.Router();
 
 
-router.post('/send', protectRoute, upload.single('media'), sendMessage);  //working
+router.post('/send', protectRoute, upload.single('media'), sendMessage);  // msg encryption works
 
-router.get('/:otherUserId', protectRoute, getMessages);    //working
+router.get('/:otherUserId', protectRoute, getMessages);    // msg decryption works
 
 router.get("/conversations", protectRoute, getConversation);  
 
@@ -25,6 +25,6 @@ router.post('/reply', protectRoute, upload.single('image'), replyToMessage);   /
 
 //router.put('/deleteforme',protectRoute, deleteFormeMessage); 
 
-router.delete('/deleteforeveryone', protectRoute, deleteMessage);     //working
+router.delete('/deleteforme', protectRoute, deleteMessage);     //working
 
 export default router;
