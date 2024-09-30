@@ -13,18 +13,18 @@ import {
 const router = express.Router();
 
 
-router.post('/send', protectRoute, upload.single('media'), sendMessage);  //working
+router.post('/send', protectRoute, upload.single('media'), sendMessage);  // msg encryption works
 
-router.get('/:otherUserId', protectRoute, getMessages);    //working
+router.get('/:otherUserId', protectRoute, getMessages);    // msg decryption works
 
 router.get("/conversations", protectRoute, getConversation);  
 
-router.put('/edit', protectRoute, editMessage);    //working
+router.put('/edit', protectRoute, editMessage);    //msg encryption & decryption works
 
-router.post('/reply', protectRoute, upload.single('image'), replyToMessage);   //working
+router.post('/reply', protectRoute, upload.single('image'), replyToMessage);   //msg encryption & decrytion works
 
 //router.put('/deleteforme',protectRoute, deleteFormeMessage); 
 
-router.delete('/deleteforeveryone', protectRoute, deleteMessage);     //working
+router.delete('/deleteforme', protectRoute, deleteMessage);     //working
 
 export default router;
