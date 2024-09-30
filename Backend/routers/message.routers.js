@@ -19,9 +19,9 @@ router.get('/:otherUserId', protectRoute, getMessages);    // msg decryption wor
 
 router.get("/conversations", protectRoute, getConversation);  
 
-router.put('/edit', protectRoute, editMessage);    //working
+router.put('/edit', protectRoute, editMessage);    //msg encryption & decryption works
 
-router.post('/reply', protectRoute, upload.single('image'), replyToMessage);   //working
+router.post('/reply', protectRoute, upload.single('image'), replyToMessage);   //msg encryption & decrytion works
 
 //router.put('/deleteforme',protectRoute, deleteFormeMessage); 
 
