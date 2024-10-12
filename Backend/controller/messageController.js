@@ -140,88 +140,70 @@ export const getMessages = async (req, res) => {
 };
 
 
-// export const getConversation = async (req, res) => {
-//     try {
-//         const userId = mongoose.Types.ObjectId(req.user._id); 
-//         console.log("User ID:", userId);
-
-//         const conversations = await Conversation.find({ participants: userId })
-//             .populate({
-//                 path: "participants",
-//                 select: "username profileImg",
-//                 match: { _id: { $ne: userId } }
-//             })
-//             .sort({ updatedAt: -1 });
-
-//         console.log("Conversations:", conversations);
-
-//         for (const conversation of conversations) {
-//             const otherParticipant = conversation.participants.find(p => p._id.toString() !== userId.toString());
-
-            
-//             conversation.lastMessage = conversation.lastMessage || {};
-//         }
-
-//         res.status(200).json(conversations);
-//     } catch (error) {
-//         console.log("Error in getConversation:", error.message);
-//         res.status(500).json({ error: error.message });
-//     }
-// };
-
 export const getConversation = async (req, res) => {
     try {
-      const userId = req.user._id;
-  
-      
-      console.log("User ID from req.user._id:", userId);
-      
-      
-      if (!mongoose.Types.ObjectId.isValid(userId)) {
-
-        throw new Error(`Invalid userId: ${userId}`);
-      }
-  
-      const objectIdUserId = mongoose.Types.ObjectId(userId);
-  
-      
-      const conversations = await Conversation.find({ participants: req.user._id })
-        .populate({
-          path: 'participants',
-          select: 'username profileImg',
-        });
-  
-      console.log('Fetched Conversations:', conversations);
-  
-      
-      const updatedConversations = conversations.map((conversation) => {
-        
-        const otherParticipants = conversation.participants.filter(
-          (participant) => participant._id.toString() !== userId.toString()
-        );
-  
-  
-        if (conversation.lastMessage && conversation.lastMessage.text !== '') {
-          const lastmsg = decrypt({
-            iv: conversation.lastMessage.iv,
-            encryptedData: conversation.lastMessage.text,
-          });
-          conversation.lastMessage.text = lastmsg;
+        // Check if the user is authenticated
+        if (!req.user || !req.user._id) {
+            return res.status(401).json({ error: "Unauthorized: No User Found" });
         }
-  
-  
-        return {
-          ...conversation._doc,
-          participants: otherParticipants,
-        };
-      });
-  
-      res.status(200).json(updatedConversations);
+
+        const userId = req.user._id; // Authenticated user ID
+        const { userid } = req.params; // Optional other user ID from the request params
+
+        console.log("User ID from req.user._id:", userId);
+        console.log("User ID from params:", userid);
+
+        // Validate the optional userid param if provided
+        if (userid && !mongoose.Types.ObjectId.isValid(userid)) {
+            throw new Error(`Invalid userId: ${userid}`);
+        }
+
+        // Find all conversations involving the user
+        const conversations = await Conversation.find({ participants: userId })
+            .populate({
+                path: 'participants',
+                select: 'username profileImg',
+            });
+
+        console.log('Fetched Conversations:', conversations);
+
+        const updatedConversations = conversations.map((conversation) => {
+            // Decrypt the last message if it exists
+            if (conversation.lastMessage && conversation.lastMessage.text && conversation.lastMessage.iv) {
+                try {
+                    const lastmsg = decrypt({
+                        iv: conversation.lastMessage.iv,
+                        encryptedData: conversation.lastMessage.text,
+                    });
+                    conversation.lastMessage.text = lastmsg;
+                } catch (err) {
+                    console.error('Error decrypting message:', err);
+                    conversation.lastMessage.text = 'Error decrypting message';
+                }
+            }
+
+            // Filter out the current user from participants
+            const otherParticipants = conversation.participants.filter(
+                participant => participant._id.toString() !== userId.toString()
+            );
+
+            // Check if the message has been seen or not
+            const isSeen = conversation.lastMessage?.seen || false;
+
+            return {
+                ...conversation._doc,
+                participants: otherParticipants,
+                isSeen, // Include the seen status of the last message
+            };
+        });
+
+        res.status(200).json(updatedConversations);
     } catch (error) {
-      console.error('Error in getConversation:', error.message);
-      res.status(500).json({ error: error.message });
+        console.error('Error in getConversation:', error.message);
+        res.status(500).json({ error: error.message });
     }
-  };
+};
+
 
 
 export const editMessage = async (req, res) => {
@@ -368,3 +350,25 @@ export const deleteMessage = async (req, res) => {
         console.log("Error in deleteMessage:", error.message);
     }
 };
+
+
+export const reactTomsg = async (req,res)=>{
+    try{
+        const {messageId,reactions} = req.body;
+        const userId = req.user._id;
+
+        const message = await Message.findByIdAndUpdate(
+            { _id: messageId },
+            { $push: { reactions: { user: userId, reaction: reactions } } },
+            { new: true }
+        ).populate('sender', 'username profileImg');
+
+        if (!message) {
+            return res.status(404).json({ error: "Message not found" });
+        }
+        res.status(200).json(message);
+    } catch(error){
+        res.status(500).json({ error: error.message });
+        console.log("Error in reactToMsg:", error.message);
+    }
+}
