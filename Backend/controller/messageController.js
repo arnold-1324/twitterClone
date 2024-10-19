@@ -191,7 +191,8 @@ export const getConversation = async (req, res) => {
       console.error("Error in getConversation:", error.message ,typeof(userId));
       res.status(500).json({ error: error.message });
     }
-  };
+};
+
 
 
 export const editMessage = async (req, res) => {
@@ -338,3 +339,25 @@ export const deleteMessage = async (req, res) => {
         console.log("Error in deleteMessage:", error.message);
     }
 };
+
+
+export const reactTomsg = async (req,res)=>{
+    try{
+        const {messageId,reactions} = req.body;
+        const userId = req.user._id;
+
+        const message = await Message.findByIdAndUpdate(
+            { _id: messageId },
+            { $push: { reactions: { user: userId, reaction: reactions } } },
+            { new: true }
+        ).populate('sender', 'username profileImg');
+
+        if (!message) {
+            return res.status(404).json({ error: "Message not found" });
+        }
+        res.status(200).json(message);
+    } catch(error){
+        res.status(500).json({ error: error.message });
+        console.log("Error in reactToMsg:", error.message);
+    }
+}
