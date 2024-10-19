@@ -17,7 +17,7 @@ router.post('/send', protectRoute, upload.single('media'), sendMessage);  // msg
 
 router.get('/:otherUserId', protectRoute, getMessages);    // msg decryption works
 
-router.get("/conversations", protectRoute, getConversation);  
+router.get('/getConvo/user', protectRoute, getConversation);  // working but need to work in the resp to the user 
 
 router.put('/edit', protectRoute, editMessage);    //msg encryption & decryption works
 
