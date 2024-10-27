@@ -9,6 +9,7 @@ import { Navigate } from "react-router-dom";
 import { useRecoilValue } from "recoil";
 import userAtom from "./atom/userAtom";
 import Logout from "./components/Logout";
+import UpdateProfile from "./Pages/UpdateProfile";
 
 function App() {
   const { pathname } = useLocation();
@@ -21,6 +22,7 @@ function App() {
       <Routes>
          <Route path="/" element={user ? <HomePage />: <Navigate to="/auth" />} />
          <Route path='/auth' element={!user ? <AuthPage /> : <Navigate to="/" />} />
+         <Route path='/update' element={user ? <UpdateProfile /> : <Navigate to="/auth" />} />
          <Route path="/:username" element={<Userpage />} />
          <Route path="/:username/post/:pid" element={<PostPage />} />
       </Routes>

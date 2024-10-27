@@ -2,11 +2,14 @@ import { Button } from "@chakra-ui/react"
 import { useRecoilState } from "recoil";
 import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
+import { HiOutlineLogout } from "react-icons/hi";
+
 
 const Logout = () => {
    const setUser = useRecoilState(userAtom);
    const showToast = useShowToast();
     const handleLogout = async()=>{
+        debugger
         try {
             const res =await fetch("api/auth/logout",{
                 method:"POST",
@@ -28,7 +31,7 @@ const Logout = () => {
     }
   return (
     <Button position={"fixed"} top={"30px"} right={"30px"} size={"sm"} onClick={handleLogout}>
-     Logout
+     <HiOutlineLogout />
     </Button>
   )
 }

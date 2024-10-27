@@ -16,9 +16,41 @@ import {
 } from '@chakra-ui/react'
 import authScreenAtom from '../atom/authAtom';
 import { useSetRecoilState } from "recoil";
+import { useState } from 'react';
+import useShowToast from '../hooks/useShowToast';
+import userAtom from '../atom/userAtom';
 
 export default function SimpleCard() {
   const setAuthScreen = useSetRecoilState(authScreenAtom);
+  const setUser = useSetRecoilState(userAtom);
+  const [inputs,setInputs] =useState({
+    username:"",
+    password:""
+  });
+  const showToast = useShowToast();
+const handlesignIn = async()=>{
+  
+  try {
+    const res = await fetch("api/auth/login",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+      },
+      body: JSON.stringify(inputs)
+    })
+    const data = await res.json();
+    if(data.error){
+      showToast("Error",data.error,"error");
+      return;
+    }
+    console.log(data);
+    localStorage.setItem("user-threads",JSON.stringify(data));
+    setUser(data);
+  } catch (error) {
+    console.log(error);
+    showToast("Error",error,"error");
+  }
+}
   return (
     <Flex
       align={'center'}
@@ -37,12 +69,12 @@ export default function SimpleCard() {
           }}>
           <Stack spacing={4}>
             <FormControl id="email" isRequired>
-              <FormLabel>Email or Username</FormLabel>
-              <Input type="text" />
+              <FormLabel>Username</FormLabel>
+              <Input type="text"  onChange={(e)=> setInputs({...inputs, username:e.target.value})} value={inputs.username}/>
             </FormControl>
             <FormControl id="password" isRequired>
               <FormLabel>Password</FormLabel>
-              <Input type="password" />
+              <Input type="password" onChange={(e)=> setInputs({...inputs, password:e.target.value})} value={inputs.password}/>
             </FormControl>
             <Stack spacing={6}>
               <Stack
@@ -57,7 +89,7 @@ export default function SimpleCard() {
                 color={'white'}
                 _hover={{
                   bg: '#1A91DA',
-                }}>
+                }} onClick={handlesignIn}>
                 Sign in
               </Button>
             </Stack>

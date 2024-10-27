@@ -58,12 +58,12 @@ export const signUp=async(req,res)=>{
         profilePic:newUser.profileImg,
       });
     }else{
-        res.status(400).json({ error:"Invalid user data"});
+        res.status(400).json({ Error:"Invalid user data"});
     }
 
-  } catch (error) {
+  } catch (Error) {
     console.log("Error in Signup controller",error.message);
-    res.status(500).json({error:"Internal Server Error"});
+    res.status(500).json({Error:"Internal Server Error"});
 
   }
 }
