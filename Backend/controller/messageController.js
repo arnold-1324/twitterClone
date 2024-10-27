@@ -1,7 +1,7 @@
+import moment from "moment";  
 import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
-import { ObjectId } from "mongoose";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getRecipientSocketId, io } from "../socket/socket.js";
 import {encrypt,decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
@@ -13,10 +13,7 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user._id;
   
     try {
-      // Ensure recipientId and senderId are valid ObjectId strings
-      if (!mongoose.Types.ObjectId.isValid(recipientId) || !mongoose.Types.ObjectId.isValid(senderId)) {
-        return res.status(400).json({ error: "Invalid sender or recipient ID" });
-      }
+     
   
       let img = "";
       let video = "";
@@ -50,7 +47,7 @@ export const sendMessage = async (req, res) => {
         {
           participants: {
             $size: 2,
-            $all: [new mongoose.Types.ObjectId(senderId), new mongoose.Types.ObjectId(recipientId)],
+            $all: [senderId, recipientId],
           },
         },
         {
@@ -67,7 +64,7 @@ export const sendMessage = async (req, res) => {
   
       if (!conversation) {
         conversation = new Conversation({
-          participants: [new mongoose.Types.ObjectId(senderId), new mongoose.Types.ObjectId(recipientId)],
+          participants: [senderId, recipientId],
           lastMessage: { text: encryptedMessage.encryptedData, iv: encryptedMessage.iv, sender: senderId },
         });
         await conversation.save();
@@ -85,14 +82,14 @@ export const sendMessage = async (req, res) => {
   
       await newMessage.save();
   
-      // Real-time handling via socket (if applicable)
+     
       const recipientSocketId = getRecipientSocketId(recipientId);
       if (recipientSocketId) {
         io.to(recipientSocketId).emit("newMessage", newMessage);
         io.to(recipientSocketId).emit("stopTyping", { conversationId: conversation._id });
       }
   
-      // Decrypt the message to send in response
+     
       const decryptedMessage = decrypt({
         iv: newMessage.iv,
         encryptedData: newMessage.text,
@@ -165,33 +162,66 @@ export const getMessages = async (req, res) => {
 };
 
 
+
 export const getConversation = async (req, res) => {
-    try {
-     // const { userId } = req.params;
-      let  Cuserid  = req.user._id.toString();
+  try {
+    let currentUserId = req.user._id.toString();
 
-    //  console.log("user id params  "+typeof(userId) + " "+ userId );
-      console.log("user id cookies  "+typeof(Cuserid) + " " +Cuserid);  
-
-      const conversations = await Conversation.find({
-        participants: Cuserid,
+   
+    const conversations = await Conversation.find({
+      participants: currentUserId,
+    })
+      .populate({
+        path: 'participants',
+        select: 'username profileImg',
       })
-        .populate({
-          path: 'participants', 
-          select: 'username profileImg', 
-        })
-        .populate({
-          path: 'lastMessage.sender', 
-          select: 'username profileImg', 
-        })
-        .sort({ updatedAt: -1 }); 
+      .populate({
+        path: 'lastMessage.sender',
+        select: 'username profileImg',
+      })
+      .sort({ updatedAt: -1 });
 
-      res.status(200).json(conversations);
-    } catch (error) {
-      console.error("Error in getConversation:", error.message ,typeof(userId));
-      res.status(500).json({ error: error.message });
-    }
+   
+    const convoData = conversations.map(convo => {
+      const lastMessageSender = convo.lastMessage.sender._id.toString();
+      const otherParticipant = convo.participants.find(participant => participant._id.toString() !== currentUserId);
+
+      
+      let decryptedMessage;
+      try {
+        decryptedMessage = decrypt({
+          iv: convo.lastMessage.iv,
+          encryptedData: convo.lastMessage.text,
+        });
+      } catch (decryptError) {
+        decryptedMessage = "[Decryption failed]";
+      }
+
+      
+      const formattedTime = moment(convo.updatedAt).calendar(null, {
+        sameDay: 'HH:mm', 
+        lastDay: '[Yesterday]', 
+        lastWeek: 'dddd', 
+        sameElse: 'MMM D', 
+      });
+
+      return {
+        name: otherParticipant.username, 
+        lastMessage: decryptedMessage,   
+        time: formattedTime,              
+        seen: convo.lastMessage.seen,     
+        isSender: lastMessageSender === currentUserId,  
+      };
+    });
+
+   
+    res.status(200).json(convoData);
+  } catch (error) {
+    console.error("Error in getConversation:", error.message);
+    res.status(500).json({ error: error.message });
+  }
 };
+
 
 
 
