@@ -10,18 +10,26 @@ import { useRecoilValue } from "recoil";
 import userAtom from "./atom/userAtom";
 import Logout from "./components/Logout";
 import UpdateProfile from "./Pages/UpdateProfile";
+import ResetPasswordForm from "./components/ForgotpassCard";
 
 function App() {
   const { pathname } = useLocation();
   const user = useRecoilValue(userAtom);
 
   return (
-    <Box position={"relative"} w='full'>
-			<Container maxW={pathname === "/" ? { base: "620px", md: "900px" } : "620px"}>
+    <Box position={"relative"} w='full' minHeight="100vh">
+    <Container 
+      maxW={pathname === "/" ? { base: "620px", md: "900px" } : "620px"} 
+      height="full" 
+      minHeight="100vh" 
+      display="flex" 
+      flexDirection="column"
+    >
 				<Header />
       <Routes>
          <Route path="/" element={user ? <HomePage />: <Navigate to="/auth" />} />
          <Route path='/auth' element={!user ? <AuthPage /> : <Navigate to="/" />} />
+         <Route path='/auth/reset-password/:token' element={<ResetPasswordForm/>} />
          <Route path='/update' element={user ? <UpdateProfile /> : <Navigate to="/auth" />} />
          <Route path="/:username" element={<Userpage />} />
          <Route path="/:username/post/:pid" element={<PostPage />} />
