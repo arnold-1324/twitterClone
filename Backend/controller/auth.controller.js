@@ -6,6 +6,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from '../lib/utils/uploader.js'
 import { generateTokenAndCookies } from "../lib/utils/generateToken.js";
 import { sendResetPasswordEmail, sendVerificationEmail,sendWelcomeEmail,sendPasswordResetSuccessEmail } from "../lib/utils/Mailtrap/email.js"
+import { profile } from "console";
 
 
 export const signUp=async(req,res)=>{
@@ -62,9 +63,10 @@ export const signUp=async(req,res)=>{
         res.status(400).json({ error:"Invalid user data"});
     }
 
-  } catch (error) {
+
+  } catch (Error) {
     console.log("Error in Signup controller",error.message);
-    res.status(500).json({error:"Internal Server Error"});
+    res.status(500).json({Error:"Internal Server Error"});
 
   }
 }
@@ -115,10 +117,10 @@ export const Logout= async(req,res)=>{
 
 
 export const verifyEmail = async(req,res)=>{
- const { code } = req.body;
+ const { verificationCode } = req.body;
  try{
 const user = await User.findOne({
-  verificationToken:code,
+  verificationToken:verificationCode,
   verificationTokenExpiresAt: { $gt:Date.now()}
 })
 
@@ -130,12 +132,12 @@ user.verificationToken=undefined;
 user.verificationTokenExpiresAt=undefined;
 await user.save();
 
-await sendWelcomeEmail(user.email,user.fullName);
+//await sendWelcomeEmail(user.email,user.fullName);
 res.status(200).json({
   success:true,
   message:"Email verified successfully",
   user: {
-    ...newUser._doc,
+    ...user._doc,
     password: undefined,
     verificationToken: undefined,
     verificationTokenExpiresAt: undefined,
@@ -148,9 +150,9 @@ res.status(200).json({
 }
 
 export const forgotPassword = async(req,res)=>{
-  const { email } = req.body;
+  const { Femail } = req.body;
   try{
-    const user = await User.findOne({email});
+    const user = await User.findOne({Femail});
     if(!user){
       return res.status(400).json({ success:true, message:"User not found"});
     }
@@ -162,15 +164,15 @@ export const forgotPassword = async(req,res)=>{
     user.resetPasswordExpires=resetTokenExpiresAt;
 
     await user.save();
-    await sendResetPasswordEmail(user.email,`${process.env.CLIENT_URL}reset-password/${resetToken}`);
+    //await sendResetPasswordEmail(user.email,`${process.env.CLIENT_URL}reset-password/${resetToken}`);
 
     res.status(200).json({ sucess:true,message:"Password reset link send to your email",
-      user: {
-        ...newUser._doc,
-        password: undefined,
-        verificationToken: undefined,
-        verificationTokenExpiresAt: undefined,
-      },
+      // user: {
+      //   ...newUser._doc,
+      //   password: undefined,
+      //   verificationToken: undefined,
+      //   verificationTokenExpiresAt: undefined,
+      // },
   });
 
   }catch(error){
