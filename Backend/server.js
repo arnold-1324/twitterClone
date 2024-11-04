@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
+import bodyParser from "body-parser";
 
 
 
@@ -20,6 +21,8 @@ const PORT=process.env.PORT || 5000;
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended:true}));
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
 app.use("/api/auth",AuthRoutes);
 app.use("/api/users",UserRoutes);
