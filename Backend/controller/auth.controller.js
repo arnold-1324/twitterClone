@@ -50,16 +50,19 @@ export const signUp=async(req,res)=>{
       //await sendVerificationEmail(newUser.email,verificationToken);  
 
       res.status(201).json({
-        _id:newUser._id,
-        name:newUser.fullName,
-        email:newUser.email,
-        username:newUser.username,
-        bio:newUser.bio,
-        profilePic:newUser.profileImg,
-      });
+        sucess:true,
+        message: "User created sucessfully",
+        user: {
+          ...newUser._doc,
+          password: undefined,
+          verificationToken: undefined,
+          verificationTokenExpiresAt: undefined,
+        },
+      })
     }else{
-        res.status(400).json({ Error:"Invalid user data"});
+        res.status(400).json({ error:"Invalid user data"});
     }
+
 
   } catch (Error) {
     console.log("Error in Signup controller",error.message);
@@ -81,12 +84,15 @@ try{
     generateTokenAndCookies(user._id,res);
 
     res.status(201).json({
-      _id:user._id,
-      name:user.fullName,
-      email:user.email,
-      username:user.username,
-      bio:user.bio,
-      profilePic:user.profileImg,
+      sucess:true,
+      message: "login  sucessfully",
+      user: {
+        ...user._doc,
+        password: undefined,
+        verificationToken: undefined,
+        verificationTokenExpiresAt: undefined,
+      },
+
     })
 
 }catch(error){
@@ -111,10 +117,10 @@ export const Logout= async(req,res)=>{
 
 
 export const verifyEmail = async(req,res)=>{
- const { code } = req.body;
+ const { verificationCode } = req.body;
  try{
 const user = await User.findOne({
-  verificationToken:code,
+  verificationToken:verificationCode,
   verificationTokenExpiresAt: { $gt:Date.now()}
 })
 
@@ -126,12 +132,12 @@ user.verificationToken=undefined;
 user.verificationTokenExpiresAt=undefined;
 await user.save();
 
-await sendWelcomeEmail(user.email,user.fullName);
+//await sendWelcomeEmail(user.email,user.fullName);
 res.status(200).json({
   success:true,
   message:"Email verified successfully",
   user: {
-    ...newUser._doc,
+    ...user._doc,
     password: undefined,
     verificationToken: undefined,
     verificationTokenExpiresAt: undefined,
@@ -144,9 +150,9 @@ res.status(200).json({
 }
 
 export const forgotPassword = async(req,res)=>{
-  const { email } = req.body;
+  const { Femail } = req.body;
   try{
-    const user = await User.findOne({email});
+    const user = await User.findOne({Femail});
     if(!user){
       return res.status(400).json({ success:true, message:"User not found"});
     }
@@ -158,15 +164,15 @@ export const forgotPassword = async(req,res)=>{
     user.resetPasswordExpires=resetTokenExpiresAt;
 
     await user.save();
-    await sendResetPasswordEmail(user.email,`${process.env.CLIENT_URL}reset-password/${resetToken}`);
+    //await sendResetPasswordEmail(user.email,`${process.env.CLIENT_URL}reset-password/${resetToken}`);
 
     res.status(200).json({ sucess:true,message:"Password reset link send to your email",
-      user: {
-        ...newUser._doc,
-        password: undefined,
-        verificationToken: undefined,
-        verificationTokenExpiresAt: undefined,
-      },
+      // user: {
+      //   ...newUser._doc,
+      //   password: undefined,
+      //   verificationToken: undefined,
+      //   verificationTokenExpiresAt: undefined,
+      // },
   });
 
   }catch(error){

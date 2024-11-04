@@ -6,10 +6,10 @@ import { HiOutlineLogout } from "react-icons/hi";
 
 
 const Logout = () => {
-   const setUser = useRecoilState(userAtom);
+    const [user, setUser] = useRecoilState(userAtom);
    const showToast = useShowToast();
     const handleLogout = async()=>{
-        debugger
+        //debugger
         try {
             const res =await fetch("api/auth/logout",{
                 method:"POST",
