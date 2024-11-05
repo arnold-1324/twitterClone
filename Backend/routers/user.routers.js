@@ -9,6 +9,6 @@ const router = express.Router();
 router.get("/profile/:username?",protectRoute,getUserProfile);
 router.get("/suggested",protectRoute,getSuggestedUser);
 router.post("/follow/:id",protectRoute,followUnfollowUser);
-router.post("/update/:id", protectRoute, upload.single('image'), UpdateUserProfile);
+router.put("/update/:id", protectRoute, upload.single('image'), UpdateUserProfile);
 
 export default router;
