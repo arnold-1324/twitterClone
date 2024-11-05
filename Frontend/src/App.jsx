@@ -4,7 +4,7 @@ import Userpage from "./Pages/Userpage";
 import PostPage from "./Pages/PostPage";
 import Header from "./components/Header";
 import AuthPage from "./Pages/AuthPage";
-import HomePage from "./Pages/Home/Home";
+import Home from "./Pages/Home";
 import { Navigate } from "react-router-dom";
 import { useRecoilValue } from "recoil";
 import userAtom from "./atom/userAtom";
@@ -30,7 +30,7 @@ function App() {
         <Routes>
           <Route
             path="/"
-            element={user ? <HomePage /> : <Navigate to="/auth" />}
+            element={user ? <Home /> : <Navigate to="/auth" />}
           />
           <Route
             path="/auth"
