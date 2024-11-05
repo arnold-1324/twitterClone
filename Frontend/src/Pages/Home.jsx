@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import useShowToast from "../hooks/useShowToast";
 import Post from "../components/Post";
 import { useRecoilState } from "recoil";
-import postsAtom from "../atoms/postsAtom";
-import SuggestedUsers from "../components/";
+import postsAtom from "../atom/postsAtom";
+import SuggestedUsers from "../components/SuggestedUsers";
 
 const HomePage = () => {
 	const [posts, setPosts] = useRecoilState(postsAtom);
@@ -30,7 +30,7 @@ const HomePage = () => {
 			}
 		};
 		getFeedPosts();
-	}, [showToast, setPosts]);
+	}, [ setPosts]);
 
 	return (
 		<Flex gap='10' alignItems={"flex-start"}>
