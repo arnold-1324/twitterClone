@@ -73,7 +73,7 @@ export default function UpdateProfilePage() {
           });
           const fileInput = fileRef.current.files[0];
           if (fileInput) {
-              formData.append("file", fileInput);
+              formData.append("image", fileInput);
           }
 
           const res = await fetch(`/api/users/update/${inputs._id}`, {
