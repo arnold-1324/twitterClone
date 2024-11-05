@@ -27,7 +27,7 @@ const SuggestedUsers = () => {
 		};
 
 		getSuggestedUsers();
-	}, [showToast]);
+	}, []);
 
 	return (
 		<>
