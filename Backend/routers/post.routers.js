@@ -4,14 +4,14 @@ import { protectRoute } from "../middleware/protectRoute.js";
 import { likePost,addReply,NewPost,DeletePost,deletePostsUsersCollection,getFeedPosts,getUserPosts,getPost } from '../controller/post.controller.js';
 const router=express.Router();
 
-router.post("/create",protectRoute, upload.single('image'),NewPost); //working
-router.put("/like/:id",protectRoute, likePost);   //working
-router.put("/reply/:id",protectRoute ,addReply);   //working
-router.get("/feed", protectRoute, getFeedPosts);
-router.get("/:id", getPost);  //working
-router.get("/user/:username", getUserPosts);   //working
-router.delete("/deleteAll",deletePostsUsersCollection);
-router.delete("/:id",protectRoute,DeletePost);   //working
+router.post("/create",protectRoute, upload.single('image'),NewPost); //working  for both
+router.put("/like/:id",protectRoute, likePost);   //working    for both
+router.put("/reply/:id",protectRoute ,addReply);   //working    for both
+router.get("/feed", protectRoute, getFeedPosts);  //working for both
+router.get("/:id", getPost);  //working for both
+router.get("/user/:username", getUserPosts);   //working for both
+//router.delete("/deleteAll",deletePostsUsersCollection);
+router.delete("/:id",protectRoute,DeletePost);   //working   for both
 export default router;
 
 
