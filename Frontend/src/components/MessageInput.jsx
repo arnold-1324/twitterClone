@@ -1,109 +1,190 @@
-import { Flex, Image, Input, InputGroup, InputRightElement, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Spinner } from "@chakra-ui/react";
-import { useRef, useState } from "react";
+import {
+    Flex,
+    Input,
+    InputGroup,
+    InputRightElement,
+    Modal,
+    ModalBody,
+    ModalCloseButton,
+    ModalContent,
+    ModalHeader,
+    ModalOverlay,
+    Spinner,
+    useDisclosure,
+    IconButton,
+    Box,
+    Image,
+    Text,
+} from "@chakra-ui/react";
+import { useState, useRef } from "react";
 import { IoSendSharp } from "react-icons/io5";
+import { BsFillImageFill } from "react-icons/bs";
 import useShowToast from "../hooks/useShowToast";
 import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAtom";
 import { useRecoilValue, useSetRecoilState } from "recoil";
-import { useSocket } from "../context/SocketContext";
 
 const MessageInput = ({ setMessages }) => {
-	const showToast = useShowToast();
-	const [message, setMessage] = useState("");
-	const [img, setImg] = useState(null);
-	const { socket } = useSocket();
-	const fileInputRef = useRef();
-	const [isLoading, setIsLoading] = useState(false);
-	const selectedConversation = useRecoilValue(selectedConversationAtom);
-	const setConversations = useSetRecoilState(conversationsAtom);
+    const [messageText, setMessageText] = useState("");
+    const [isSending, setIsSending] = useState(false);
+    const [mediaUrl, setMediaUrl] = useState(null);
+    const [mediaError, setMediaError] = useState(""); 
+    const imageRef = useRef(null);
+    const { onClose } = useDisclosure();
+    const selectedConversation = useRecoilValue(selectedConversationAtom);
+    const setConversations = useSetRecoilState(conversationsAtom);
+    const showToast = useShowToast();
 
-	// Handle file input
-	const handleFileChange = (e) => {
-		const file = e.target.files[0];
-		if (file) {
-			const reader = new FileReader();
-			reader.onloadend = () => {
-				setImg(reader.result);
-			};
-			reader.readAsDataURL(file);
-		}
-	};
+  
+    const handleMediaChange = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+           
+            const validTypes = ["image/*", "video/*", "audio/*", "application/*"];
+            if (file.type.match(validTypes.join('|'))) {
+                const reader = new FileReader();
+                reader.onloadend = () => setMediaUrl(reader.result);
+                reader.readAsDataURL(file); 
+                setMediaError(""); 
+            } else {
+                setMediaError("Invalid file type. Please upload a valid media file.");
+                setMediaUrl(null); 
+            }
+        }
+    };
 
-	// Send the message
-	const sendMessage = async () => {
-		if (message.trim() === "" && !img) return;
+    const handleSendMessage = async (e) => {
+        e.preventDefault();
+        if (!messageText && !mediaUrl) return;
+        if (isSending) return;
 
-		setIsLoading(true);
-		try {
-			const newMessage = { text: message, img, sender: selectedConversation.userId, receiver: selectedConversation._id };
-			socket.emit("sendMessage", newMessage);
-			setMessages((prev) => [...prev, newMessage]);
-			setMessage("");
-			setImg(null);
-		} catch (error) {
-			showToast("Error", error.message, "error");
-		} finally {
-			setIsLoading(false);
-		}
-	};
+        setIsSending(true);
 
-	return (
-		<Flex gap={2} alignItems="center">
-			{/* Image Preview Modal */}
-			{img && (
-				<Modal isOpen={true} onClose={() => setImg(null)}>
-					<ModalOverlay />
-					<ModalContent>
-						<ModalHeader>Preview Image</ModalHeader>
-						<ModalCloseButton />
-						<ModalBody>
-							<Image src={img} alt="preview" />
-						</ModalBody>
-					</ModalContent>
-				</Modal>
-			)}
+        try {
+            const formData = new FormData();
+            formData.append("message", messageText);
+            formData.append("recipientId", selectedConversation.userId);
 
-			{/* Input Box */}
-			<InputGroup>
-				<Input
-					placeholder="Type a message..."
-					value={message}
-					onChange={(e) => setMessage(e.target.value)}
-					onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-				/>
-				<InputRightElement>
-					<Image
-						src="/image-icon.png"
-						alt="Attach Image"
-						boxSize="20px"
-						cursor="pointer"
-						onClick={() => fileInputRef.current.click()}
-					/>
-				</InputRightElement>
-			</InputGroup>
+            
+            if (mediaUrl) {
+                const blob = dataURLtoBlob(mediaUrl); 
+                formData.append("media", blob); 
+            }
 
-			{/* Send Button */}
-			<Flex
-				onClick={sendMessage}
-				alignItems="center"
-				justifyContent="center"
-				borderRadius="full"
-				bg="green.400"
-				color="white"
-				p={2}
-				cursor="pointer"
-			>
-				{isLoading ? <Spinner /> : <IoSendSharp />}
-			</Flex>
+            const res = await fetch("api/messages/send", {
+                method: "POST",
+                body: formData,
+            });
 
-			{/* Hidden file input */}
-			<input
-				type="file"
-				ref={fileInputRef}
-				style={{ display: "none" }}
-				onChange={handleFileChange}
-			/>
-		</Flex>
-	);
+            const data = await res.json();
+            if (data.error) {
+                showToast("Error", data.error, "error");
+                return;
+            }
+
+            setMessages((messages) => [...messages, data]);
+
+            setConversations((prevConvs) => {
+                return prevConvs.map((conversation) => {
+                    if (conversation._id === selectedConversation._id) {
+                        return {
+                            ...conversation,
+                            lastMessage: {
+                                text: messageText,
+                                sender: data.sender,
+                            },
+                        };
+                    }
+                    return conversation;
+                });
+            });
+
+            setMessageText("");
+            setMediaUrl(null);
+        } catch (error) {
+            showToast("Error", error.message, "error");
+        } finally {
+            setIsSending(false);
+        }
+    };
+
+    
+	const dataURLtoBlob = (dataURL) => {
+        const [header, data] = dataURL.split(',');
+        const mimeType = header.match(/:(.*?);/)[1]; 
+        const byteString = atob(data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([ab], { type: mimeType }); 
+    };
+
+    return (
+        <Flex gap={3} alignItems="center" justifyContent="space-between">
+            <form onSubmit={handleSendMessage} style={{ flex: 1 }}>
+                <InputGroup>
+                    <Input
+                        w="full"
+                        placeholder="Type a message"
+                        value={messageText}
+                        onChange={(e) => setMessageText(e.target.value)}
+                    />
+                    <InputRightElement
+                        onClick={handleSendMessage}
+                        cursor={messageText || mediaUrl ? "pointer" : "not-allowed"}
+                    >
+                        {isSending ? (
+                            <Spinner size="sm" />
+                        ) : (
+                            <IoSendSharp />
+                        )}
+                    </InputRightElement>
+                </InputGroup>
+            </form>
+
+            <Box display="flex" alignItems="center" flexDirection="column">
+                <IconButton
+                    icon={<BsFillImageFill />}
+                    onClick={() => imageRef.current.click()}
+                    variant="outline"
+                    aria-label="Send media"
+                />
+                <Input
+                    ref={imageRef}
+                    type="file"
+                    hidden
+                    accept="image/*,video/*,audio/*"
+                    onChange={handleMediaChange}
+                />
+                {mediaError && <Text color="red.500" fontSize="sm">{mediaError}</Text>}
+            </Box>
+
+            <Modal isOpen={mediaUrl} onClose={() => setMediaUrl(null)}>
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>Preview</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody>
+                        <Flex direction="column" alignItems="center">
+                            {mediaUrl && <Image src={mediaUrl} alt="Preview" w="100%" />}
+                            <Flex justifyContent="center" my={3}>
+                                {isSending ? (
+                                    <Spinner size="lg" />
+                                ) : (
+                                    <IoSendSharp
+                                        size={28}
+                                        cursor="pointer"
+                                        onClick={handleSendMessage}
+                                    />
+                                )}
+                            </Flex>
+                        </Flex>
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
+        </Flex>
+    );
 };
 
 export default MessageInput;
