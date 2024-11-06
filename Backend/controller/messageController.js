@@ -9,104 +9,125 @@ import {encrypt,decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
 
 
 export const sendMessage = async (req, res) => {
-    const { recipientId, message } = req.body;
-    const senderId = req.user._id;
-  
-    try {
-     
-  
-      let img = "";
-      let video = "";
-  
-      // Handle file upload if present
-      if (req.file) {
-        const fileUrl = generateFileName();
-        const params = {
-          Bucket: process.env.BUCKET_NAME,
-          Key: fileUrl,
-          Body: req.file.buffer,
-          ContentType: req.file.mimetype,
-        };
-  
-        const command = new PutObjectCommand(params);
-        await s3.send(command);
-        const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
-  
-        if (req.file.mimetype.startsWith("image/")) {
-          img = publicUrl;
-        } else if (req.file.mimetype.startsWith("video/")) {
-          video = publicUrl;
-        }
-      }
-  
-      // Encrypt message
-      const encryptedMessage = encrypt(message);
-  
-      // Find or create conversation
-      let conversation = await Conversation.findOneAndUpdate(
-        {
-          participants: {
-            $size: 2,
-            $all: [senderId, recipientId],
-          },
-        },
-        {
-          $set: {
-            lastMessage: {
-              text: encryptedMessage.encryptedData,
-              iv: encryptedMessage.iv,
-              sender: senderId,
-            },
-          },
-        },
-        { new: true }
-      );
-  
-      if (!conversation) {
-        conversation = new Conversation({
-          participants: [senderId, recipientId],
-          lastMessage: { text: encryptedMessage.encryptedData, iv: encryptedMessage.iv, sender: senderId },
-        });
-        await conversation.save();
-      }
-  
-      // Create a new message
-      const newMessage = new Message({
-        conversationId: conversation._id,
-        sender: senderId,
-        text: encryptedMessage.encryptedData,
-        img,
-        video,
-        iv: encryptedMessage.iv,
-      });
-  
-      await newMessage.save();
-  
-     
-      const recipientSocketId = getRecipientSocketId(recipientId);
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit("newMessage", newMessage);
-        io.to(recipientSocketId).emit("stopTyping", { conversationId: conversation._id });
-      }
-  
-     
-      const decryptedMessage = decrypt({
-        iv: newMessage.iv,
-        encryptedData: newMessage.text,
-      });
-  
-      const responseMessage = {
-        ...newMessage._doc,
-        text: decryptedMessage,
-        iv: undefined, 
+  const { recipientId, message } = req.body;
+  const senderId = req.user._id;
+
+  let img = "";
+  let video = "";
+  try {
+
+    // Check if file is uploaded
+    if (req.file) {
+      const fileUrl = generateFileName();
+      const params = {
+        Bucket: process.env.BUCKET_NAME,
+        Key: fileUrl,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
       };
-  
-      res.status(201).json(responseMessage);
-    } catch (error) {
-      console.error("Error in sendMessage:", error.message);
-      res.status(500).json({ error: error.message });
+
+      const command = new PutObjectCommand(params);
+      await s3.send(command);
+
+      const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
+
+      if (req.file.mimetype.startsWith("image/")) {
+       
+        img = publicUrl;
+      } else if (req.file.mimetype.startsWith("video/")) {
+        
+        video = publicUrl;
+      }
     }
-  };
+
+    console.log("Image URL:", img);  // log the image URL
+    console.log("Video URL:", video);  // log the video URL
+
+    // Encrypt the message text
+    const encryptedMessage = encrypt(message);
+
+    // Find or create a conversation
+    let conversation = await Conversation.findOneAndUpdate(
+      {
+        participants: {
+          $size: 2,
+          $all: [senderId, recipientId],
+        },
+      },
+      {
+        $set: {
+          lastMessage: {
+            text: encryptedMessage.encryptedData,
+            iv: encryptedMessage.iv,
+            sender: senderId,
+          },
+        },
+      },
+      { new: true }
+    );
+
+    // If no conversation exists, create a new one
+    if (!conversation) {
+      conversation = new Conversation({
+        participants: [senderId, recipientId],
+        lastMessage: {
+          text: encryptedMessage.encryptedData,
+          iv: encryptedMessage.iv,
+          sender: senderId,
+        },
+      });
+      await conversation.save();
+    }
+
+    // Create a new message document including media
+    const newMessage = new Message({
+      conversationId: conversation._id,
+      sender: senderId,
+      text: encryptedMessage.encryptedData,
+      img: img,  // Save the image URL here
+      video: video,  // Save the video URL here
+      iv: encryptedMessage.iv,
+    });
+
+    // Log message data before saving
+    console.log("Message data to be saved:", {
+      conversationId: conversation._id,
+      sender: senderId,
+      text: encryptedMessage.encryptedData,
+      img,
+      video,
+    });
+
+    await newMessage.save();
+
+    // Notify recipient via socket (if online)
+    const recipientSocketId = getRecipientSocketId(recipientId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit("newMessage", newMessage);
+      io.to(recipientSocketId).emit("stopTyping", { conversationId: conversation._id });
+    }
+
+    // Decrypt the message to send back in response
+    const decryptedMessage = decrypt({
+      iv: newMessage.iv,
+      encryptedData: newMessage.text,
+    });
+
+    const responseMessage = {
+      ...newMessage._doc,
+      text: decryptedMessage,  // Decrypted message text
+      iv: undefined,  // Remove the iv from the response
+    };
+
+    res.status(201).json(responseMessage);  // Send the message back with media URL
+
+  } catch (error) {
+    console.error("Error in sendMessage:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
 
 export const getMessages = async (req, res) => {
     const { otherUserId } = req.params;
@@ -167,13 +188,12 @@ export const getConversation = async (req, res) => {
   try {
     let currentUserId = req.user._id.toString();
 
-   
     const conversations = await Conversation.find({
       participants: currentUserId,
     })
       .populate({
         path: 'participants',
-        select: 'username profileImg',
+        select: 'username profileImg isVerified',  
       })
       .populate({
         path: 'lastMessage.sender',
@@ -181,7 +201,6 @@ export const getConversation = async (req, res) => {
       })
       .sort({ updatedAt: -1 });
 
-   
     const convoData = conversations.map(convo => {
       const lastMessageSender = convo.lastMessage.sender._id.toString();
       const otherParticipant = convo.participants.find(participant => participant._id.toString() !== currentUserId);
@@ -197,7 +216,7 @@ export const getConversation = async (req, res) => {
         decryptedMessage = "[Decryption failed]";
       }
 
-      
+     
       const formattedTime = moment(convo.updatedAt).calendar(null, {
         sameDay: 'HH:mm', 
         lastDay: '[Yesterday]', 
@@ -206,15 +225,23 @@ export const getConversation = async (req, res) => {
       });
 
       return {
-        name: otherParticipant.username, 
-        lastMessage: decryptedMessage,   
-        time: formattedTime,              
-        seen: convo.lastMessage.seen,     
+        _id: convo._id,  
+        participants: convo.participants, 
+        lastMessage: {
+          text: decryptedMessage, 
+          sender: lastMessageSender, 
+          seen: convo.lastMessage.seen, 
+          createdAt: convo.lastMessage.createdAt, 
+        },
+        userProfilePic: otherParticipant.profileImg, 
+        username: otherParticipant.username,  
+        isVerified: otherParticipant.isVerified,  
+        formattedTime,  
         isSender: lastMessageSender === currentUserId,  
+       
       };
     });
 
-   
     res.status(200).json(convoData);
   } catch (error) {
     console.error("Error in getConversation:", error.message);
