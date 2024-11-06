@@ -24,7 +24,7 @@ export const getNotifications = async (req, res) => {
 
 export const deleteNotification = async (req, res) => {
     try {
-        const { id: notificationId } = req.params;  
+        const { notificationId } = req.body;  
         const userId = req.user._id;  
 
         if (notificationId) {

@@ -1,6 +1,6 @@
 import { Avatar } from "@chakra-ui/avatar";
 import { Image } from "@chakra-ui/image";
-import { Box, Flex, Text } from "@chakra-ui/layout";
+import { Box, Flex, Text, Skeleton, SkeletonCircle, SkeletonText } from "@chakra-ui/react";
 import { Link, useNavigate } from "react-router-dom";
 import Actions from "./Actions";
 import { useEffect, useState } from "react";
@@ -55,7 +55,20 @@ const Post = ({ post, postedBy }) => {
     }
   };
 
-  if (isLoading) return <Text>Loading...</Text>;
+  if (isLoading) {
+    return (
+      <Flex gap={3} mb={4} py={5} borderWidth="1px" borderRadius="md" p={4} shadow="md">
+        <SkeletonCircle size="10" />
+        <Flex flex={1} flexDirection="column" gap={2}>
+          <SkeletonText noOfLines={1} width="40%" />
+          <SkeletonText noOfLines={2} spacing="4" mb={2} />
+          <Skeleton height="200px" borderRadius="md" />
+          <SkeletonText noOfLines={1} width="30%" />
+        </Flex>
+      </Flex>
+    );
+  }
+
   if (!user) return null;
 
   return (
@@ -78,8 +91,8 @@ const Post = ({ post, postedBy }) => {
             </Text>
           </Flex>
           <Box>
-            <Text mb={2}>{post.caption}</Text> {/* Updated to display caption */}
-            {post.images && <Image src={post.images} alt={post.caption} borderRadius="md" /> } {/* Updated to display images */}
+            <Text mb={2}>{post.caption}</Text>
+            {post.images && <Image src={post.images} alt={post.caption} borderRadius="md" />}
           </Box>
           <Actions post={post} />
           {user._id === currentUser?._id && (

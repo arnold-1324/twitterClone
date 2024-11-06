@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.get('/', protectRoute ,getNotifications);  //working
 
-router.delete("/:id",protectRoute, deleteNotification);  //working
+router.delete("/delete",protectRoute, deleteNotification);  //working
 
 
 
