@@ -30,7 +30,7 @@ const SuggestedUser = ({ user }) => {
 				/>
 				<Box>
 					<Flex alignItems="center">
-						<Text fontSize="md" fontWeight="bold" color="gray.800" mr={1}>
+						<Text fontSize="md" fontWeight="bold" color={useColorModeValue("gray.700", "whiteAlpha.900")} mr={1}>
 							{user.username}
 						</Text>
 						{user.isVerified && (
