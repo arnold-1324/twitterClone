@@ -71,19 +71,18 @@ const MessageContainer = () => {
 		return () => socket.off("messagesSeen", handleMessagesSeen);
 	}, [messages, currentUser._id, selectedConversation, socket]);
 
-	// Scroll to the latest message
+	
 	useEffect(() => {
 		messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages]);
 
-	// Fetch messages for the selected conversation
+	
 	useEffect(() => {
 		const getMessages = async () => {
 			setLoadingMessages(true);
 			setMessages([]);
 			try {
 				if (selectedConversation.mock) return;
-
 				const res = await fetch(`api/messages/${selectedConversation.userId}`);
 				const data = await res.json();
 				if (data.error) {
