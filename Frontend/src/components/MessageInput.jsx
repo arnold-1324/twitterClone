@@ -109,14 +109,16 @@ const MessageInput = ({ setMessages }) => {
 
     
 	const dataURLtoBlob = (dataURL) => {
-		const byteString = atob(dataURL.split(',')[1]);
-		const ab = new ArrayBuffer(byteString.length);
-		const ia = new Uint8Array(ab);
-		for (let i = 0; i < byteString.length; i++) {
-			ia[i] = byteString.charCodeAt(i);
-		}
-		return new Blob([ab], { type: "application/octet-stream" }); 
-	};
+        const [header, data] = dataURL.split(',');
+        const mimeType = header.match(/:(.*?);/)[1]; 
+        const byteString = atob(data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([ab], { type: mimeType }); 
+    };
 
     return (
         <Flex gap={3} alignItems="center" justifyContent="space-between">

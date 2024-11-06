@@ -16,14 +16,28 @@ import { BsCheck2All, BsFillImageFill } from "react-icons/bs";
 import { selectedConversationAtom } from "../atom/messagesAtom";
 
 const Conversation = ({ conversation, isOnline }) => {
-	const user = conversation.participants[0];
+	// Get the first participant as the user (based on your data structure)
+	const user = conversation.participants.find(
+		(participant) => participant._id !== conversation.lastMessage.sender // Find the non-sender
+	); 
 	const currentUser = useRecoilValue(userAtom);
 	const lastMessage = conversation.lastMessage;
 	const [selectedConversation, setSelectedConversation] = useRecoilState(selectedConversationAtom);
 	const colorMode = useColorMode();
 
+	// Set hover and selected background colors
 	const hoverBgColor = useColorModeValue("gray.100", "gray.700");
 	const selectedBgColor = useColorModeValue("gray.200", "gray.600");
+
+	// Handle when a conversation is clicked to select it
+	const handleSelectConversation = () => {
+		setSelectedConversation({
+			_id: conversation._id,
+			userId: user._id,
+			userProfilePic: user.profileImg,
+			username: user.username,
+		});
+	};
 
 	return (
 		<Flex
@@ -34,15 +48,7 @@ const Conversation = ({ conversation, isOnline }) => {
 				cursor: "pointer",
 				bg: hoverBgColor,
 			}}
-			onClick={() =>
-				setSelectedConversation({
-					_id: conversation._id,
-					userId: user._id,
-					userProfilePic: user.profilePic,
-					username: user.username,
-					mock: conversation.mock,
-				})
-			}
+			onClick={handleSelectConversation}
 			bg={
 				selectedConversation?._id === conversation._id
 					? selectedBgColor
@@ -55,7 +61,7 @@ const Conversation = ({ conversation, isOnline }) => {
 			<WrapItem>
 				<Avatar
 					size={"md"}
-					src={user.profileImg}
+					src={user.profileImg} // Using user.profileImg instead of profilePic
 					name={user.username}
 					borderRadius="full"
 				>
