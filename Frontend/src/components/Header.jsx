@@ -18,6 +18,7 @@ import { MdOutlineSettings } from "react-icons/md";
 import { Link as RouterLink } from "react-router-dom";
 import useLogout from "../hooks/useLogout";
 import authScreenAtom from "../atom/authAtom";
+import NotificationIcon from "./NotificationIcon";
 
 const Header = () => {
 	const { colorMode, toggleColorMode } = useColorMode();
@@ -74,29 +75,7 @@ const Header = () => {
 						</Link>
 					</Tooltip>
 
-					{/* Notifications Icon with Badge */}
-					<Tooltip label="Notifications" placement="bottom">
-						<Link as={RouterLink} to="/notifications" position="relative">
-							<IconButton
-								icon={<BsBellFill size={20} />}
-								variant="ghost"
-								aria-label="Notifications"
-							/>
-							{unreadNotifications > 0 && (
-								<Badge
-									position="absolute"
-									top="-1"
-									right="-1"
-									colorScheme="red"
-									fontSize="0.7em"
-									borderRadius="full"
-									px={2}
-								>
-									{unreadNotifications}
-								</Badge>
-							)}
-						</Link>
-					</Tooltip>
+					<NotificationIcon unreadCount={3} />
 
 					<Tooltip label="Settings" placement="bottom">
 						<Link as={RouterLink} to="/settings">
