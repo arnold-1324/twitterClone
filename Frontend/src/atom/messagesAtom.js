@@ -1,17 +1,12 @@
-
+// atoms.js
 import { atom } from "recoil";
 
 export const conversationsAtom = atom({
-	key: "conversationsAtom",
-	default: [],
+    key: "conversationsAtom",
+    default: [],
 });
 
 export const selectedConversationAtom = atom({
-	key: "selectedConversationAtom",
-	default: {
-		_id: "",
-		userId: "",
-		username: "",
-		userProfilePic: "",
-	},
+    key: "selectedConversationAtom",
+    default: null, 
 });

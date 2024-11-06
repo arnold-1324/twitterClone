@@ -32,8 +32,10 @@ export const sendMessage = async (req, res) => {
       const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
 
       if (req.file.mimetype.startsWith("image/")) {
+       
         img = publicUrl;
       } else if (req.file.mimetype.startsWith("video/")) {
+        
         video = publicUrl;
       }
     }
