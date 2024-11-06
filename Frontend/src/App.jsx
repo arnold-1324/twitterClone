@@ -8,10 +8,11 @@ import Home from "./Pages/Home";
 import { Navigate } from "react-router-dom";
 import { useRecoilValue } from "recoil";
 import userAtom from "./atom/userAtom";
-import Logout from "./components/Logout";
+import ChatPage from "./Pages/ChatPage";
 import UpdateProfile from "./Pages/UpdateProfile";
 import ResetPasswordForm from "./components/ForgotpassCard";
 import CreatePost from "./components/CreatePost";
+import NotificationPage from "./Pages/NotificationPage";
 
 function App() {
   const { pathname } = useLocation();
@@ -57,9 +58,11 @@ function App() {
               )
             }
           />
+          <Route path='/chat' element={user ? <ChatPage /> : <Navigate to={"/auth"} />} />
+          <Route path="/notifications" element={user ? <NotificationPage /> : <Navigate to="/auth"/>} />
          <Route path='/:username/post/:pid' element={<PostPage />} />
         </Routes>
-        {user && <Logout />}
+        
       </Container>
     </Box>
   );
