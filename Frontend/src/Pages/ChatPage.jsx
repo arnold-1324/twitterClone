@@ -129,6 +129,7 @@ const ChatPage = () => {
       w={{ base: "100%", md: "80%", lg: "750px" }}
       p={4}
       transform={"translateX(-50%)"}
+      mt={"49px"}
     >
       <Flex
         gap={4}
@@ -140,9 +141,9 @@ const ChatPage = () => {
         mx={"auto"}
       >
         <Flex flex={30} gap={2} flexDirection={"column"} maxW={{ sm: "250px", md: "full" }} mx={"auto"}>
-          <Text fontWeight={700} color={useColorModeValue("gray.600", "gray.400")}>
+          {/* <Text fontWeight={700} color={useColorModeValue("gray.600", "gray.400")}>
             Your Conversations
-          </Text>
+          </Text> */}
           <form onSubmit={handleConversationSearch}>
             <Flex alignItems={"center"} gap={2}>
               <Input placeholder="Search for a user" onChange={(e) => setSearchText(e.target.value)} />

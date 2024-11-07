@@ -28,44 +28,23 @@ function App() {
         flexDirection="column"
       >
         <Header />
-        <Routes>
-          <Route
-            path="/"
-            element={user ? <Home /> : <Navigate to="/auth" />}
-          />
-          <Route
-            path="/auth"
-            element={!user ? <AuthPage /> : <Navigate to="/" />}
-          />
-          <Route
-            path="/auth/reset-password/:token"
-            element={<ResetPasswordForm />}
-          />
-          <Route
-            path="/update"
-            element={user ? <UpdateProfile /> : <Navigate to="/auth" />}
-          />
-          <Route
-            path="/:username"
-            element={
-              user ? (
-                <>
-                  <Userpage />
-                  <CreatePost />
-                </>
-              ) : (
-                <Userpage />
-              )
-            }
-          />
-          <Route path='/chat' element={user ? <ChatPage /> : <Navigate to={"/auth"} />} />
-          <Route path="/notifications" element={user ? <NotificationPage /> : <Navigate to="/auth"/>} />
-         <Route path='/:username/post/:pid' element={<PostPage />} />
-        </Routes>
         
+        {/* Position CreatePost button outside Routes to display on all pages */}
+        {user && <CreatePost />}
+        
+        <Routes>
+          <Route path="/" element={user ? <Home /> : <Navigate to="/auth" />} />
+          <Route path="/auth" element={!user ? <AuthPage /> : <Navigate to="/" />} />
+          <Route path="/auth/reset-password/:token" element={<ResetPasswordForm />} />
+          <Route path="/update" element={user ? <UpdateProfile /> : <Navigate to="/auth" />} />
+          <Route path="/:username" element={user ? <Userpage /> : <Navigate to="/auth" />} />
+          <Route path="/chat" element={user ? <ChatPage /> : <Navigate to="/auth" />} />
+          <Route path="/notifications" element={user ? <NotificationPage /> : <Navigate to="/auth" />} />
+          <Route path="/:username/post/:pid" element={<PostPage />} />
+        </Routes>
       </Container>
     </Box>
   );
 }
 
-export default App
+export default App;
