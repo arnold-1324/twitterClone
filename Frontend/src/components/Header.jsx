@@ -41,11 +41,14 @@ const Header = () => {
 			)}
 
 			{/* Logo with Color Mode Toggle, centered with mx="auto" */}
+			{/* Logo with Color Mode Toggle, centered with mx="auto" */}
 			<IconButton
 				icon={<Image alt="logo" src={colorMode === "dark" ? "/light-logo.svg" : "/dark-logo.svg"} />}
 				onClick={toggleColorMode}
 				aria-label="Toggle Color Mode"
 				variant="ghost"
+				alignItems={"center"}
+				mx="auto"
 				alignItems={"center"}
 				mx="auto"
 			/>
