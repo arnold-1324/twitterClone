@@ -37,12 +37,12 @@ export const sendMessage = async (req, res) => {
       } else if (req.file.mimetype.startsWith("video/")) {
         
         video = publicUrl;
+      } else if(req.file.mimetype.startsWith("audio/")){
+        video = publicUrl;
       }
     }
 
-    console.log("Image URL:", img);  // log the image URL
-    console.log("Video URL:", video);  // log the video URL
-
+  
     // Encrypt the message text
     const encryptedMessage = encrypt(message);
 
@@ -90,13 +90,7 @@ export const sendMessage = async (req, res) => {
     });
 
     // Log message data before saving
-    console.log("Message data to be saved:", {
-      conversationId: conversation._id,
-      sender: senderId,
-      text: encryptedMessage.encryptedData,
-      img,
-      video,
-    });
+ 
 
     await newMessage.save();
 

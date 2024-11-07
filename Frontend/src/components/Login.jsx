@@ -86,7 +86,7 @@ export default function SimpleCard() {
 
   return (
     <Flex align={'center'} justify={'center'}>
-      <Stack spacing={8} mx={'auto'} maxW={'md'} py={12} px={6}>
+      <Stack spacing={8} mx={'auto'} maxW={'md'} py={8} px={6}>
         <Stack align={'center'}>
           <Heading fontSize={'3xl'}>{forgot ? 'Forgot your password?' : 'Login'}</Heading>
           {forgot && (

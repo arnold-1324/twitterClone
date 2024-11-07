@@ -8,5 +8,5 @@ export const conversationsAtom = atom({
 
 export const selectedConversationAtom = atom({
     key: "selectedConversationAtom",
-    default: null, 
+    default: { _id: null },
 });
