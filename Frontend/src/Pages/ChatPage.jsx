@@ -1,4 +1,5 @@
 import { SearchIcon } from "@chakra-ui/icons";
+import { motion } from "framer-motion";
 import { Box, Button, Flex, Input, Skeleton, SkeletonCircle, Text, useColorModeValue } from "@chakra-ui/react";
 import Conversation from "../components/Conversation";
 import { GiConversation } from "react-icons/gi";
@@ -10,6 +11,9 @@ import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAto
 import userAtom from "../atom/userAtom";
 import { useSocket } from "../context/SocketContext";
 
+
+const MotionFlex = motion(Flex);
+const MotionBox = motion(Box);
 const ChatPage = () => {
   const [searchingUser, setSearchingUser] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(true);
@@ -123,48 +127,47 @@ const ChatPage = () => {
   };
 
   return (
-    <Box
-      position={"absolute"}
-      left={"50%"}
-      w={{ base: "100%", md: "80%", lg: "750px" }}
-      p={4}
-      transform={"translateX(-50%)"}
-      mt={"49px"}
-    >
-      <Flex
-        gap={4}
-        flexDirection={{ base: "column", md: "row" }}
-        maxW={{
-          sm: "400px",
-          md: "full",
-        }}
-        mx={"auto"}
-      >
+    <Box position={"absolute"} left={"50%"} w={{ base: "100%", md: "80%", lg: "750px" }} p={4} transform={"translateX(-50%)"}>
+      <Flex gap={4} flexDirection={{ base: "column", md: "row" }} maxW={{ sm: "400px", md: "full" }} mx={"auto"}>
+        
         <Flex flex={30} gap={2} flexDirection={"column"} maxW={{ sm: "250px", md: "full" }} mx={"auto"}>
-          {/* <Text fontWeight={700} color={useColorModeValue("gray.600", "gray.400")}>
-            Your Conversations
-          </Text> */}
           <form onSubmit={handleConversationSearch}>
             <Flex alignItems={"center"} gap={2}>
-              <Input placeholder="Search for a user" onChange={(e) => setSearchText(e.target.value)} />
-              <Button size={"sm"} onClick={handleConversationSearch} isLoading={searchingUser}>
-                <SearchIcon />
-              </Button>
+              <Input
+                placeholder="Search for a user"
+                onChange={(e) => setSearchText(e.target.value)}
+                sx={{
+                  transition: "border 0.2s ease-in-out",
+                  _focus: {
+                    borderColor: useColorModeValue("teal.500", "teal.300"),
+                    boxShadow: "0 0 0 2px teal.500",
+                  },
+                }}
+              />
+              <Button size={"sm"} onClick={handleConversationSearch} isLoading={searchingUser}><SearchIcon /></Button>
             </Flex>
           </form>
 
           {loadingConversations &&
             [0, 1, 2, 3, 4].map((_, i) => (
-              <Flex key={i} gap={4} alignItems={"center"} p={"1"} borderRadius={"md"}>
-                <Box>
-                  <SkeletonCircle size={"10"} />
-                </Box>
+              <MotionFlex
+                key={i}
+                gap={4}
+                alignItems={"center"}
+                p={"1"}
+                borderRadius={"md"}
+                initial={{ opacity: 0.7 }}
+                animate={{ opacity: 1 }}
+                transition={{ repeat: Infinity, duration: 1, repeatType: "mirror" }}
+              >
+                <SkeletonCircle size={"10"} />
                 <Flex w={"full"} flexDirection={"column"} gap={3}>
                   <Skeleton h={"10px"} w={"80px"} />
                   <Skeleton h={"8px"} w={"90%"} />
                 </Flex>
-              </Flex>
-            ))}
+              </MotionFlex>
+            ))
+          }
 
           {!loadingConversations &&
             conversations.map((conversation) => (
@@ -172,11 +175,20 @@ const ChatPage = () => {
                 key={conversation._id}
                 isOnline={onlineUsers.includes(conversation.participants[0]._id)}
                 conversation={conversation}
+                sx={{
+                  transition: "box-shadow 0.2s ease-in-out",
+                  _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },
+                  ...(selectedConversation._id === conversation._id && {
+                    boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
+                  }),
+                }}
               />
-            ))}
+            ))
+          }
         </Flex>
+
         {!selectedConversation._id && (
-          <Flex
+          <MotionFlex
             flex={70}
             borderRadius={"md"}
             p={2}
@@ -184,13 +196,25 @@ const ChatPage = () => {
             alignItems={"center"}
             justifyContent={"center"}
             height={"400px"}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
           >
             <GiConversation size={100} />
             <Text fontSize={20}>Select a conversation to start messaging</Text>
-          </Flex>
+          </MotionFlex>
         )}
 
-        {selectedConversation._id && <MessageContainer />}
+        {selectedConversation._id && (
+          <MotionBox
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <MessageContainer />
+          </MotionBox>
+        )}
       </Flex>
     </Box>
   );

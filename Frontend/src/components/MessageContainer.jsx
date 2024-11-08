@@ -1,24 +1,24 @@
-import {
-	Avatar,
-	Divider,
-	Flex,
-	Image,
-	Skeleton,
-	SkeletonCircle,
-	Text,
-	useColorModeValue,
-	Box,
+import { 
+	Avatar, 
+	Divider, 
+	Flex, 
+	Image, 
+	Skeleton, 
+	SkeletonCircle, 
+	Text, 
+	useColorModeValue 
   } from "@chakra-ui/react";
-  import Message from "./Message";
+  import { motion } from "framer-motion"; // Import framer-motion for animation
   import MessageInput from "./MessageInput";
   import { useEffect, useRef, useState } from "react";
   import useShowToast from "../hooks/useShowToast";
   import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAtom";
   import { useRecoilValue, useSetRecoilState } from "recoil";
   import userAtom from "../atom/userAtom";
-  import { keyframes } from '@emotion/react';
   import { useSocket } from "../context/SocketContext";
   import messageSound from "../assets/sounds/message.mp3";
+  
+  const MotionFlex = motion(Flex); // Animated Flex component for message animations
   
   const MessageContainer = () => {
 	const showToast = useShowToast();
@@ -30,28 +30,15 @@ import {
 	const setConversations = useSetRecoilState(conversationsAtom);
 	const messageEndRef = useRef(null);
   
-	// Colors based on theme
-	const containerBg = useColorModeValue("gray.200", "gray.900");
-	const messageBg = useColorModeValue("white", "gray.700");
-	const ownMessageBg = useColorModeValue("blue.200", "blue.600");
-	const textColor = useColorModeValue("black", "white");
-
-	const spinAnimation = keyframes`
-	0% { transform: rotate(0deg); }
-	100% { transform: rotate(360deg); }
-	`;
-	
 	// Handle new messages in the conversation
 	useEffect(() => {
 	  const handleNewMessage = (message) => {
 		if (selectedConversation._id === message.conversationId) {
 		  setMessages((prev) => [...prev, message]);
 		}
-  
 		if (!document.hasFocus()) {
 		  new Audio(messageSound).play();
 		}
-  
 		setConversations((prev) =>
 		  prev.map((conversation) =>
 			conversation._id === message.conversationId
@@ -62,31 +49,9 @@ import {
 	  };
   
 	  socket.on("newMessage", handleNewMessage);
+  
 	  return () => socket.off("newMessage", handleNewMessage);
 	}, [socket, selectedConversation._id, setConversations]);
-  
-	useEffect(() => {
-	  const markMessagesAsSeen = () => {
-		if (messages.length && messages[messages.length - 1].sender._id !== currentUser._id) {
-		  socket.emit("markMessagesAsSeen", {
-			conversationId: selectedConversation._id,
-			userId: selectedConversation.userId,
-		  });
-		}
-	  };
-  
-	  const handleMessagesSeen = ({ conversationId }) => {
-		if (selectedConversation._id === conversationId) {
-		  setMessages((prev) =>
-			prev.map((message) => (message.seen ? message : { ...message, seen: true }))
-		  );
-		}
-	  };
-  
-	  markMessagesAsSeen();
-	  socket.on("messagesSeen", handleMessagesSeen);
-	  return () => socket.off("messagesSeen", handleMessagesSeen);
-	}, [messages, currentUser._id, selectedConversation, socket]);
   
 	useEffect(() => {
 	  messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -117,25 +82,23 @@ import {
 	return (
 	  <Flex
 		flex="70"
-		bg={containerBg}
+		bg={useColorModeValue("gray.900", "black")}
 		borderRadius="md"
 		p={4}
 		flexDirection="column"
-		maxW="500px"
-		maxH="600px"
+		maxW="496.22px"
+		maxH="537.05px"
 		overflow="hidden"
 	  >
-		{/* Message Header */}
 		<Flex w="full" h={12} alignItems="center" gap={2} mb={2}>
 		  <Avatar src={selectedConversation.userProfilePic} size="sm" />
-		  <Text color={textColor} display="flex" alignItems="center">
-			{selectedConversation.username}
-			<Image src="/verified.png" w={4} h={4} ml={1} />
+		  <Text display="flex" alignItems="center">
+			{selectedConversation.username} <Image src="/verified.png" w={4} h={4} ml={1} />
 		  </Text>
 		</Flex>
+  
 		<Divider />
   
-		{/* Messages List */}
 		<Flex
 		  flexDir="column"
 		  gap={4}
@@ -144,18 +107,21 @@ import {
 		  height="400px"
 		  overflowY="auto"
 		  borderRadius="md"
-		  bg={containerBg}
+		  bg={useColorModeValue("gray.800", "black")}
 		  boxShadow="md"
 		>
 		  {loadingMessages
 			? [...Array(5)].map((_, i) => (
-				<Flex
+				<MotionFlex
 				  key={i}
 				  gap={2}
 				  alignItems="center"
 				  p={1}
 				  borderRadius="md"
 				  alignSelf={i % 2 === 0 ? "flex-start" : "flex-end"}
+				  initial={{ opacity: 0, y: 20 }}
+				  animate={{ opacity: 1, y: 0 }}
+				  transition={{ delay: i * 0.1, duration: 0.4 }}
 				>
 				  {i % 2 === 0 && <SkeletonCircle size={7} />}
 				  <Flex flexDir="column" gap={2}>
@@ -164,61 +130,71 @@ import {
 					<Skeleton h="8px" w="250px" />
 				  </Flex>
 				  {i % 2 !== 0 && <SkeletonCircle size={7} />}
-				</Flex>
+				</MotionFlex>
 			  ))
 			: messages.map((message) => {
 				const isOwnMessage = currentUser._id === message.sender._id;
 				return (
-				  <Flex
+				  <MotionFlex
 					key={message._id}
 					direction="column"
 					alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
 					gap={2}
+					initial={{ opacity: 0, scale: 0.95 }}
+					animate={{ opacity: 1, scale: 1 }}
+					transition={{ duration: 0.3 }}
 				  >
 					<Flex alignItems="center" gap={2} mb={2}>
 					  {!isOwnMessage && <Avatar src={message.sender.profileImg} size="sm" />}
 					  <Flex
 						direction="column"
-						bg={isOwnMessage ? ownMessageBg : messageBg}
-						borderRadius="16px"
+						bg={isOwnMessage ? "gray.600" : "gray.700"}
+						borderRadius="md"
 						alignItems={isOwnMessage ? "flex-end" : "flex-start"}
-						p={2}
-						boxShadow="md"
-						position="relative"
 					  >
-						{message.img && (
-						  <Image
-							src={message.img}
-							alt="Message image"
-							maxWidth="70%"
-							borderRadius="md"
-							mt={2}
-							boxShadow="md"
-						  />
-						)}
-						{message.video && (
-						<Box as="video" src={message.video} controls width="100%" borderRadius="md" boxShadow="md" />
+						{(message.img || message.video) && (
+						  <Flex direction="column" alignItems="center" gap={2}>
+							{message.img && (
+							  <Image
+								src={message.img}
+								alt="Message image"
+								maxWidth="50%"
+								borderRadius="md"
+								mt={2}
+								boxShadow="md"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								transition={{ duration: 0.3 }}
+							  />
+							)}
+							{message.video && (
+							  <motion.video
+								width="100%"
+								controls
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								transition={{ duration: 0.3 }}
+							  >
+								<source src={message.video} type="video/mp4" />
+								Your browser does not support the video tag.
+							  </motion.video>
+							)}
+						  </Flex>
 						)}
 						{message.text && (
-						  <Text color={textColor} mt={2}>
+						  <Text
+							color={isOwnMessage ? "white" : "black"}
+							p={2}
+							borderRadius="md"
+							mt={2}
+							boxShadow="sm"
+						  >
 							{message.text}
 						  </Text>
 						)}
-						<Box
-						  position="absolute"
-						  w="0"
-						  h="0"
-						  borderLeft={isOwnMessage ? `10px solid ${ownMessageBg}` : "none"}
-						  borderRight={!isOwnMessage ? `10px solid ${messageBg}` : "none"}
-						  borderBottom="10px solid transparent"
-						  top={isOwnMessage ? "unset" : "0"}
-						  bottom={isOwnMessage ? "0" : "unset"}
-						  right={isOwnMessage ? "-10px" : "unset"}
-						  left={!isOwnMessage ? "-10px" : "unset"}
-						/>
 					  </Flex>
 					</Flex>
-				  </Flex>
+				  </MotionFlex>
 				);
 			  })}
 		</Flex>

@@ -7,29 +7,29 @@ import {
 	Stack,
 	Text,
 	WrapItem,
-	useColorMode,
 	useColorModeValue,
 } from "@chakra-ui/react";
+import { motion } from "framer-motion";
 import { useRecoilState, useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import { BsCheck2All, BsFillImageFill } from "react-icons/bs";
 import { selectedConversationAtom } from "../atom/messagesAtom";
 
-const Conversation = ({ conversation, isOnline }) => {
-	// Get the first participant as the user (based on your data structure)
+const MotionFlex = motion(Flex);
+
+const Conversation = ({ conversation, isOnline, sx }) => {
 	const user = conversation.participants.find(
-		(participant) => participant._id !== conversation.lastMessage.sender // Find the non-sender
-	); 
+		(participant) => participant._id !== conversation.lastMessage.sender
+	);
 	const currentUser = useRecoilValue(userAtom);
 	const lastMessage = conversation.lastMessage;
 	const [selectedConversation, setSelectedConversation] = useRecoilState(selectedConversationAtom);
-	const colorMode = useColorMode();
 
 	// Set hover and selected background colors
 	const hoverBgColor = useColorModeValue("gray.100", "gray.700");
 	const selectedBgColor = useColorModeValue("gray.200", "gray.600");
 
-	// Handle when a conversation is clicked to select it
+	// Handle conversation selection
 	const handleSelectConversation = () => {
 		setSelectedConversation({
 			_id: conversation._id,
@@ -40,28 +40,30 @@ const Conversation = ({ conversation, isOnline }) => {
 	};
 
 	return (
-		<Flex
+		<MotionFlex
 			gap={4}
 			alignItems={"center"}
 			p={3}
+			borderRadius={"md"}
+			boxShadow="md"
+			initial={{ opacity: 0, y: 10 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.4 }}
 			_hover={{
 				cursor: "pointer",
 				bg: hoverBgColor,
 			}}
+			whileHover={{ scale: 1.03 }}
 			onClick={handleSelectConversation}
-			bg={
-				selectedConversation?._id === conversation._id
-					? selectedBgColor
-					: "transparent"
-			}
-			borderRadius={"md"}
-			boxShadow="md"
+			bg={selectedConversation?._id === conversation._id ? selectedBgColor : "transparent"}
+			{...(selectedConversation?._id === conversation._id ? { opacity: 1, scale: 1.02, boxShadow: "0px 0px 12px rgba(66, 153, 225, 0.4)" } : {})}
+			sx={sx} // Include sx prop for custom styles
 		>
 			{/* Avatar and Status */}
 			<WrapItem>
 				<Avatar
 					size={"md"}
-					src={user.profileImg} // Using user.profileImg instead of profilePic
+					src={user.profileImg}
 					name={user.username}
 					borderRadius="full"
 				>
@@ -101,7 +103,7 @@ const Conversation = ({ conversation, isOnline }) => {
 					})}
 				</Text>
 			</Stack>
-		</Flex>
+		</MotionFlex>
 	);
 };
 
