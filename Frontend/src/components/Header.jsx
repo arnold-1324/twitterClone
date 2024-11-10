@@ -48,9 +48,7 @@ const Header = () => {
 				aria-label="Toggle Color Mode"
 				variant="ghost"
 				alignItems={"center"}
-				mx="auto"
-				alignItems={"center"}
-				mx="auto"
+				mx={"auto"}
 			/>
 
 			{/* User Icons Section */}
