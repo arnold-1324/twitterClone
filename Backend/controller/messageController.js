@@ -90,13 +90,7 @@ export const sendMessage = async (req, res) => {
     });
 
     // Log message data before saving
-    console.log("Message data to be saved:", {
-      conversationId: conversation._id,
-      sender: senderId,
-      text: encryptedMessage.encryptedData,
-      img,
-      video,
-    });
+ 
 
     await newMessage.save();
 
