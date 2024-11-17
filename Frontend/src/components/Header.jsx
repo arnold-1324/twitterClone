@@ -41,16 +41,7 @@ const Header = () => {
 			)}
 
 			{/* Authentication Links */}
-			{!user && (
-				<Flex gap={4}>
-					<Link as={RouterLink} to="/auth" onClick={() => setAuthScreen("login")}>
-						Login
-					</Link>
-					<Link as={RouterLink} to="/auth" onClick={() => setAuthScreen("signup")}>
-						Sign up
-					</Link>
-				</Flex>
-			)}
+			
 
 			{/* Logo with Color Mode Toggle */}
 			<IconButton

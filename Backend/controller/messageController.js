@@ -37,12 +37,12 @@ export const sendMessage = async (req, res) => {
       } else if (req.file.mimetype.startsWith("video/")) {
         
         video = publicUrl;
-      }
+      }else if (req.file.mimetype.startsWith("audio/")) {
+        video = publicUrl;
     }
+  }
 
-    console.log("Image URL:", img);  // log the image URL
-    console.log("Video URL:", video);  // log the video URL
-
+    
     // Encrypt the message text
     const encryptedMessage = encrypt(message);
 
@@ -184,70 +184,105 @@ export const getMessages = async (req, res) => {
 
 
 
+// export const getConversation = async (req, res) => {
+//   try {
+//     let currentUserId = req.user._id.toString();
+
+//     const conversations = await Conversation.find({
+//       participants: currentUserId,
+//     })
+//       .populate({
+//         path: 'participants',
+//         select: 'username profileImg ',  
+//       })
+      
+
+//     const convoData = conversations.map(convo => {
+//       convo.participants=convo.participants.filter(
+//         (participant)=> participant._id.toString()!==currentUserId.toString() 
+//       );
+      
+//       const decryptConvo = (convoData) => {
+//         try {
+//           const decryptedMessage = decrypt({
+//             iv: convoData.lastMessage.iv,
+//             encryptedData: convoData.lastMessage.text,
+//           });
+//           return { ...convoData, lastMessage: { ...convoData.lastMessage, text: decryptedMessage } };
+//         } catch {
+//           return { ...convoData, lastMessage: { ...convoData.lastMessage, text: "[Decryption failed]" } };
+//         }
+//       };
+    
+//       return decryptConvo;
+//     });
+
+//     res.status(200).json(decryptConvo);
+//   } catch (error) {
+//     console.error("Error in getConversation:", error.message);
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+
 export const getConversation = async (req, res) => {
   try {
-    let currentUserId = req.user._id.toString();
+    const currentUserId = req.user._id.toString();
 
+    // Fetch conversations involving the current user
     const conversations = await Conversation.find({
       participants: currentUserId,
-    })
-      .populate({
-        path: 'participants',
-        select: 'username profileImg isVerified',  
-      })
-      .populate({
-        path: 'lastMessage.sender',
-        select: 'username profileImg',
-      })
-      .sort({ updatedAt: -1 });
+    }).populate({
+      path: "participants",
+      select: "username profileImg",
+    });
 
-    const convoData = conversations.map(convo => {
-      const lastMessageSender = convo.lastMessage.sender._id.toString();
-      const otherParticipant = convo.participants.find(participant => participant._id.toString() !== currentUserId);
+    // Process and prepare data for the frontend
+    const convoData = conversations.map((convo) => {
+      // Filter out the current user from participants
+      const filteredParticipants = convo.participants.filter(
+        (participant) => participant._id.toString() !== currentUserId
+      );
 
-      
-      let decryptedMessage;
-      try {
-        decryptedMessage = decrypt({
-          iv: convo.lastMessage.iv,
-          encryptedData: convo.lastMessage.text,
-        });
-      } catch (decryptError) {
-        decryptedMessage = "[Decryption failed]";
-      }
+      // Decrypt the last message or return a fallback
+      const decryptedMessage = (() => {
+        try {
+          return decrypt({
+            iv: convo.lastMessage?.iv,
+            encryptedData: convo.lastMessage?.text,
+          });
+        } catch {
+          return "[Decryption failed]";
+        }
+      })();
 
-     
-      const formattedTime = moment(convo.updatedAt).calendar(null, {
-        sameDay: 'HH:mm', 
-        lastDay: '[Yesterday]', 
-        lastWeek: 'dddd', 
-        sameElse: 'MMM D', 
-      });
-
+      // Return the formatted conversation object
       return {
-        _id: convo._id,  
-        participants: convo.participants, 
+        _id: convo._id, // Conversation ID
+        participants: filteredParticipants.map((participant) => ({
+          _id: participant._id,
+          username: participant.username,
+          profileImg: participant.profileImg,
+        })),
         lastMessage: {
-          text: decryptedMessage, 
-          sender: lastMessageSender, 
-          seen: convo.lastMessage.seen, 
-          createdAt: convo.lastMessage.createdAt, 
+          text: decryptedMessage,
+          sender: convo.lastMessage?.sender || null, // Sender's User ID
+          seen: convo.lastMessage?.seen || false, // Seen status
         },
-        userProfilePic: otherParticipant.profileImg, 
-        username: otherParticipant.username,  
-        isVerified: otherParticipant.isVerified,  
-        formattedTime,  
-        isSender: lastMessageSender === currentUserId,  
-       
       };
     });
 
     res.status(200).json(convoData);
   } catch (error) {
     console.error("Error in getConversation:", error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Failed to fetch conversations" });
   }
 };
+
+
+
+
+
+
 
 
 
