@@ -19,6 +19,9 @@ import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAto
 import userAtom from "../atom/userAtom";
 import { useSocket } from "../context/SocketContext";
 
+
+const MotionFlex = motion(Flex);
+const MotionBox = motion(Box);
 const ChatPage = () => {
   const [searchingUser, setSearchingUser] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(true);
@@ -187,6 +190,13 @@ const ChatPage = () => {
                 key={conversation._id}
                 isOnline={onlineUsers.includes(conversation.participants[0]?._id)}
                 conversation={conversation}
+                sx={{
+                  transition: "box-shadow 0.2s ease-in-out",
+                  _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },
+                  ...(selectedConversation._id === conversation._id && {
+                    boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
+                  }),
+                }}
               />
             ))
           ) : (
