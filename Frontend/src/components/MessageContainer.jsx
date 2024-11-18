@@ -17,11 +17,13 @@ import {
   import userAtom from "../atom/userAtom";
   import { useSocket } from "../context/SocketContext";
   import messageSound from "../assets/sounds/message.mp3";
+  import { FaCompactDisc ,FaPause,FaPlay} from "react-icons/fa";
   
   const MotionFlex = motion(Flex); // Animated Flex component for message animations
   
   const MessageContainer = () => {
 	const showToast = useShowToast();
+	const [isPlaying, setIsPlaying] = useState(false);
 	const selectedConversation = useRecoilValue(selectedConversationAtom);
 	const [loadingMessages, setLoadingMessages] = useState(true);
 	const [messages, setMessages] = useState([]);
@@ -80,7 +82,7 @@ import {
 	}, [selectedConversation.userId, selectedConversation.mock]);
   
 	return (
-	  <Flex
+		<Flex
 		flex="70"
 		bg={useColorModeValue("gray.900", "black")}
 		borderRadius="md"
@@ -152,7 +154,7 @@ import {
 						borderRadius="md"
 						alignItems={isOwnMessage ? "flex-end" : "flex-start"}
 					  >
-						{(message.img || message.video) && (
+						{(message.img || message.video || message.audio) && (
 						  <Flex direction="column" alignItems="center" gap={2}>
 							{message.img && (
 							  <Image
@@ -179,6 +181,86 @@ import {
 								Your browser does not support the video tag.
 							  </motion.video>
 							)}
+{message.audio && (
+  <Flex direction="row" alignItems="center" gap={4} w="100%" justify="flex-start" p={2}>
+    {/* Gramophone Icon */}
+    <Flex
+      width="60px"
+      height="60px"
+      borderRadius="50%"
+      bg="gray.700"
+      display="flex"
+      justifyContent="center"
+      alignItems="center"
+      boxShadow="lg"
+    >
+      <FaCompactDisc size={35} color="gold" />
+    </Flex>
+
+    {/* Audio Player Container */}
+    <Flex
+      direction="column"
+      w="100%"
+      bg="gray.900"
+      borderRadius="md"
+      p={4}
+      boxShadow="lg"
+      alignItems="center"
+      justify="center"
+    >
+      {/* Song Title */}
+      <Text fontSize="sm" color="white" isTruncated mb={2} fontWeight="bold">
+        {message.audioName || "Audio Name"}
+      </Text>
+
+      {/* Audio Controls */}
+      <Flex direction="row" alignItems="center" justify="center" w="100%" gap={4}>
+        {/* Play/Pause Button */}
+        <motion.div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "10px",
+            borderRadius: "50%",
+            backgroundColor: "green",
+            cursor: "pointer",
+            boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.2)",
+          }}
+          onClick={() => {
+            if (isPlaying) {
+              document.getElementById("audioPlayer").pause();
+            } else {
+              document.getElementById("audioPlayer").play();
+            }
+            setIsPlaying(!isPlaying);
+          }}
+        >
+          {isPlaying ? <FaPause size={20} color="white" /> : <FaPlay size={20} color="white" />}
+        </motion.div>
+
+        {/* Audio Progress */}
+        <motion.audio
+          id="audioPlayer"
+          controls
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+          style={{
+            width: "80%",
+            backgroundColor: "transparent",
+            border: "none",
+            outline: "none",
+            margin: "0 auto",
+          }}
+        >
+          <source src={message.audio} type="audio/mp3" />
+        </motion.audio>
+      </Flex>
+    </Flex>
+  </Flex>
+)}
+
 						  </Flex>
 						)}
 						{message.text && (

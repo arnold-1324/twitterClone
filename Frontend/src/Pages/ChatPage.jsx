@@ -3,14 +3,16 @@ import {
   Box,
   Button,
   Flex,
+  IconButton,
   Input,
   Skeleton,
   SkeletonCircle,
   Text,
-  useColorModeValue,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 import Conversation from "../components/Conversation";
 import { GiConversation } from "react-icons/gi";
+import { BiArrowBack } from "react-icons/bi"; // Back icon
 import MessageContainer from "../components/MessageContainer";
 import { useEffect, useState } from "react";
 import useShowToast from "../hooks/useShowToast";
@@ -18,10 +20,11 @@ import { useRecoilState, useRecoilValue } from "recoil";
 import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAtom";
 import userAtom from "../atom/userAtom";
 import { useSocket } from "../context/SocketContext";
-
+import { motion } from "framer-motion";
 
 const MotionFlex = motion(Flex);
 const MotionBox = motion(Box);
+
 const ChatPage = () => {
   const [searchingUser, setSearchingUser] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(true);
@@ -32,7 +35,8 @@ const ChatPage = () => {
   const showToast = useShowToast();
   const { socket, onlineUsers } = useSocket();
 
-  // Handle marking messages as seen
+  const isMobileView = useBreakpointValue({ base: true, md: false }); // Mobile view condition
+
   useEffect(() => {
     const handleMessagesSeen = ({ conversationId }) => {
       setConversations((prev) =>
@@ -54,7 +58,6 @@ const ChatPage = () => {
     };
   }, [socket, setConversations]);
 
-  // Fetch initial conversations
   useEffect(() => {
     const getConversations = async () => {
       try {
@@ -76,7 +79,6 @@ const ChatPage = () => {
     getConversations();
   }, [setConversations]);
 
-  // Handle user search
   const handleConversationSearch = async (e) => {
     e.preventDefault();
     if (!searchText.trim()) return;
@@ -137,89 +139,105 @@ const ChatPage = () => {
     }
   };
 
+  const clearSelectedConversation = () => {
+    setSelectedConversation({});
+  };
+
   return (
     <Box
       position="absolute"
       left="50%"
       w={{ base: "100%", md: "80%", lg: "750px" }}
       p={4}
-      mt={'49px'}
+      mt="49px"
       transform="translateX(-50%)"
     >
       <Flex
         gap={4}
-        flexDirection={{ base: "column", md: "row" }}
+        flexDirection={isMobileView && selectedConversation._id ? "column" : "row"}
         mx="auto"
-        my={'10px'}
+        my="10px"
         maxW={{ sm: "400px", md: "full" }}
       >
-        {/* Conversations Sidebar */}
-        <Flex flex={30} flexDirection="column" gap={4}>
-          <form onSubmit={handleConversationSearch}>
-            <Flex gap={2}>
-              <Input
-                placeholder="Search for a user"
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-              />
-              <Button
-                type="submit"
-                isLoading={searchingUser}
-                size="sm"
-                aria-label="Search for user"
-              >
-                <SearchIcon />
-              </Button>
-            </Flex>
-          </form>
-
-          {/* Conversations List */}
-          {loadingConversations ? (
-            [0, 1, 2, 3].map((_, i) => (
-              <Flex key={i} gap={4} alignItems="center">
-                <SkeletonCircle size="10" />
-                <Flex flexDirection="column" gap={2} w="full">
-                  <Skeleton h="10px" w="80px" />
-                  <Skeleton h="8px" w="90%" />
-                </Flex>
+        {(!isMobileView || !selectedConversation._id) && (
+          <Flex flex={30} flexDirection="column" gap={4}>
+            <form onSubmit={handleConversationSearch}>
+              <Flex gap={2}>
+                <Input
+                  placeholder="Search for a user"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                />
+                <Button
+                  type="submit"
+                  isLoading={searchingUser}
+                  size="sm"
+                  aria-label="Search for user"
+                >
+                  <SearchIcon />
+                </Button>
               </Flex>
-            ))
-          ) : conversations.length ? (
-            conversations.map((conversation) => (
-              <Conversation
-                key={conversation._id}
-                isOnline={onlineUsers.includes(conversation.participants[0]?._id)}
-                conversation={conversation}
-                sx={{
-                  transition: "box-shadow 0.2s ease-in-out",
-                  _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },
-                  ...(selectedConversation._id === conversation._id && {
-                    boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
-                  }),
-                }}
-              />
-            ))
-          ) : (
-            <Text>No conversations found.</Text>
-          )}
-        </Flex>
+            </form>
 
-        {/* Message Section */}
-        {selectedConversation._id ? (
-          <MessageContainer />
-        ) : (
-          <Flex
-            flex={70}
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            h="400px"
-            borderRadius="md"
-          >
-            <GiConversation size={100} />
-            <Text>Select a conversation to start messaging</Text>
+            {loadingConversations ? (
+              [0, 1, 2, 3].map((_, i) => (
+                <Flex key={i} gap={4} alignItems="center">
+                  <SkeletonCircle size="10" />
+                  <Flex flexDirection="column" gap={2} w="full">
+                    <Skeleton h="10px" w="80px" />
+                    <Skeleton h="8px" w="90%" />
+                  </Flex>
+                </Flex>
+              ))
+            ) : conversations.length ? (
+              conversations.map((conversation) => (
+                <Conversation
+                  key={conversation._id}
+                  isOnline={onlineUsers.includes(conversation.participants[0]?._id)}
+                  conversation={conversation}
+                  sx={{
+                    transition: "box-shadow 0.2s ease-in-out",
+                    _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },
+                    ...(selectedConversation._id === conversation._id && {
+                      boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
+                    }),
+                  }}
+                />
+              ))
+            ) : (
+              <Text>No conversations found.</Text>
+            )}
           </Flex>
         )}
+
+        {selectedConversation._id ? (
+          <Flex flex={70} flexDirection="column" gap={2}>
+            {isMobileView && (
+              <IconButton
+                icon={<BiArrowBack />}
+                aria-label="Back to conversations"
+                onClick={clearSelectedConversation}
+                alignSelf="flex-start"
+              />
+            )}
+            <MessageContainer />
+          </Flex>
+        ) : (
+          !isMobileView && (
+            <Flex
+              flex={70}
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              h="400px"
+              borderRadius="md"
+            >
+              <GiConversation size={100} />
+              <Text>Select a conversation to start messaging</Text>
+            </Flex>
+          )
+        )}
+
       </Flex>
     </Box>
   );

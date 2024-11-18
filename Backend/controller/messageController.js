@@ -5,6 +5,7 @@ import Message from "../models/message.model.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getRecipientSocketId, io } from "../socket/socket.js";
 import {encrypt,decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
+import { Mongoose } from "mongoose";
 
 
 
@@ -14,9 +15,8 @@ export const sendMessage = async (req, res) => {
 
   let img = "";
   let video = "";
+  let audio="";
   try {
-
-    // Check if file is uploaded
     if (req.file) {
       const fileUrl = generateFileName();
       const params = {
@@ -38,7 +38,7 @@ export const sendMessage = async (req, res) => {
         
         video = publicUrl;
       }else if (req.file.mimetype.startsWith("audio/")) {
-        video = publicUrl;
+        audio = publicUrl;
     }
   }
 
@@ -85,7 +85,8 @@ export const sendMessage = async (req, res) => {
       sender: senderId,
       text: encryptedMessage.encryptedData,
       img: img,  // Save the image URL here
-      video: video,  // Save the video URL here
+      video: video,
+      audio:audio,  // Save the video URL here
       iv: encryptedMessage.iv,
     });
 
@@ -93,6 +94,8 @@ export const sendMessage = async (req, res) => {
  
 
     await newMessage.save();
+
+    console.log(newMessage);
 
     // Notify recipient via socket (if online)
     const recipientSocketId = getRecipientSocketId(recipientId);
@@ -154,14 +157,7 @@ export const getMessages = async (req, res) => {
             };
         });
 
-        await Message.updateMany(
-            {
-                conversationId: conversation._id,
-                sender: { $ne: userId },
-                seen: false
-            },
-            { $set: { seen: true } }
-        );
+       
 
         const recipientSocketId = getRecipientSocketId(otherUserId);
         if (recipientSocketId) {
