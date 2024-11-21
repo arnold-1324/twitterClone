@@ -61,7 +61,7 @@ const ChatPage = () => {
   useEffect(() => {
     const getConversations = async () => {
       try {
-        const res = await fetch("/api/messages/getConvo/user");
+        const res = await fetch("api/messages/getConvo/user");
         const data = await res.json();
 
         if (data.error) {
