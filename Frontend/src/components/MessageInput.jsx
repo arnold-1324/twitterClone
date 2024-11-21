@@ -19,7 +19,7 @@ import { useRecoilValue } from "recoil";
 
 const MotionFlex = motion(Flex);
 
-const MessageInput = ({ setMessages }) => {
+const MessageInput = ({ setMessages, setMsg }) => {
     const [messageText, setMessageText] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
@@ -27,10 +27,14 @@ const MessageInput = ({ setMessages }) => {
     const [audioPreview, setAudioPreview] = useState(null);
     const [mediaFile, setMediaFile] = useState(null);
     const [mediaPreview, setMediaPreview] = useState(null);
+    const [replyData, setReplyData] = useState(null); // State to manage reply context
+
     const mediaRecorderRef = useRef(null);
     const recipient = useRecoilValue(selectedConversationAtom);
     const toast = useToast();
 
+    console.log(setMsg);
+    
     // Theme-aware styles
     const bgColor = useColorModeValue("white", "gray.800");
     const iconHoverColor = useColorModeValue("gray.200", "gray.600");
@@ -45,7 +49,7 @@ const MessageInput = ({ setMessages }) => {
         try {
             const formData = new FormData();
             formData.append("message", messageText);
-            formData.append("recipientId",recipient.userId);
+            formData.append("recipientId", recipient.userId);
 
             if (audioBlob) {
                 formData.append("media", audioBlob, "voice-message.webm");
@@ -55,7 +59,15 @@ const MessageInput = ({ setMessages }) => {
                 formData.append("media", mediaFile);
             }
 
-            
+            if (replyData) {
+                formData.append("parentMessageId", replyData._id);
+                formData.append("parentMessageContent", replyData.content);
+                if (replyData.media) {
+                    formData.append("parentMessageMedia", replyData.media);
+                }
+            }
+
+            // Dummy API endpoint (replace it with actual)
             const res = await fetch("/api/messages/send", {
                 method: "POST",
                 body: formData,
@@ -79,6 +91,7 @@ const MessageInput = ({ setMessages }) => {
             setAudioPreview(null);
             setMediaFile(null);
             setMediaPreview(null);
+            setReplyData(null); // Clear reply context
         } catch (error) {
             toast({
                 title: "Error",
@@ -140,8 +153,8 @@ const MessageInput = ({ setMessages }) => {
                 setMediaPreview(<Image src={url} alt="Preview" maxH="150px" borderRadius="md" />);
             } else if (file.type.startsWith("video/")) {
                 setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
-            }else if (file.type.startsWith("audio/")) {
-                setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
+            } else if (file.type.startsWith("audio/")) {
+                setMediaPreview(<audio src={url} controls style={{ maxHeight: "150px" }} />);
             }
         }
     };
@@ -153,8 +166,52 @@ const MessageInput = ({ setMessages }) => {
         setMediaPreview(null);
     };
 
+    const handleReply = (message) => {
+        setReplyData({
+            _id: message._id,
+            content: message.parentmsgcontent,
+            media: message.parentmsgMedia,
+        });
+        setMsg(message); // Pass reply message data to the parent component
+    };
+
     return (
         <Box w="full">
+            {/* Reply Context */}
+            {replyData && (
+                <Box
+                    mb={4}
+                    p={2}
+                    bg={bgColor}
+                    border="1px solid"
+                    borderColor={borderColor}
+                    borderRadius="md"
+                    position="relative"
+                >
+                    {replyData.content && <Text mb={2}>{replyData.content}</Text>}
+                    {replyData.media && (
+                        <>
+                            {replyData.media.startsWith("image/") && (
+                                <Image src={replyData.media} alt="Reply Media" maxH="150px" borderRadius="md" />
+                            )}
+                            {replyData.media.startsWith("video/") && (
+                                <video src={replyData.media} controls style={{ maxHeight: "150px" }} />
+                            )}
+                            {replyData.media.startsWith("audio/") && (
+                                <audio src={replyData.media} controls style={{ maxHeight: "150px" }} />
+                            )}
+                        </>
+                    )}
+                    <CloseButton
+                        position="absolute"
+                        top={2}
+                        right={2}
+                        onClick={() => setReplyData(null)}
+                        aria-label="Cancel Reply"
+                    />
+                </Box>
+            )}
+
             {/* Media Preview */}
             {mediaPreview && (
                 <Box
@@ -195,7 +252,7 @@ const MessageInput = ({ setMessages }) => {
                 {/* Media Upload */}
                 <input
                     type="file"
-                    accept="image/*,video/*"
+                    accept="image/*,video/*,audio/*"
                     style={{ display: "none" }}
                     id="media-upload"
                     onChange={handleMediaUpload}

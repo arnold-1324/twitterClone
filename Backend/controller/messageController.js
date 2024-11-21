@@ -174,46 +174,6 @@ export const getMessages = async (req, res) => {
 
 
 
-// export const getConversation = async (req, res) => {
-//   try {
-//     let currentUserId = req.user._id.toString();
-
-//     const conversations = await Conversation.find({
-//       participants: currentUserId,
-//     })
-//       .populate({
-//         path: 'participants',
-//         select: 'username profileImg ',  
-//       })
-      
-
-//     const convoData = conversations.map(convo => {
-//       convo.participants=convo.participants.filter(
-//         (participant)=> participant._id.toString()!==currentUserId.toString() 
-//       );
-      
-//       const decryptConvo = (convoData) => {
-//         try {
-//           const decryptedMessage = decrypt({
-//             iv: convoData.lastMessage.iv,
-//             encryptedData: convoData.lastMessage.text,
-//           });
-//           return { ...convoData, lastMessage: { ...convoData.lastMessage, text: decryptedMessage } };
-//         } catch {
-//           return { ...convoData, lastMessage: { ...convoData.lastMessage, text: "[Decryption failed]" } };
-//         }
-//       };
-    
-//       return decryptConvo;
-//     });
-
-//     res.status(200).json(decryptConvo);
-//   } catch (error) {
-//     console.error("Error in getConversation:", error.message);
-//     res.status(500).json({ error: error.message });
-//   }
-// };
-
 export const getConversation = async (req, res) => {
   try {
     const currentUserId = req.user._id.toString();
@@ -308,7 +268,17 @@ export const editMessage = async (req, res) => {
              io.to(socketId).emit("messageEdited", message);
          });
 
-        const decryptMessage = decrypt({ iv: message.iv, encryptedData: message.text });
+       // const decryptMessage = decrypt({ iv: message.iv, encryptedData: message.text });
+
+        const decryptMessage = (() => {
+          try {
+            return decrypt({
+              iv: message.iv, encryptedData: message.text
+            });
+          } catch {
+            return "[Decryption failed]";
+          }
+        })();
     
         const responsMessage ={
           ...message._doc,
@@ -326,75 +296,105 @@ export const editMessage = async (req, res) => {
 
 
 export const replyToMessage = async (req, res) => {
-    const { recipientId, messageId, replyText } = req.body;
-    const senderId = req.user._id;
+  const { recipientId, messageId, replyText } = req.body;
+  const senderId = req.user._id;
+  let img = "";
+  let video = "";
+  let audio = "";
+  try {
+    if (req.file) {
+      const fileUrl = generateFileName();
+      const params = {
+        Bucket: process.env.BUCKET_NAME,
+        Key: fileUrl,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
 
-    try {
-        
-        const encryptedMessage=encrypt(replyText);
+      const command = new PutObjectCommand(params);
+      await s3.send(command);
 
-        const parentMessage = await Message.findById(messageId).populate('sender', 'username');
-        if (!parentMessage) {
-            return res.status(404).json({ error: "Parent message not found" });
-        }
+      const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
 
-        
-        const conversation = await Conversation.findOneAndUpdate(
-            { participants: { $all: [senderId, recipientId] } },
-            { text: encryptedMessage.encryptedData, edited: true, iv: encryptedMessage.iv }, 
-            { new: true, upsert: true }
-        );
+      if (req.file.mimetype.startsWith("image/")) {
 
+        img = publicUrl;
+      } else if (req.file.mimetype.startsWith("video/")) {
 
-       
-        const replyMessage = new Message({
-            conversationId: conversation._id,
-            sender: senderId,
-            text: encryptedMessage.encryptedData,
-            iv:encryptedMessage.iv,
-            replyTo: parentMessage._id
-        });
-        
-        
-        const savedReplyMessage = await replyMessage.save();
-        const populatedReplyMessage = await savedReplyMessage.populate('sender', 'username profileImg');
-        
-        const decryptParentMessage = decrypt({ iv: parentMessage.iv, encryptedData: parentMessage.text });
-    
-        const decrytreplyMessage = decrypt({iv: populatedReplyMessage.iv, encryptedData: populatedReplyMessage.text})
-      
-        
-        res.status(201).json({
-            messageId: populatedReplyMessage._id,
-            conversationId: populatedReplyMessage.conversationId,
-            sender: {
-                id: populatedReplyMessage.sender._id,
-                username: populatedReplyMessage.sender.username,
-                profileImg: populatedReplyMessage.sender.profileImg 
-            },
-            text: decrytreplyMessage,
-            type: "text",
-            replyTo: {
-                messageId: parentMessage._id,
-                text: decryptParentMessage,
-                sender: {
-                    id: parentMessage.sender._id,
-                    name: parentMessage.sender.name
-                }
-            },
-            status: {
-                seen: false,
-                edited: false,
-                deletedFor: []
-            },
-            reactions: [],
-            createdAt: populatedReplyMessage.createdAt,
-            updatedAt: populatedReplyMessage.updatedAt
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-        console.log("Error in replyToMessage:", error.message);
+        video = publicUrl;
+      } else if (req.file.mimetype.startsWith("audio/")) {
+        audio = publicUrl;
+      }
     }
+
+
+    const encryptedMessage = encrypt(replyText);
+
+    const parentMessage = await Message.findById(messageId).populate('sender', 'username');
+    if (!parentMessage) {
+      return res.status(404).json({ error: "Parent message not found" });
+    }
+
+
+    const conversation = await Conversation.findOneAndUpdate(
+      { participants: { $all: [senderId, recipientId] } },
+      { text: encryptedMessage.encryptedData, edited: true, iv: encryptedMessage.iv },
+      { new: true, upsert: true }
+    );
+
+
+
+    const replyMessage = new Message({
+      conversationId: conversation._id,
+      sender: senderId,
+      text: encryptedMessage.encryptedData,
+      iv: encryptedMessage.iv,
+      img: img,
+      video: video,
+      audio: audio,
+      replyTo: parentMessage._id
+    });
+
+
+    const savedReplyMessage = await replyMessage.save();
+    const populatedReplyMessage = await savedReplyMessage.populate('sender', 'username profileImg');
+
+    const decryptParentMessage = decrypt({ iv: parentMessage.iv, encryptedData: parentMessage.text });
+
+    const decrytreplyMessage = decrypt({ iv: populatedReplyMessage.iv, encryptedData: populatedReplyMessage.text })
+
+
+    res.status(201).json({
+      messageId: populatedReplyMessage._id,
+      conversationId: populatedReplyMessage.conversationId,
+      sender: {
+        id: populatedReplyMessage.sender._id,
+        username: populatedReplyMessage.sender.username,
+        profileImg: populatedReplyMessage.sender.profileImg
+      },
+      text: decrytreplyMessage,
+      type: "text",
+      replyTo: {
+        messageId: parentMessage._id,
+        text: decryptParentMessage,
+        sender: {
+          id: parentMessage.sender._id,
+          name: parentMessage.sender.name
+        }
+      },
+      status: {
+        seen: false,
+        edited: false,
+        deletedFor: []
+      },
+      reactions: [],
+      createdAt: populatedReplyMessage.createdAt,
+      updatedAt: populatedReplyMessage.updatedAt
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+    console.log("Error in replyToMessage:", error.message);
+  }
 };
 
 

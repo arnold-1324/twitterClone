@@ -35,9 +35,12 @@ import {
 	const setConversations = useSetRecoilState(conversationsAtom);
 	const messageEndRef = useRef(null);
 	const audioRef = useRef(null);
+	const [msg,setMsg]=useState({
+		_id:"",
+		messageContent:"",
+		messageMedia:"",
+	});
 
-
-	
 	
 	
 	useEffect(() => {
@@ -262,37 +265,48 @@ import {
 					)}
 	  
 					{/* Three Dot Menu - Positioned above the message content */}
-					{isOwnMessage && (
-					  <Flex position="absolute" top="-25px" right="0">
-						<Menu>
-						  <MenuButton
-							as={IconButton}
-							icon={<BsThreeDotsVertical />}
-							variant="ghost"
-							size="sm"
-							aria-label="Options"
-						  />
-						  <MenuList
-							borderRadius="md"
-							boxShadow="lg"
-							p={2}
-							bg={useColorModeValue("white", "gray.800")}
-							color="black"
-							mt="4px" // Adding some space between the menu and the message
-						  >
-							<MenuItem onClick={() => handleEdit(message._id)}>
-							  Edit
-							</MenuItem>
-							<MenuItem onClick={() => handleReply(message._id)}>
-							  Reply
-							</MenuItem>
-							<MenuItem onClick={() => handleDelete(message._id)}>
-							  Delete
-							</MenuItem>
-						  </MenuList>
-						</Menu>
-					  </Flex>
-					)}
+
+						<Flex position="absolute" top="-25px" right="0">
+							<Menu>
+								<MenuButton
+									as={IconButton}
+									icon={<BsThreeDotsVertical />}
+									variant="ghost"
+									size="sm"
+									aria-label="Options"
+								/>
+								<MenuList
+									borderRadius="md"
+									boxShadow="lg"
+									p={2}
+									bg={useColorModeValue("white", "gray.800")}
+									color="black"
+									mt="4px"
+								>
+									{isOwnMessage && (
+										<MenuItem onClick={() => handleEdit(message._id)}>
+											Edit
+										</MenuItem>
+									)}
+									<MenuItem onClick={() => {
+										const data = {
+											id: message._id,
+											text: message.text,
+											media: message.img || message.video || message.audio,
+										};
+										console.log("Data sent to child:", data);
+										setMsg(data.id, data.text, data.media);
+									}}>
+										Reply
+									</MenuItem>
+									
+										<MenuItem onClick={() => handleDelete(message._id)}>
+											Delete
+										</MenuItem>
+								</MenuList>
+							</Menu>
+						</Flex>
+
 	  
 					<Text fontSize="xs" align="right" mt={1}>
 					  {formatMessageTime(message.createdAt)}
@@ -303,7 +317,7 @@ import {
 		</Flex>
 	  
 		<div ref={messageEndRef} />
-		<MessageInput setMessages={setMessages} />
+		<MessageInput setMessages={setMessages} setMsg={setMsg} /> 
 	  </Flex>
 	  
   );
