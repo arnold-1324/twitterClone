@@ -145,40 +145,50 @@ const ChatPage = () => {
 
   return (
     <Box
-      position="absolute"
-      left="50%"
-      w={{ base: "100%", md: "80%", lg: "750px" }}
-      p={4}
-      mt="49px"
-      transform="translateX(-50%)"
+    position="absolute"
+    left="50%"
+    w={{ base: "100%", md: "80%", lg: "750px" }}
+    p={4}
+    mt="49px"
+    transform="translateX(-50%)"
+  >
+    <Flex
+      gap={4}
+      flexDirection={isMobileView && selectedConversation._id ? "column" : "row"}
+      mx="auto"
+      my="10px"
+      maxW={{ sm: "400px", md: "full" }}
     >
-      <Flex
-        gap={4}
-        flexDirection={isMobileView && selectedConversation._id ? "column" : "row"}
-        mx="auto"
-        my="10px"
-        maxW={{ sm: "400px", md: "full" }}
-      >
-        {(!isMobileView || !selectedConversation._id) && (
-          <Flex flex={30} flexDirection="column" gap={4}>
-            <form onSubmit={handleConversationSearch}>
-              <Flex gap={2}>
-                <Input
-                  placeholder="Search for a user"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                />
-                <Button
-                  type="submit"
-                  isLoading={searchingUser}
-                  size="sm"
-                  aria-label="Search for user"
-                >
-                  <SearchIcon />
-                </Button>
-              </Flex>
-            </form>
-
+      {(!isMobileView || !selectedConversation._id) && (
+        <Flex flex={30} flexDirection="column" gap={4} maxH={"600px"}>
+          <form onSubmit={handleConversationSearch}>
+            <Flex gap={2}>
+              <Input
+                placeholder="Search for a user"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+              />
+              <Button
+                type="submit"
+                isLoading={searchingUser}
+                size="sm"
+                aria-label="Search for user"
+              >
+                <SearchIcon />
+              </Button>
+            </Flex>
+          </form>
+  
+          <Box
+            flex="1"
+            maxH={{ base: "400px", md: "500px" }} 
+            overflowY="auto" 
+            sx={{
+              "&::-webkit-scrollbar": { display: "none" }, 
+              "-ms-overflow-style": "none", 
+              "scrollbar-width": "none", 
+            }}
+          >
             {loadingConversations ? (
               [0, 1, 2, 3].map((_, i) => (
                 <Flex key={i} gap={4} alignItems="center">
@@ -207,39 +217,40 @@ const ChatPage = () => {
             ) : (
               <Text>No conversations found.</Text>
             )}
+          </Box>
+        </Flex>
+      )}
+  
+      {selectedConversation._id ? (
+        <Flex flex={70} flexDirection="column" gap={2}>
+          {isMobileView && (
+            <IconButton
+              icon={<BiArrowBack />}
+              aria-label="Back to conversations"
+              onClick={clearSelectedConversation}
+              alignSelf="flex-start"
+            />
+          )}
+          <MessageContainer />
+        </Flex>
+      ) : (
+        !isMobileView && (
+          <Flex
+            flex={70}
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            h="400px"
+            borderRadius="md"
+          >
+            <GiConversation size={100} />
+            <Text>Select a conversation to start messaging</Text>
           </Flex>
-        )}
-
-        {selectedConversation._id ? (
-          <Flex flex={70} flexDirection="column" gap={2}>
-            {isMobileView && (
-              <IconButton
-                icon={<BiArrowBack />}
-                aria-label="Back to conversations"
-                onClick={clearSelectedConversation}
-                alignSelf="flex-start"
-              />
-            )}
-            <MessageContainer />
-          </Flex>
-        ) : (
-          !isMobileView && (
-            <Flex
-              flex={70}
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              h="400px"
-              borderRadius="md"
-            >
-              <GiConversation size={100} />
-              <Text>Select a conversation to start messaging</Text>
-            </Flex>
-          )
-        )}
-
-      </Flex>
-    </Box>
+        )
+      )}
+    </Flex>
+  </Box>
+  
   );
 };
 

@@ -13,7 +13,8 @@ import {
   import userAtom from "../atom/userAtom";
   import { BsCheck2All, BsFillImageFill } from "react-icons/bs";
   import { selectedConversationAtom } from "../atom/messagesAtom";
-  
+  import formatMessageTime from "../Utils/Timeformate";
+
   const Conversation = ({ conversation, isOnline }) => {
 	const currentUser = useRecoilValue(userAtom);
 	const [selectedConversation, setSelectedConversation] = useRecoilState(
@@ -99,12 +100,7 @@ import {
   
 		  {/* Timestamp */}
 		  <Text fontSize="xs" color={useColorModeValue("gray.500", "gray.400")}>
-			{lastMessage.createdAt
-			  ? new Date(lastMessage.createdAt).toLocaleTimeString([], {
-				  hour: "2-digit",
-				  minute: "2-digit",
-				})
-			  : "No Timestamp"}
+			{ formatMessageTime(new Date(lastMessage.createdAt))}
 		  </Text>
 		</Stack>
 	  </Flex>
