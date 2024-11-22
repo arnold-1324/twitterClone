@@ -10,6 +10,9 @@ import { DeleteIcon } from "@chakra-ui/icons";
 import { useRecoilState, useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import postsAtom from "../atom/postsAtom";
+import { motion } from "framer-motion";
+
+const MotionFlex = motion(Flex); // Wrapping Chakra's Flex with motion for animations
 
 const Post = ({ post, postedBy }) => {
   const [user, setUser] = useState(null);
@@ -57,7 +60,18 @@ const Post = ({ post, postedBy }) => {
 
   if (isLoading) {
     return (
-      <Flex gap={3} mb={4} py={5} borderWidth="1px" borderRadius="md" p={4} shadow="md">
+      <MotionFlex
+        gap={3}
+        mb={4}
+        py={5}
+        borderWidth="1px"
+        borderRadius="md"
+        p={4}
+        shadow="md"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
         <SkeletonCircle size="10" />
         <Flex flex={1} flexDirection="column" gap={2}>
           <SkeletonText noOfLines={1} width="40%" />
@@ -65,7 +79,7 @@ const Post = ({ post, postedBy }) => {
           <Skeleton height="200px" borderRadius="md" />
           <SkeletonText noOfLines={1} width="30%" />
         </Flex>
-      </Flex>
+      </MotionFlex>
     );
   }
 
@@ -73,15 +87,31 @@ const Post = ({ post, postedBy }) => {
 
   return (
     <Link to={`/${user.username}/post/${post._id}`}>
-      <Flex gap={3} mb={4} py={5} borderWidth="1px" borderRadius="md" p={4} shadow="md">
-        <Avatar 
-          size="md" 
-          name={user.fullName} 
-          src={user.profileImg} 
+      <MotionFlex
+        gap={3}
+        mb={4}
+        py={5}
+        borderWidth="1px"
+        borderRadius="md"
+        p={4}
+        shadow="md"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.6 }}
+        _hover={{
+          scale: 1.02, // Slight scale effect to simulate hover inside the card
+          boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.15)", // Elevation effect on hover
+        }}
+      >
+        <Avatar
+          size="md"
+          name={user.fullName}
+          src={user.profileImg}
           onClick={(e) => {
             e.preventDefault();
             navigate(`/${user.username}`);
-          }} 
+          }}
         />
         <Flex flex={1} flexDirection="column" gap={2}>
           <Flex justifyContent="space-between">
@@ -96,10 +126,14 @@ const Post = ({ post, postedBy }) => {
           </Box>
           <Actions post={post} />
           {user._id === currentUser?._id && (
-            <DeleteIcon cursor="pointer" onClick={handleDeletePost} />
+            <DeleteIcon
+              cursor="pointer"
+              onClick={handleDeletePost}
+              _hover={{ color: "red.500" }}
+            />
           )}
         </Flex>
-      </Flex>
+      </MotionFlex>
     </Link>
   );
 };
