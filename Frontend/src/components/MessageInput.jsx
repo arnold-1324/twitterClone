@@ -14,12 +14,13 @@ import { useState, useRef } from "react";
 import { IoSendSharp, IoMic, IoPause } from "react-icons/io5";
 import { BsFillImageFill } from "react-icons/bs";
 import { motion } from "framer-motion";
-import { selectedConversationAtom } from "../atom/messagesAtom";
-import { useRecoilValue } from "recoil";
+import { selectedConversationAtom,selectedMsg } from "../atom/messagesAtom";
+import { useRecoilState, useRecoilValue } from "recoil";
+import MediaThumbnail from "../Utils/Thumbnail";
 
 const MotionFlex = motion(Flex);
 
-const MessageInput = ({ setMessages, setMsg }) => {
+const MessageInput = ({ setMessages }) => {
     const [messageText, setMessageText] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
@@ -27,14 +28,13 @@ const MessageInput = ({ setMessages, setMsg }) => {
     const [audioPreview, setAudioPreview] = useState(null);
     const [mediaFile, setMediaFile] = useState(null);
     const [mediaPreview, setMediaPreview] = useState(null);
-    const [replyData, setReplyData] = useState(null); // State to manage reply context
-
     const mediaRecorderRef = useRef(null);
     const recipient = useRecoilValue(selectedConversationAtom);
     const toast = useToast();
+    const replyMsg=useRecoilValue(selectedMsg);
+    const [reply,setReply]=useRecoilState(selectedMsg);
 
-    console.log(setMsg);
-    
+
     // Theme-aware styles
     const bgColor = useColorModeValue("white", "gray.800");
     const iconHoverColor = useColorModeValue("gray.200", "gray.600");
@@ -49,7 +49,7 @@ const MessageInput = ({ setMessages, setMsg }) => {
         try {
             const formData = new FormData();
             formData.append("message", messageText);
-            formData.append("recipientId", recipient.userId);
+            formData.append("recipientId",recipient.userId);
 
             if (audioBlob) {
                 formData.append("media", audioBlob, "voice-message.webm");
@@ -59,15 +59,7 @@ const MessageInput = ({ setMessages, setMsg }) => {
                 formData.append("media", mediaFile);
             }
 
-            if (replyData) {
-                formData.append("parentMessageId", replyData._id);
-                formData.append("parentMessageContent", replyData.content);
-                if (replyData.media) {
-                    formData.append("parentMessageMedia", replyData.media);
-                }
-            }
-
-            // Dummy API endpoint (replace it with actual)
+            
             const res = await fetch("/api/messages/send", {
                 method: "POST",
                 body: formData,
@@ -91,7 +83,6 @@ const MessageInput = ({ setMessages, setMsg }) => {
             setAudioPreview(null);
             setMediaFile(null);
             setMediaPreview(null);
-            setReplyData(null); // Clear reply context
         } catch (error) {
             toast({
                 title: "Error",
@@ -153,8 +144,8 @@ const MessageInput = ({ setMessages, setMsg }) => {
                 setMediaPreview(<Image src={url} alt="Preview" maxH="150px" borderRadius="md" />);
             } else if (file.type.startsWith("video/")) {
                 setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
-            } else if (file.type.startsWith("audio/")) {
-                setMediaPreview(<audio src={url} controls style={{ maxHeight: "150px" }} />);
+            }else if (file.type.startsWith("audio/")) {
+                setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
             }
         }
     };
@@ -166,53 +157,65 @@ const MessageInput = ({ setMessages, setMsg }) => {
         setMediaPreview(null);
     };
 
-    const handleReply = (message) => {
-        setReplyData({
-            _id: message._id,
-            content: message.parentmsgcontent,
-            media: message.parentmsgMedia,
-        });
-        setMsg(message); // Pass reply message data to the parent component
-    };
-
     return (
         <Box w="full">
-            {/* Reply Context */}
-            {replyData && (
+            {/*reply content bar*/}
+            {replyMsg !== null && (
                 <Box
-                    mb={4}
                     p={2}
-                    bg={bgColor}
-                    border="1px solid"
-                    borderColor={borderColor}
+                    bg={useColorModeValue("gray.100", "gray.700")} // Light gray for light mode, darker gray for dark mode
+                    borderLeft="4px solid"
+                    borderColor={useColorModeValue("green.500", "green.300")} // Brighter green for light mode, softer green for dark mode
                     borderRadius="md"
                     position="relative"
+                    boxShadow={useColorModeValue("sm", "md")} // Subtle shadow adjustments for themes
                 >
-                    {replyData.content && <Text mb={2}>{replyData.content}</Text>}
-                    {replyData.media && (
-                        <>
-                            {replyData.media.startsWith("image/") && (
-                                <Image src={replyData.media} alt="Reply Media" maxH="150px" borderRadius="md" />
-                            )}
-                            {replyData.media.startsWith("video/") && (
-                                <video src={replyData.media} controls style={{ maxHeight: "150px" }} />
-                            )}
-                            {replyData.media.startsWith("audio/") && (
-                                <audio src={replyData.media} controls style={{ maxHeight: "150px" }} />
-                            )}
-                        </>
-                    )}
+                    <Flex direction="row" alignItems="center">
+                        <Box flex="1">
+                            <Text
+                                fontSize="sm"
+                                fontWeight="bold"
+                                color={useColorModeValue("green.600", "green.200")} // Darker green for light mode, lighter green for dark mode
+                                mb={1}
+                            >
+                                {replyMsg.sender || "You"} {/* Simulating WhatsApp sender */}
+                            </Text>
+                            <Text fontSize="sm" color={useColorModeValue("gray.800", "gray.100")} noOfLines={2}>
+                                {replyMsg.text}
+                            </Text>
+                        </Box>
+                        {replyMsg.media && (
+                            <Box
+                                w="50px"
+                                h="50px"
+                                ml={2}
+                                borderRadius="md"
+                                overflow="hidden"
+                                boxShadow={useColorModeValue("md", "lg")}
+                            >
+                                <Image
+                                    src={replyMsg.media}
+                                    alt="Thumbnail"
+                                    objectFit="cover"
+                                    w="full"
+                                    h="full"
+                                />
+                            </Box>
+                        )}
+                    </Flex>
                     <CloseButton
                         position="absolute"
                         top={2}
                         right={2}
-                        onClick={() => setReplyData(null)}
-                        aria-label="Cancel Reply"
+                        onClick={() => {
+                            setReply(null);
+                        }}
+                        aria-label="Cancel"
                     />
                 </Box>
             )}
 
-            {/* Media Preview */}
+
             {mediaPreview && (
                 <Box
                     mb={4}
@@ -252,7 +255,7 @@ const MessageInput = ({ setMessages, setMsg }) => {
                 {/* Media Upload */}
                 <input
                     type="file"
-                    accept="image/*,video/*,audio/*"
+                    accept="image/*,video/*"
                     style={{ display: "none" }}
                     id="media-upload"
                     onChange={handleMediaUpload}

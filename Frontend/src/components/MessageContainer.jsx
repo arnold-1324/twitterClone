@@ -13,8 +13,8 @@ import {
   import MessageInput from "./MessageInput";
   import { useEffect, useRef, useState } from "react";
   import useShowToast from "../hooks/useShowToast";
-  import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAtom";
-  import { useRecoilValue, useSetRecoilState } from "recoil";
+  import { conversationsAtom, selectedConversationAtom,selectedMsg } from "../atom/messagesAtom";
+  import { useRecoilValue, useSetRecoilState ,useRecoilState} from "recoil";
   import userAtom from "../atom/userAtom";
   import { useSocket } from "../context/SocketContext";
   import messageSound from "../assets/sounds/message.mp3";
@@ -35,14 +35,15 @@ import {
 	const setConversations = useSetRecoilState(conversationsAtom);
 	const messageEndRef = useRef(null);
 	const audioRef = useRef(null);
-	const [msg,setMsg]=useState({
-		_id:"",
-		messageContent:"",
-		messageMedia:"",
-	});
+	const [Msg,setSelectedMsg] = useRecoilState(
+		selectedMsg
+	  );
 
-	
-	
+
+	  const handelselectedMsg = (message) => {
+		  setSelectedMsg({...message});
+	  }
+
 	useEffect(() => {
 	  const handleNewMessage = (message) => {
 		if (selectedConversation._id === message.conversationId) {
@@ -293,9 +294,10 @@ import {
 											id: message._id,
 											text: message.text,
 											media: message.img || message.video || message.audio,
+											sender:isOwnMessage?"you" :message.sender.username,
 										};
 										console.log("Data sent to child:", data);
-										setMsg(data.id, data.text, data.media);
+										handelselectedMsg(data);
 									}}>
 										Reply
 									</MenuItem>
@@ -317,7 +319,7 @@ import {
 		</Flex>
 	  
 		<div ref={messageEndRef} />
-		<MessageInput setMessages={setMessages} setMsg={setMsg} /> 
+		<MessageInput setMessages={setMessages}  /> 
 	  </Flex>
 	  
   );
