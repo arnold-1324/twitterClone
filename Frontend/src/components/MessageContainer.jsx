@@ -158,7 +158,8 @@ import {
             : messages.map((message) => {
                 const isOwnMessage =
                   currentUser._id === message.sender._id ||
-                  currentUser._id === message.sender.id;
+                  currentUser._id === message.sender.id ||
+                  currentUser._id === message.sender;
 
                 return (
                   <MotionFlex
@@ -178,7 +179,7 @@ import {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3 }}
-                    position="relative" 
+                    position="relative"
                   >
                     {message.replyTo && (
                       <Box
@@ -199,7 +200,8 @@ import {
                               color={useColorModeValue("teal.600", "teal.200")}
                               mb={1}
                             >
-                              {message.replyTo.sender._id === currentUser._id
+                              {message.replyTo.sender._id === currentUser._id ||
+                              message.sender.id === currentUser._id
                                 ? "You"
                                 : message.replyTo.sender.username}
                             </Text>
@@ -211,7 +213,8 @@ import {
                               {message.replyTo.text}
                             </Text>
                           </Box>
-                          {message.replyTo.img && (
+
+                          {(message.replyTo.img || message.replyTo.video) && (
                             <Box
                               w="50px"
                               h="50px"
@@ -220,13 +223,20 @@ import {
                               overflow="hidden"
                               boxShadow={useColorModeValue("md", "lg")}
                             >
-                              <Image
-                                src={message.replyTo.img}
-                                alt="Thumbnail"
-                                objectFit="cover"
-                                w="full"
-                                h="full"
-                              />
+                              {message.replyTo.img && (
+                                <Image
+                                  src={message.replyTo.img}
+                                  alt="Thumbnail"
+                                  objectFit="cover"
+                                  w="full"
+                                  h="full"
+                                />
+                              )}
+                              {message.replyTo.video && (
+                                <video w="full" h="full" controls={false}>
+                                  <source src={message.replyTo.video} />
+                                </video>
+                              )}
                             </Box>
                           )}
                         </Flex>
