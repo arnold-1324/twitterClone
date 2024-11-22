@@ -126,50 +126,136 @@ export const sendMessage = async (req, res) => {
 
 
 
-export const getMessages = async (req, res) => {
-    const { otherUserId } = req.params;
-    const userId = req.user._id;
+// export const getMessages = async (req, res) => {
+//     const { otherUserId } = req.params;
+//     const userId = req.user._id;
 
-    try {
-        const conversation = await Conversation.findOne({ participants: { $all: [userId, otherUserId] } });
-        if (!conversation) {
-            return res.status(404).json({ error: "Conversation not found" });
-        }
+//     try {
+//         const conversation = await Conversation.findOne({ participants: { $all: [userId, otherUserId] } });
+//         if (!conversation) {
+//             return res.status(404).json({ error: "Conversation not found" });
+//         }
 
-        const { page = 1, limit = 20 } = req.query;
+//         const { page = 1, limit = 20 } = req.query;
 
-        const messages = await Message.find({ conversationId: conversation._id })
-                                      .sort({ createdAt: 1 })
-                                      .skip((page - 1) * limit)
-                                      .limit(limit)
-                                      .populate({
-                                          path: 'sender',
-                                          select: 'username profileImg'
-                                      });
-
-       
-        const decryptedMessages = messages.map(msg => {
-            const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
-            return {
-                ...msg._doc,
-                text: decryptedText ,
-                iv:undefined
-            };
-        });
+//         const messages = await Message.find({ conversationId: conversation._id })
+//                                       .sort({ createdAt: 1 })
+//                                       .skip((page - 1) * limit)
+//                                       .limit(limit)
+//                                       .populate({
+//                                           path: 'sender',
+//                                           select: 'username profileImg'
+//                                       }).populate({
+//                                         path: "replyTo", 
+//                                         select: "text iv img sender",
+//                                         populate: {
+//                                             path: "sender",
+//                                             select: "username profileImg",
+//                                         },
+//                                     })
 
        
+//                                     const decryptedMessages = messages.map(msg => {
+//                                       const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
+//                                       const decryptedReplyTo = msg.replyTo ? decrypt({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : null;
+                                  
+//                                       return {
+//                                           ...msg._doc,
+//                                           text: decryptedText,
+//                                           iv: undefined,
+//                                           replyTo: {
+//                                               ...msg.replyTo,
+//                                               text: decryptedReplyTo,
+//                                               iv: undefined
+//                                           }
+//                                       };
+//                                   });
+                                  
 
-        const recipientSocketId = getRecipientSocketId(otherUserId);
-        if (recipientSocketId) {
-            io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
-        }
+       
+
+//         const recipientSocketId = getRecipientSocketId(otherUserId);
+//         if (recipientSocketId) {
+//             io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
+//         }
         
 
-        res.status(200).json(decryptedMessages);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-        console.log("Error in getMessages:", error.message);
-    }
+//         res.status(200).json(decryptedMessages);
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//         console.log("Error in getMessages:", error.message);
+//     }
+// };
+
+
+export const getMessages = async (req, res) => {
+  const { otherUserId } = req.params;
+  const userId = req.user._id;
+
+  try {
+      
+      const conversation = await Conversation.findOne({ 
+          participants: { $all: [userId, otherUserId] } 
+      });
+
+      if (!conversation) {
+          return res.status(404).json({ error: "Conversation not found" });
+      }
+
+     
+      const { page = 1, limit = 20 } = req.query;
+      const pageNum = parseInt(page, 10);
+      const limitNum = parseInt(limit, 10);
+
+      
+      const messages = await Message.find({ conversationId: conversation._id })
+          .sort({ createdAt: 1 })
+          .skip((pageNum - 1) * limitNum)  
+          .limit(limitNum) 
+          .populate({
+              path: 'sender',
+              select: 'username profileImg'  
+          })
+          .populate({
+              path: "replyTo",
+              select: "text iv img sender",  
+              populate: {
+                  path: "sender",
+                  select: "username profileImg",  
+              },
+          });
+
+      // Decrypt messages
+      const decryptedMessages = messages.map(msg => {
+          const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
+          const decryptedReplyTo = msg.replyTo ? decrypt({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : null;
+
+          return {
+              ...msg._doc,  
+              text: decryptedText,  
+              iv: undefined,  
+              replyTo: msg.replyTo ? {
+                  ...msg.replyTo._doc,
+                  text: decryptedReplyTo,  
+                  iv: undefined, 
+              } : null,
+          };
+      });
+
+     
+      const recipientSocketId = getRecipientSocketId(otherUserId);
+      if (recipientSocketId) {
+          io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
+      }
+
+      
+      res.status(200).json(decryptedMessages);
+  } catch (error) {
+     
+      console.error("Error in getMessages:", error.message);
+
+      res.status(500).json({ error: error.message });
+  }
 };
 
 
@@ -296,7 +382,7 @@ export const editMessage = async (req, res) => {
 
 
 export const replyToMessage = async (req, res) => {
-  const { recipientId, messageId, replyText } = req.body;
+  const { recipientId, messageId, message } = req.body;
   const senderId = req.user._id;
   let img = "";
   let video = "";
@@ -328,7 +414,7 @@ export const replyToMessage = async (req, res) => {
     }
 
 
-    const encryptedMessage = encrypt(replyText);
+    const encryptedMessage = encrypt(message);
 
     const parentMessage = await Message.findById(messageId).populate('sender', 'username');
     if (!parentMessage) {

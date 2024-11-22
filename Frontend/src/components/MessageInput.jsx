@@ -50,6 +50,12 @@ const MessageInput = ({ setMessages }) => {
             const formData = new FormData();
             formData.append("message", messageText);
             formData.append("recipientId",recipient.userId);
+            
+            if(replyMsg !== null){
+                formData.append("messageId",replyMsg.id);
+            }
+
+             
 
             if (audioBlob) {
                 formData.append("media", audioBlob, "voice-message.webm");
@@ -59,12 +65,16 @@ const MessageInput = ({ setMessages }) => {
                 formData.append("media", mediaFile);
             }
 
-            
-            const res = await fetch("/api/messages/send", {
+            let url = "/api/messages/send"; 
+            if (replyMsg !== null) {
+                url = "/api/messages/reply"; 
+            }
+
+            const res = await fetch(url,{
                 method: "POST",
                 body: formData,
             });
-
+            
             const data = await res.json();
             if (data.error) {
                 toast({
@@ -83,6 +93,7 @@ const MessageInput = ({ setMessages }) => {
             setAudioPreview(null);
             setMediaFile(null);
             setMediaPreview(null);
+            setReply(null);
         } catch (error) {
             toast({
                 title: "Error",
