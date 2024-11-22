@@ -5,6 +5,7 @@ import Message from "../models/message.model.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getRecipientSocketId, io } from "../socket/socket.js";
 import {encrypt,decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
+import { Mongoose } from "mongoose";
 
 
 
@@ -14,9 +15,8 @@ export const sendMessage = async (req, res) => {
 
   let img = "";
   let video = "";
+  let audio="";
   try {
-
-    // Check if file is uploaded
     if (req.file) {
       const fileUrl = generateFileName();
       const params = {
@@ -37,12 +37,12 @@ export const sendMessage = async (req, res) => {
       } else if (req.file.mimetype.startsWith("video/")) {
         
         video = publicUrl;
-      }
+      }else if (req.file.mimetype.startsWith("audio/")) {
+        audio = publicUrl;
     }
+  }
 
-    console.log("Image URL:", img);  // log the image URL
-    console.log("Video URL:", video);  // log the video URL
-
+    
     // Encrypt the message text
     const encryptedMessage = encrypt(message);
 
@@ -85,20 +85,17 @@ export const sendMessage = async (req, res) => {
       sender: senderId,
       text: encryptedMessage.encryptedData,
       img: img,  // Save the image URL here
-      video: video,  // Save the video URL here
+      video: video,
+      audio:audio,  // Save the video URL here
       iv: encryptedMessage.iv,
     });
 
     // Log message data before saving
-    console.log("Message data to be saved:", {
-      conversationId: conversation._id,
-      sender: senderId,
-      text: encryptedMessage.encryptedData,
-      img,
-      video,
-    });
+ 
 
     await newMessage.save();
+
+    console.log(newMessage);
 
     // Notify recipient via socket (if online)
     const recipientSocketId = getRecipientSocketId(recipientId);
@@ -129,125 +126,199 @@ export const sendMessage = async (req, res) => {
 
 
 
-export const getMessages = async (req, res) => {
-    const { otherUserId } = req.params;
-    const userId = req.user._id;
+// export const getMessages = async (req, res) => {
+//     const { otherUserId } = req.params;
+//     const userId = req.user._id;
 
-    try {
-        const conversation = await Conversation.findOne({ participants: { $all: [userId, otherUserId] } });
-        if (!conversation) {
-            return res.status(404).json({ error: "Conversation not found" });
-        }
+//     try {
+//         const conversation = await Conversation.findOne({ participants: { $all: [userId, otherUserId] } });
+//         if (!conversation) {
+//             return res.status(404).json({ error: "Conversation not found" });
+//         }
 
-        const { page = 1, limit = 20 } = req.query;
+//         const { page = 1, limit = 20 } = req.query;
 
-        const messages = await Message.find({ conversationId: conversation._id })
-                                      .sort({ createdAt: 1 })
-                                      .skip((page - 1) * limit)
-                                      .limit(limit)
-                                      .populate({
-                                          path: 'sender',
-                                          select: 'username profileImg'
-                                      });
+//         const messages = await Message.find({ conversationId: conversation._id })
+//                                       .sort({ createdAt: 1 })
+//                                       .skip((page - 1) * limit)
+//                                       .limit(limit)
+//                                       .populate({
+//                                           path: 'sender',
+//                                           select: 'username profileImg'
+//                                       }).populate({
+//                                         path: "replyTo", 
+//                                         select: "text iv img sender",
+//                                         populate: {
+//                                             path: "sender",
+//                                             select: "username profileImg",
+//                                         },
+//                                     })
 
        
-        const decryptedMessages = messages.map(msg => {
-            const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
-            return {
-                ...msg._doc,
-                text: decryptedText ,
-                iv:undefined
-            };
-        });
+//                                     const decryptedMessages = messages.map(msg => {
+//                                       const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
+//                                       const decryptedReplyTo = msg.replyTo ? decrypt({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : null;
+                                  
+//                                       return {
+//                                           ...msg._doc,
+//                                           text: decryptedText,
+//                                           iv: undefined,
+//                                           replyTo: {
+//                                               ...msg.replyTo,
+//                                               text: decryptedReplyTo,
+//                                               iv: undefined
+//                                           }
+//                                       };
+//                                   });
+                                  
 
-        await Message.updateMany(
-            {
-                conversationId: conversation._id,
-                sender: { $ne: userId },
-                seen: false
-            },
-            { $set: { seen: true } }
-        );
+       
 
-        const recipientSocketId = getRecipientSocketId(otherUserId);
-        if (recipientSocketId) {
-            io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
-        }
+//         const recipientSocketId = getRecipientSocketId(otherUserId);
+//         if (recipientSocketId) {
+//             io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
+//         }
         
 
-        res.status(200).json(decryptedMessages);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-        console.log("Error in getMessages:", error.message);
-    }
+//         res.status(200).json(decryptedMessages);
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//         console.log("Error in getMessages:", error.message);
+//     }
+// };
+
+
+export const getMessages = async (req, res) => {
+  const { otherUserId } = req.params;
+  const userId = req.user._id;
+
+  try {
+      
+      const conversation = await Conversation.findOne({ 
+          participants: { $all: [userId, otherUserId] } 
+      });
+
+      if (!conversation) {
+          return res.status(404).json({ error: "Conversation not found" });
+      }
+
+     
+      const { page = 1, limit = 20 } = req.query;
+      const pageNum = parseInt(page, 10);
+      const limitNum = parseInt(limit, 10);
+
+      
+      const messages = await Message.find({ conversationId: conversation._id })
+          .sort({ createdAt: 1 })
+          .skip((pageNum - 1) * limitNum)  
+          .limit(limitNum) 
+          .populate({
+              path: 'sender',
+              select: 'username profileImg'  
+          })
+          .populate({
+              path: "replyTo",
+              select: "text iv img video audio sender",  
+              populate: {
+                  path: "sender",
+                  select: "username profileImg",  
+              },
+          });
+
+      
+      const decryptedMessages = messages.map(msg => {
+          const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
+          const decryptedReplyTo = msg.replyTo ? decrypt({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : null;
+
+          return {
+              ...msg._doc,  
+              text: decryptedText,  
+              iv: undefined,  
+              replyTo: msg.replyTo ? {
+                  ...msg.replyTo._doc,
+                  text: decryptedReplyTo,  
+                  iv: undefined, 
+              } : null,
+          };
+      });
+
+     
+      const recipientSocketId = getRecipientSocketId(otherUserId);
+      if (recipientSocketId) {
+          io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
+      }
+
+      
+      res.status(200).json(decryptedMessages);
+  } catch (error) {
+     
+      console.error("Error in getMessages:", error.message);
+
+      res.status(500).json({ error: error.message });
+  }
 };
 
 
 
 export const getConversation = async (req, res) => {
   try {
-    let currentUserId = req.user._id.toString();
+    const currentUserId = req.user._id.toString();
 
+   
     const conversations = await Conversation.find({
       participants: currentUserId,
-    })
-      .populate({
-        path: 'participants',
-        select: 'username profileImg isVerified',  
-      })
-      .populate({
-        path: 'lastMessage.sender',
-        select: 'username profileImg',
-      })
-      .sort({ updatedAt: -1 });
+    }).populate({
+      path: "participants",
+      select: "username profileImg",
+    });
 
-    const convoData = conversations.map(convo => {
-      const lastMessageSender = convo.lastMessage.sender._id.toString();
-      const otherParticipant = convo.participants.find(participant => participant._id.toString() !== currentUserId);
+    
+    const convoData = conversations.map((convo) => {
+     
+      const filteredParticipants = convo.participants.filter(
+        (participant) => participant._id.toString() !== currentUserId
+      );
 
       
-      let decryptedMessage;
-      try {
-        decryptedMessage = decrypt({
-          iv: convo.lastMessage.iv,
-          encryptedData: convo.lastMessage.text,
-        });
-      } catch (decryptError) {
-        decryptedMessage = "[Decryption failed]";
-      }
+      const decryptedMessage = (() => {
+        try {
+          return decrypt({
+            iv: convo.lastMessage?.iv,
+            encryptedData: convo.lastMessage?.text,
+          });
+        } catch {
+          return "[Decryption failed]";
+        }
+      })();
 
-     
-      const formattedTime = moment(convo.updatedAt).calendar(null, {
-        sameDay: 'HH:mm', 
-        lastDay: '[Yesterday]', 
-        lastWeek: 'dddd', 
-        sameElse: 'MMM D', 
-      });
-
+      
       return {
-        _id: convo._id,  
-        participants: convo.participants, 
+        _id: convo._id, 
+        participants: filteredParticipants.map((participant) => ({
+          _id: participant._id,
+          username: participant.username,
+          profileImg: participant.profileImg,
+        })),
         lastMessage: {
-          text: decryptedMessage, 
-          sender: lastMessageSender, 
-          seen: convo.lastMessage.seen, 
-          createdAt: convo.lastMessage.createdAt, 
+          text: decryptedMessage,
+          sender: convo.lastMessage?.sender || null, 
+          seen: convo.lastMessage?.seen || false, 
         },
-        userProfilePic: otherParticipant.profileImg, 
-        username: otherParticipant.username,  
-        isVerified: otherParticipant.isVerified,  
-        formattedTime,  
-        isSender: lastMessageSender === currentUserId,  
-       
       };
     });
 
     res.status(200).json(convoData);
   } catch (error) {
     console.error("Error in getConversation:", error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Failed to fetch conversations" });
   }
 };
+
+
+
+
+
+
 
 
 
@@ -283,7 +354,17 @@ export const editMessage = async (req, res) => {
              io.to(socketId).emit("messageEdited", message);
          });
 
-        const decryptMessage = decrypt({ iv: message.iv, encryptedData: message.text });
+       // const decryptMessage = decrypt({ iv: message.iv, encryptedData: message.text });
+
+        const decryptMessage = (() => {
+          try {
+            return decrypt({
+              iv: message.iv, encryptedData: message.text
+            });
+          } catch {
+            return "[Decryption failed]";
+          }
+        })();
     
         const responsMessage ={
           ...message._doc,
@@ -301,75 +382,111 @@ export const editMessage = async (req, res) => {
 
 
 export const replyToMessage = async (req, res) => {
-    const { recipientId, messageId, replyText } = req.body;
-    const senderId = req.user._id;
+  const { recipientId, messageId, message } = req.body;
+  const senderId = req.user._id;
+  let img = "";
+  let video = "";
+  let audio = "";
+  try {
+    if (req.file) {
+      const fileUrl = generateFileName();
+      const params = {
+        Bucket: process.env.BUCKET_NAME,
+        Key: fileUrl,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
 
-    try {
-        
-        const encryptedMessage=encrypt(replyText);
+      const command = new PutObjectCommand(params);
+      await s3.send(command);
 
-        const parentMessage = await Message.findById(messageId).populate('sender', 'username');
-        if (!parentMessage) {
-            return res.status(404).json({ error: "Parent message not found" });
-        }
+      const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
 
-        
-        const conversation = await Conversation.findOneAndUpdate(
-            { participants: { $all: [senderId, recipientId] } },
-            { text: encryptedMessage.encryptedData, edited: true, iv: encryptedMessage.iv }, 
-            { new: true, upsert: true }
-        );
+      if (req.file.mimetype.startsWith("image/")) {
 
+        img = publicUrl;
+      } else if (req.file.mimetype.startsWith("video/")) {
 
-       
-        const replyMessage = new Message({
-            conversationId: conversation._id,
-            sender: senderId,
-            text: encryptedMessage.encryptedData,
-            iv:encryptedMessage.iv,
-            replyTo: parentMessage._id
-        });
-        
-        
-        const savedReplyMessage = await replyMessage.save();
-        const populatedReplyMessage = await savedReplyMessage.populate('sender', 'username profileImg');
-        
-        const decryptParentMessage = decrypt({ iv: parentMessage.iv, encryptedData: parentMessage.text });
-    
-        const decrytreplyMessage = decrypt({iv: populatedReplyMessage.iv, encryptedData: populatedReplyMessage.text})
-      
-        
-        res.status(201).json({
-            messageId: populatedReplyMessage._id,
-            conversationId: populatedReplyMessage.conversationId,
-            sender: {
-                id: populatedReplyMessage.sender._id,
-                username: populatedReplyMessage.sender.username,
-                profileImg: populatedReplyMessage.sender.profileImg 
-            },
-            text: decrytreplyMessage,
-            type: "text",
-            replyTo: {
-                messageId: parentMessage._id,
-                text: decryptParentMessage,
-                sender: {
-                    id: parentMessage.sender._id,
-                    name: parentMessage.sender.name
-                }
-            },
-            status: {
-                seen: false,
-                edited: false,
-                deletedFor: []
-            },
-            reactions: [],
-            createdAt: populatedReplyMessage.createdAt,
-            updatedAt: populatedReplyMessage.updatedAt
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-        console.log("Error in replyToMessage:", error.message);
+        video = publicUrl;
+      } else if (req.file.mimetype.startsWith("audio/")) {
+        audio = publicUrl;
+      }
     }
+
+
+    const encryptedMessage = encrypt(message);
+
+    const parentMessage = await Message.findById(messageId).populate('sender', 'username');
+    if (!parentMessage) {
+      return res.status(404).json({ error: "Parent message not found" });
+    }
+
+
+    const conversation = await Conversation.findOneAndUpdate(
+      { participants: { $all: [senderId, recipientId] } },
+      { text: encryptedMessage.encryptedData, edited: true, iv: encryptedMessage.iv },
+      { new: true, upsert: true }
+    );
+
+
+
+    const replyMessage = new Message({
+      conversationId: conversation._id,
+      sender: senderId,
+      text: encryptedMessage.encryptedData,
+      iv: encryptedMessage.iv,
+      img: img,
+      video: video,
+      audio: audio,
+      replyTo: parentMessage._id
+    });
+
+
+    const savedReplyMessage = await replyMessage.save();
+    const populatedReplyMessage = await savedReplyMessage.populate('sender', 'username profileImg');
+
+    const decryptParentMessage = decrypt({ iv: parentMessage.iv, encryptedData: parentMessage.text });
+
+    const decrytreplyMessage = decrypt({ iv: populatedReplyMessage.iv, encryptedData: populatedReplyMessage.text })
+
+   
+    res.status(201).json({
+      messageId: populatedReplyMessage._id,
+      conversationId: populatedReplyMessage.conversationId,
+      sender: {
+        id: populatedReplyMessage.sender._id,
+        username: populatedReplyMessage.sender.username,
+        profileImg: populatedReplyMessage.sender.profileImg
+      },
+      text: decrytreplyMessage,
+      img:populatedReplyMessage.img,
+      video: populatedReplyMessage.video,
+      audio: populatedReplyMessage.audio,
+      type: "text",
+      replyTo: {
+        messageId: parentMessage._id,
+        text: decryptParentMessage,
+        img:parentMessage.img,
+        video: parentMessage.video,
+        audio: parentMessage.audio,
+        sender: {
+          id: parentMessage.sender._id,
+          name: parentMessage.sender.name
+        }
+      },
+      status: {
+        seen: false,
+        edited: false,
+        deletedFor: []
+      },
+      reactions: [],
+      createdAt: populatedReplyMessage.createdAt,
+      updatedAt: populatedReplyMessage.updatedAt
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+    console.log("Error in replyToMessage:", error.message);
+  }
 };
 
 

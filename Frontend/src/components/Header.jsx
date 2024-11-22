@@ -30,7 +30,7 @@ const Header = () => {
 	const unreadNotifications = 3;
 
 	return (
-		<Flex justifyContent="space-between" align="center" alignItems={"center"} mt={6} mb={12} px={4}>
+		<Flex justifyContent="space-between" align="center" alignItems={"center"} mt={6} mb={6} px={4}>
 			{/* Home Icon */}
 			{user && (
 				<Tooltip label="Home" placement="bottom">
@@ -40,14 +40,17 @@ const Header = () => {
 				</Tooltip>
 			)}
 
-			{/* Logo with Color Mode Toggle, centered with mx="auto" */}
+			{/* Authentication Links */}
+			
+
+			{/* Logo with Color Mode Toggle */}
 			<IconButton
 				icon={<Image alt="logo" src={colorMode === "dark" ? "/light-logo.svg" : "/dark-logo.svg"} />}
 				onClick={toggleColorMode}
 				aria-label="Toggle Color Mode"
 				variant="ghost"
 				alignItems={"center"}
-				mx="auto"
+				mx={"auto"}
 			/>
 
 			{/* User Icons Section */}
