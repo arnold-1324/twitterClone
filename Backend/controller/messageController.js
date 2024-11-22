@@ -218,14 +218,14 @@ export const getMessages = async (req, res) => {
           })
           .populate({
               path: "replyTo",
-              select: "text iv img sender",  
+              select: "text iv img video audio sender",  
               populate: {
                   path: "sender",
                   select: "username profileImg",  
               },
           });
 
-      // Decrypt messages
+      
       const decryptedMessages = messages.map(msg => {
           const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
           const decryptedReplyTo = msg.replyTo ? decrypt({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : null;
@@ -264,7 +264,7 @@ export const getConversation = async (req, res) => {
   try {
     const currentUserId = req.user._id.toString();
 
-    // Fetch conversations involving the current user
+   
     const conversations = await Conversation.find({
       participants: currentUserId,
     }).populate({
@@ -272,14 +272,14 @@ export const getConversation = async (req, res) => {
       select: "username profileImg",
     });
 
-    // Process and prepare data for the frontend
+    
     const convoData = conversations.map((convo) => {
-      // Filter out the current user from participants
+     
       const filteredParticipants = convo.participants.filter(
         (participant) => participant._id.toString() !== currentUserId
       );
 
-      // Decrypt the last message or return a fallback
+      
       const decryptedMessage = (() => {
         try {
           return decrypt({
@@ -291,9 +291,9 @@ export const getConversation = async (req, res) => {
         }
       })();
 
-      // Return the formatted conversation object
+      
       return {
-        _id: convo._id, // Conversation ID
+        _id: convo._id, 
         participants: filteredParticipants.map((participant) => ({
           _id: participant._id,
           username: participant.username,
@@ -301,8 +301,8 @@ export const getConversation = async (req, res) => {
         })),
         lastMessage: {
           text: decryptedMessage,
-          sender: convo.lastMessage?.sender || null, // Sender's User ID
-          seen: convo.lastMessage?.seen || false, // Seen status
+          sender: convo.lastMessage?.sender || null, 
+          seen: convo.lastMessage?.seen || false, 
         },
       };
     });
@@ -449,7 +449,7 @@ export const replyToMessage = async (req, res) => {
 
     const decrytreplyMessage = decrypt({ iv: populatedReplyMessage.iv, encryptedData: populatedReplyMessage.text })
 
-
+   
     res.status(201).json({
       messageId: populatedReplyMessage._id,
       conversationId: populatedReplyMessage.conversationId,
@@ -459,10 +459,16 @@ export const replyToMessage = async (req, res) => {
         profileImg: populatedReplyMessage.sender.profileImg
       },
       text: decrytreplyMessage,
+      img:populatedReplyMessage.img,
+      video: populatedReplyMessage.video,
+      audio: populatedReplyMessage.audio,
       type: "text",
       replyTo: {
         messageId: parentMessage._id,
         text: decryptParentMessage,
+        img:parentMessage.img,
+        video: parentMessage.video,
+        audio: parentMessage.audio,
         sender: {
           id: parentMessage.sender._id,
           name: parentMessage.sender.name

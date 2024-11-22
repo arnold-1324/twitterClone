@@ -174,22 +174,22 @@ const MessageInput = ({ setMessages }) => {
             {replyMsg !== null && (
                 <Box
                     p={2}
-                    bg={useColorModeValue("gray.100", "gray.700")} // Light gray for light mode, darker gray for dark mode
+                    bg={useColorModeValue("gray.100", "gray.700")} 
                     borderLeft="4px solid"
-                    borderColor={useColorModeValue("green.500", "green.300")} // Brighter green for light mode, softer green for dark mode
+                    borderColor={useColorModeValue("green.500", "green.300")} 
                     borderRadius="md"
                     position="relative"
-                    boxShadow={useColorModeValue("sm", "md")} // Subtle shadow adjustments for themes
+                    boxShadow={useColorModeValue("sm", "md")} 
                 >
                     <Flex direction="row" alignItems="center">
                         <Box flex="1">
                             <Text
                                 fontSize="sm"
                                 fontWeight="bold"
-                                color={useColorModeValue("green.600", "green.200")} // Darker green for light mode, lighter green for dark mode
+                                color={useColorModeValue("green.600", "green.200")} 
                                 mb={1}
                             >
-                                {replyMsg.sender || "You"} {/* Simulating WhatsApp sender */}
+                                {replyMsg.sender || "You"} 
                             </Text>
                             <Text fontSize="sm" color={useColorModeValue("gray.800", "gray.100")} noOfLines={2}>
                                 {replyMsg.text}
@@ -204,13 +204,17 @@ const MessageInput = ({ setMessages }) => {
                                 overflow="hidden"
                                 boxShadow={useColorModeValue("md", "lg")}
                             >
-                                <Image
+                                {/* <Image
                                     src={replyMsg.media}
                                     alt="Thumbnail"
                                     objectFit="cover"
                                     w="full"
                                     h="full"
-                                />
+                                /> */}
+                                <video  w="full"
+                                    h="full">
+                                <source  src={replyMsg.media} />
+                                </video>
                             </Box>
                         )}
                     </Flex>
