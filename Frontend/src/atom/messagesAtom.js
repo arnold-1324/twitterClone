@@ -8,5 +8,10 @@ export const conversationsAtom = atom({
 
 export const selectedConversationAtom = atom({
     key: "selectedConversationAtom",
-    default: { _id: "" }, 
+    default: { _id: "" },
+});
+
+export const selectedMsg =atom({
+  key:"selectedMsg",
+  default:{},
 });
