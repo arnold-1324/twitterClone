@@ -100,7 +100,7 @@ import {
   
 		  {/* Timestamp */}
 		  <Text fontSize="xs" color={useColorModeValue("gray.500", "gray.400")}>
-			{ formatMessageTime(new Date(lastMessage.createdAt))}
+			{ formatMessageTime("wgeabgb")}
 		  </Text>
 		</Stack>
 	  </Flex>
