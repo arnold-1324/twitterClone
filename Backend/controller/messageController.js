@@ -203,15 +203,10 @@ export const getMessages = async (req, res) => {
       }
 
      
-      const { page = 1, limit = 20 } = req.query;
-      const pageNum = parseInt(page, 10);
-      const limitNum = parseInt(limit, 10);
-
+    
       
       const messages = await Message.find({ conversationId: conversation._id })
           .sort({ createdAt: 1 })
-          .skip((pageNum - 1) * limitNum)  
-          .limit(limitNum) 
           .populate({
               path: 'sender',
               select: 'username profileImg'  
