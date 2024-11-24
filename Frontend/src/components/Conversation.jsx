@@ -100,7 +100,7 @@ import {
   
 		  {/* Timestamp */}
 		  <Text fontSize="xs" color={useColorModeValue("gray.500", "gray.400")}>
-			{ formatMessageTime(converstion.updatedAt)}
+			{ formatMessageTime(conversation.updatedAt)}
 		  </Text>
 		</Stack>
 	  </Flex>
