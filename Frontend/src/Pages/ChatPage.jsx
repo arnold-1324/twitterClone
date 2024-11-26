@@ -12,7 +12,6 @@ import {
 } from "@chakra-ui/react";
 import Conversation from "../components/Conversation";
 import { GiConversation } from "react-icons/gi";
-import { BiArrowBack } from "react-icons/bi"; // Back icon
 import MessageContainer from "../components/MessageContainer";
 import { useEffect, useState } from "react";
 import useShowToast from "../hooks/useShowToast";
@@ -139,9 +138,7 @@ const ChatPage = () => {
     }
   };
 
-  const clearSelectedConversation = () => {
-    setSelectedConversation({});
-  };
+ 
 
   return (
     <Box
@@ -223,15 +220,8 @@ const ChatPage = () => {
   
       {selectedConversation._id ? (
         <Flex flex={70} flexDirection="column" gap={2}>
-          {isMobileView && (
-            <IconButton
-              icon={<BiArrowBack />}
-              aria-label="Back to conversations"
-              onClick={clearSelectedConversation}
-              alignSelf="flex-start"
-            />
-          )}
-          <MessageContainer />
+          
+          <MessageContainer isMobileView={isMobileView} setSelectedConversation={setSelectedConversation} />
         </Flex>
       ) : (
         !isMobileView && (
