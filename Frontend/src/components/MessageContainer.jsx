@@ -20,12 +20,14 @@ import {
   import { useSocket } from "../context/SocketContext";
   import messageSound from "../assets/sounds/message.mp3";
   import {  FaPause, FaPlay } from "react-icons/fa";
+  import { BiArrowBack } from "react-icons/bi"; 
   import formatMessageTime from "../Utils/Timeformate";
-  import { BsThreeDotsVertical } from "react-icons/bs";
+  import { BsThreeDotsVertical,BsCheck2All } from "react-icons/bs";
+
 
   const MotionFlex = motion(Flex);
   
-  const MessageContainer = () => {
+  const MessageContainer = ({isMobileView ,setSelectedConversation}) => {
     const showToast = useShowToast();
     const [isPlaying, setIsPlaying] = useState(false);
     const selectedConversation = useRecoilValue(selectedConversationAtom);
@@ -38,9 +40,34 @@ import {
     const audioRef = useRef(null);
     const [Msg, setSelectedMsg] = useRecoilState(selectedMsg);
 
+    const clearSelectedConversation = () => {
+      setSelectedConversation({});
+    };
+
     const handelselectedMsg = (message) => {
       setSelectedMsg({ ...message });
     };
+
+    const handleDelete=async(messageId)=>{
+      const response = await fetch("api/messages/deleteforme", {
+        method: "DELETE",
+        body: JSON.stringify({messageId}),
+      });
+
+      if (!response.ok) {
+        showToast({
+          type: "error",
+          title: "Error deleting message",
+        });
+        return;
+      }
+
+      setMessages((prev) => prev.filter((msg) => msg._id!== message._id));
+      showToast({
+        type: "success",
+        title: "Message deleted successfully",
+      });
+    }
 
     useEffect(() => {
       const handleNewMessage = (message) => {
@@ -111,6 +138,15 @@ import {
         overflow="hidden"
       >
         <Flex w="full" h={12} alignItems="center" gap={2} mb={2}>
+        {isMobileView && (
+            <IconButton
+              icon={<BiArrowBack />}
+              aria-label="Back to conversations"
+              onClick={clearSelectedConversation}
+              alignSelf="flex-start"
+              
+            />
+          )}
           <Avatar src={selectedConversation.userProfilePic} size="sm" />
           <Text display="flex" alignItems="center">
             {selectedConversation.username}{" "}
@@ -329,6 +365,11 @@ import {
                         </Flex>
                       </Flex>
                     )}
+                    {message.seen && (
+                    <Box color={isOwnMessage ? "blue.400" : "gray.900"} mr={1} alignSelf={"flex-end"}>
+                      <BsCheck2All size={16} />
+                    </Box>
+                    )}
 
                     <Flex position="absolute" top="-25px" right="0">
                       <Menu>
@@ -369,8 +410,9 @@ import {
                           >
                             Reply
                           </MenuItem>
-
-                          <MenuItem onClick={() => handleDelete(message._id)}>
+                          
+                          <MenuItem onClick={() => 
+                            handleDelete(message._id)}>
                             Delete
                           </MenuItem>
                         </MenuList>

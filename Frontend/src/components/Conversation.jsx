@@ -86,7 +86,7 @@ import {
   
 		  {/* Last message */}
 		  <Text fontSize={"xs"} color={useColorModeValue("gray.600", "gray.400")}>
-			{currentUser._id === lastMessage.sender && (
+			{lastMessage.sender && (
 			  <Box color={lastMessage.seen ? "blue.400" : "gray.500"} mr={1}>
 				<BsCheck2All size={16} />
 			  </Box>
