@@ -32,29 +32,41 @@ const NotificationPage = () => {
   const unreadBgColor = useColorModeValue("blue.50", "#1e1e30");
   const textColor = useColorModeValue("gray.800", "whiteAlpha.900");
 
-  // Fetch notifications
+  
   useEffect(() => {
     const getNotifications = async () => {
-      setIsLoading(true);
+      setIsLoading(true); 
+  
       try {
-        const res = await fetch("api/notification/");
+        const res = await fetch("/api/notification/");
         if (!res.ok) throw new Error("Failed to fetch notifications");
-
+  
         const data = await res.json();
-        setNotify(data);
+  
+        // Filter unread notifications to calculate unread count
+        const unreadCount = data.filter((notif) => !notif.read).length;
+  
+        // Update the notifications and unread count in the global state
+        setNotify((prev) => ({
+          ...prev,
+          notifications: data, 
+          unreadCount: unreadCount, // Update unread count
+        }));
       } catch (error) {
         showToast("Error", error.message || "Failed to fetch data", "error");
       } finally {
-        setIsLoading(false);
+        setIsLoading(false); // Hide loading state after fetch
       }
     };
-    getNotifications();
-  }, [setNotify]);
+  
+    getNotifications(); // Trigger the fetch function
+  }, [setNotify]); // Include dependencies
+  
 
   // Delete specific notification
   const handleDeleteNotification = async (notificationId) => {
     try {
-      const res = await fetch("api/notification/delete", {
+      const res = await fetch("/api/notification/delete", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notificationId }),
@@ -93,7 +105,7 @@ const NotificationPage = () => {
       ) : notify.length === 0 ? (
         <Text>No notifications</Text>
       ) : (
-        notify.map((notif) => (
+        notify.notifications.map((notif) => (
           <MotionBox
             key={notif._id}
             w="full"

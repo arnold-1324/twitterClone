@@ -27,8 +27,9 @@ const PostPage = () => {
       setPosts([]);
       setPostLoading(true);
       try {
-        const res = await fetch(`http://localhost:3000/api/posts/${pid}`);
+        const res = await fetch(`/api/posts/${pid}`);
         const data = await res.json();
+        console.log(data);
         if (data.error) {
           showToast("Error", data.error, "error");
           return;
