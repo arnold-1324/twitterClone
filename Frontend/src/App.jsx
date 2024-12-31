@@ -13,10 +13,37 @@ import UpdateProfile from "./Pages/UpdateProfile";
 import ResetPasswordForm from "./components/ForgotpassCard";
 import CreatePost from "./components/CreatePost";
 import NotificationPage from "./Pages/NotificationPage";
+import { useSetRecoilState } from 'recoil';
+import NotifyAtom from "./atom/notifyAtom";
+import useShowToast from "./hooks/useShowToast";
+import { useEffect } from "react";
 
 function App() {
   const { pathname } = useLocation();
   const user = useRecoilValue(userAtom);
+  const setNotify = useSetRecoilState(NotifyAtom);
+  const showToast = useShowToast();
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch("/api/notification/");
+        if (!res.ok) throw new Error("Failed to fetch notifications");
+
+        const data = await res.json();
+        const unreadCount = data.filter((notif) => !notif.read).length;
+
+        setNotify({ notifications: data, unreadCount });
+      } catch (error) {
+        showToast("Error", error.message || "Failed to fetch data", "error");
+      }
+    };
+
+    fetchNotifications();
+  }, [setNotify, showToast]);
+
+  
+
 
   return (
     <Box position={"relative"} w="full" minHeight="100vh">
