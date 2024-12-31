@@ -19,13 +19,14 @@ import { Link as RouterLink } from "react-router-dom";
 import useLogout from "../hooks/useLogout";
 import authScreenAtom from "../atom/authAtom";
 import NotificationIcon from "./NotificationIcon";
+import NotifyAtom from "../atom/notifyAtom";
 
 const Header = () => {
 	const { colorMode, toggleColorMode } = useColorMode();
 	const user = useRecoilValue(userAtom);
 	const logout = useLogout();
 	const setAuthScreen = useSetRecoilState(authScreenAtom);
-
+	const { unreadCount } = useRecoilValue(NotifyAtom);
 	// Mockup for unread notifications count
 	const unreadNotifications = 3;
 
@@ -68,7 +69,7 @@ const Header = () => {
 						</Link>
 					</Tooltip>
 
-					<NotificationIcon unreadCount={3} />
+					<NotificationIcon unreadCount={unreadCount > 0 ? unreadCount : ""} />
 
 					<Tooltip label="Settings" placement="bottom">
 						<Link as={RouterLink} to="/settings">
