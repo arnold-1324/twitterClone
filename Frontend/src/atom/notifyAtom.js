@@ -2,7 +2,7 @@ import { atom } from "recoil";
 
 const  NotifyAtom= atom({
 	key: "NotifyAtom",
-	default: [],
+	default: { notifications: [], unreadCount: 0 }, 
 });
 
 export default NotifyAtom;
