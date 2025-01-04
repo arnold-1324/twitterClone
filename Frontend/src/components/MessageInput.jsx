@@ -33,17 +33,24 @@ const MessageInput = ({ setMessages }) => {
     const toast = useToast();
     const replyMsg=useRecoilValue(selectedMsg);
     const [reply,setReply]=useRecoilState(selectedMsg);
+    console.log(replyMsg);
+    const isValidReply = 
+    (replyMsg.text || replyMsg.media) && 
+    (!replyMsg.media || ['img', 'video', 'audio'].includes(replyMsg.mediaType)); 
+  
 
-
+   
     // Theme-aware styles
     const bgColor = useColorModeValue("white", "gray.800");
     const iconHoverColor = useColorModeValue("gray.200", "gray.600");
     const borderColor = useColorModeValue("gray.300", "gray.600");
+    
+    
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
         if (!messageText && !audioBlob && !mediaFile) return;
-
+        console.log(replyMsg +"reply");
         setIsSending(true);
 
         try {
@@ -51,7 +58,7 @@ const MessageInput = ({ setMessages }) => {
             formData.append("message", messageText);
             formData.append("recipientId",recipient.userId);
             
-            if(replyMsg !== null){
+            if ( replyMsg.id!= "" ) {
                 formData.append("messageId",replyMsg.id);
             }
 
@@ -66,7 +73,7 @@ const MessageInput = ({ setMessages }) => {
             }
 
             let url = "/api/messages/send"; 
-            if (replyMsg !== null) {
+            if ( replyMsg.id!= "") {
                 url = "/api/messages/reply"; 
             }
 
@@ -93,7 +100,13 @@ const MessageInput = ({ setMessages }) => {
             setAudioPreview(null);
             setMediaFile(null);
             setMediaPreview(null);
-            setReply(null);
+            setReply(prevState => ({
+              ...prevState,
+              id: "",
+              text: '',
+              media: null,
+              mediaType: null,
+            }));
         } catch (error) {
             toast({
                 title: "Error",
@@ -169,154 +182,173 @@ const MessageInput = ({ setMessages }) => {
     };
 
     return (
-        <Box w="full">
-            {/*reply content bar*/}
-            {replyMsg !== null && (
-                <Box
-                    p={2}
-                    bg={useColorModeValue("gray.100", "gray.700")} 
-                    borderLeft="4px solid"
-                    borderColor={useColorModeValue("green.500", "green.300")} 
-                    borderRadius="md"
-                    position="relative"
-                    boxShadow={useColorModeValue("sm", "md")} 
+      <Box w="full">
+        
+        {isValidReply && (
+          <Box
+            p={2}
+            bg={useColorModeValue("gray.100", "gray.700")}
+            borderLeft="4px solid"
+            borderColor={useColorModeValue("green.500", "green.300")}
+            borderRadius="md"
+            position="relative"
+            boxShadow={useColorModeValue("sm", "md")}
+          >
+            <Flex direction="row" alignItems="center">
+              <Box flex="1">
+                <Text
+                  fontSize="sm"
+                  fontWeight="bold"
+                  color={useColorModeValue("green.600", "green.200")}
+                  mb={1}
                 >
-                    <Flex direction="row" alignItems="center">
-                        <Box flex="1">
-                            <Text
-                                fontSize="sm"
-                                fontWeight="bold"
-                                color={useColorModeValue("green.600", "green.200")} 
-                                mb={1}
-                            >
-                                {replyMsg.sender || "You"} 
-                            </Text>
-                            <Text fontSize="sm" color={useColorModeValue("gray.800", "gray.100")} noOfLines={2}>
-                                {replyMsg.text}
-                            </Text>
-                        </Box>
-                        {replyMsg.media && (
-                            <Box
-                                w="50px"
-                                h="50px"
-                                ml={2}
-                                borderRadius="md"
-                                overflow="hidden"
-                                boxShadow={useColorModeValue("md", "lg")}
-                            >
-                                {/* <Image
-                                    src={replyMsg.media}
-                                    alt="Thumbnail"
-                                    objectFit="cover"
-                                    w="full"
-                                    h="full"
-                                /> */}
-                                <video  w="full"
-                                    h="full">
-                                <source  src={replyMsg.media} />
-                                </video>
-                            </Box>
-                        )}
-                    </Flex>
-                    <CloseButton
-                        position="absolute"
-                        top={2}
-                        right={2}
-                        onClick={() => {
-                            setReply(null);
-                        }}
-                        aria-label="Cancel"
-                    />
-                </Box>
-            )}
-
-
-            {mediaPreview && (
-                <Box
-                    mb={4}
-                    p={2}
-                    bg={bgColor}
-                    border="1px solid"
-                    borderColor={borderColor}
-                    borderRadius="md"
-                    position="relative"
+                  {replyMsg.sender || "You"}
+                </Text>
+                <Text
+                  fontSize="sm"
+                  color={useColorModeValue("gray.800", "gray.100")}
+                  noOfLines={2}
                 >
-                    {mediaPreview}
-                    <CloseButton
-                        position="absolute"
-                        top={2}
-                        right={2}
-                        onClick={handleCancelMedia}
-                        aria-label="Cancel"
+                  {replyMsg.text}
+                </Text>
+              </Box>
+              {replyMsg.media && (
+                <Box
+                  w="50px"
+                  h="50px"
+                  ml={2}
+                  borderRadius="md"
+                  overflow="hidden"
+                  boxShadow={useColorModeValue("md", "lg")}
+                >
+                  {replyMsg.mediaType === "img" ? (
+                    <Image
+                      src={replyMsg.media}
+                      alt="Thumbnail"
+                      objectFit="cover"
+                      w="full"
+                      h="full"
                     />
+                  ) : replyMsg.mediaType === "video" ? (
+                    <video w="full" h="full" objectFit="cover" controls={false}>
+                      <source src={replyMsg.media} />
+                    </video>
+                  ) : replyMsg.mediaType === "audio" ? (
+                    <Image
+                      src="../public/audio.png" 
+                      alt="Audio Thumbnail"
+                      objectFit="cover"
+                      w="full"
+                      h="full"
+                    />
+                  ) : null}
                 </Box>
-            )}
+              )}
+            </Flex>
+            <CloseButton
+              position="absolute"
+              top={2}
+              right={2}
+              onClick={() => {
+                setReply(prevState => ({
+                  ...prevState,
+                  id: "",
+                  text: '',
+                  media: null,
+                  mediaType: null,
+                }));
+              }}
+              aria-label="Cancel"
+            />
+          </Box>
+        )}
 
-            <MotionFlex
-                w="full"
-                bg={bgColor}
-                borderRadius="full"
-                boxShadow="lg"
-                px={4}
-                py={2}
-                alignItems="center"
-                gap={2}
-                border="1px solid"
-                borderColor={borderColor}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-            >
-                {/* Media Upload */}
-                <input
-                    type="file"
-                    accept="image/*,video/*"
-                    style={{ display: "none" }}
-                    id="media-upload"
-                    onChange={handleMediaUpload}
-                />
-                <IconButton
-                    as="label"
-                    htmlFor="media-upload"
-                    icon={<BsFillImageFill />}
-                    aria-label="Upload Media"
-                    variant="ghost"
-                    size="lg"
-                    _hover={{ bg: iconHoverColor }}
-                />
+        {mediaPreview && (
+          <Box
+            mb={4}
+            p={2}
+            bg={bgColor}
+            border="1px solid"
+            borderColor={borderColor}
+            borderRadius="md"
+            position="relative"
+          >
+            {mediaPreview}
+            <CloseButton
+              position="absolute"
+              top={2}
+              right={2}
+              onClick={handleCancelMedia}
+              aria-label="Cancel"
+            />
+          </Box>
+        )}
 
-                {/* Message Input */}
-                <Input
-                    placeholder="Type a message"
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    flex={1}
-                    variant="unstyled"
-                    bg={bgColor}
-                />
+        <MotionFlex
+          w="full"
+          bg={bgColor}
+          borderRadius="full"
+          boxShadow="lg"
+          px={4}
+          py={2}
+          alignItems="center"
+          gap={2}
+          border="1px solid"
+          borderColor={borderColor}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          {/* Media Upload */}
+          <input
+            type="file"
+            accept="image/*,video/*"
+            style={{ display: "none" }}
+            id="media-upload"
+            onChange={handleMediaUpload}
+          />
+          <IconButton
+            as="label"
+            htmlFor="media-upload"
+            icon={<BsFillImageFill />}
+            aria-label="Upload Media"
+            variant="ghost"
+            size="lg"
+            _hover={{ bg: iconHoverColor }}
+          />
 
-                {/* Audio Record */}
-                <IconButton
-                    icon={isRecording ? <IoPause /> : <IoMic />}
-                    onClick={handleAudioRecording}
-                    aria-label="Record"
-                    variant="ghost"
-                    size="lg"
-                    colorScheme={isRecording ? "red" : "gray"}
-                    _hover={{ bg: iconHoverColor }}
-                />
+          {/* Message Input */}
+          <Input
+            placeholder="Type a message"
+            value={messageText}
+            onChange={(e) => setMessageText(e.target.value)}
+            flex={1}
+            variant="unstyled"
+            bg={bgColor}
+          />
 
-                {/* Send Button */}
-                <IconButton
-                    icon={isSending ? <Spinner size="sm" /> : <IoSendSharp />}
-                    aria-label="Send"
-                    onClick={handleSendMessage}
-                    variant="ghost"
-                    size="lg"
-                    _hover={{ bg: iconHoverColor }}
-                />
-            </MotionFlex>
-        </Box>
+          {/* Audio Record */}
+          <IconButton
+            icon={isRecording ? <IoPause /> : <IoMic />}
+            onClick={handleAudioRecording}
+            aria-label="Record"
+            variant="ghost"
+            size="lg"
+            colorScheme={isRecording ? "red" : "gray"}
+            _hover={{ bg: iconHoverColor }}
+          />
+
+          {/* Send Button */}
+          <IconButton
+            icon={isSending ? <Spinner size="sm" /> : <IoSendSharp />}
+            aria-label="Send"
+            onClick={handleSendMessage}
+            variant="ghost"
+            size="lg"
+            _hover={{ bg: iconHoverColor }}
+          />
+        </MotionFlex>
+      </Box>
     );
 };
 

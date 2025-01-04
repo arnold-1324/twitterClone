@@ -21,7 +21,7 @@ router.get('/getConvo/user', protectRoute, getConversation);  // working but nee
 
 router.put('/edit', protectRoute, editMessage);    //msg encryption & decryption works
 
-router.post('/reply', protectRoute, upload.single('image'), replyToMessage);   //msg encryption & decrytion works
+router.post('/reply', protectRoute, upload.single('media'), replyToMessage);   //msg encryption & decrytion works
 
 //router.put('/deleteforme',protectRoute, deleteFormeMessage); 
 
