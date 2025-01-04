@@ -45,7 +45,11 @@ import {
     };
 
     const handelselectedMsg = (message) => {
-      setSelectedMsg({ ...message });
+      setSelectedMsg({  
+        id: message.id,
+        text: message.text,
+        media: message.media,
+        mediaType:  message.mediaType });
     };
 
     const handleDelete=async(messageId)=>{
@@ -400,11 +404,13 @@ import {
                                 text: message.text,
                                 media:
                                   message.img || message.video || message.audio,
+                                  mediaType: message.img ? "img" : message.video ? "video" : message.audio ? "audio" : null,
                                 sender: isOwnMessage
                                   ? "you"
                                   : message.sender.username,
+
                               };
-                              console.log("Data sent to child:", data);
+                            
                               handelselectedMsg(data);
                             }}
                           >
