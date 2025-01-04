@@ -36,7 +36,7 @@ const MessageInput = ({ setMessages }) => {
     console.log(replyMsg);
     const isValidReply = 
     (replyMsg.text || replyMsg.media) && 
-    (!replyMsg.media || ['img', 'video', 'audio'].includes(replyMsg.mediaType));
+    (!replyMsg.media || ['img', 'video', 'audio'].includes(replyMsg.mediaType)); 
   
 
    
@@ -44,11 +44,13 @@ const MessageInput = ({ setMessages }) => {
     const bgColor = useColorModeValue("white", "gray.800");
     const iconHoverColor = useColorModeValue("gray.200", "gray.600");
     const borderColor = useColorModeValue("gray.300", "gray.600");
+    
+    
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
         if (!messageText && !audioBlob && !mediaFile) return;
-
+        console.log(replyMsg +"reply");
         setIsSending(true);
 
         try {
@@ -56,7 +58,7 @@ const MessageInput = ({ setMessages }) => {
             formData.append("message", messageText);
             formData.append("recipientId",recipient.userId);
             
-            if(replyMsg !== null){
+            if ( replyMsg.id!= "" ) {
                 formData.append("messageId",replyMsg.id);
             }
 
@@ -71,7 +73,7 @@ const MessageInput = ({ setMessages }) => {
             }
 
             let url = "/api/messages/send"; 
-            if (replyMsg !== null) {
+            if ( replyMsg.id!= "") {
                 url = "/api/messages/reply"; 
             }
 
@@ -98,7 +100,13 @@ const MessageInput = ({ setMessages }) => {
             setAudioPreview(null);
             setMediaFile(null);
             setMediaPreview(null);
-            setReply(null);
+            setReply(prevState => ({
+              ...prevState,
+              id: "",
+              text: '',
+              media: null,
+              mediaType: null,
+            }));
         } catch (error) {
             toast({
                 title: "Error",
@@ -244,6 +252,7 @@ const MessageInput = ({ setMessages }) => {
               onClick={() => {
                 setReply(prevState => ({
                   ...prevState,
+                  id: "",
                   text: '',
                   media: null,
                   mediaType: null,
