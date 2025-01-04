@@ -13,7 +13,8 @@ export const selectedConversationAtom = atom({
 
 export const selectedMsg =atom({
   key:"selectedMsg",
-  default:{ text: '',
+  default:{ id: "",
+    text: '',
     media: null,
     mediaType: null},
 });

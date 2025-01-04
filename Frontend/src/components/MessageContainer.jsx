@@ -45,7 +45,9 @@ import {
     };
 
     const handelselectedMsg = (message) => {
-      setSelectedMsg({  text: message.text,
+      setSelectedMsg({  
+        id: message.id,
+        text: message.text,
         media: message.media,
         mediaType:  message.mediaType });
     };
@@ -408,7 +410,7 @@ import {
                                   : message.sender.username,
 
                               };
-                              console.log("Data sent to child:", data);
+                            
                               handelselectedMsg(data);
                             }}
                           >
