@@ -21,6 +21,7 @@ import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
 import postsAtom from "../atom/postsAtom";
 
+
 const Actions = ({ post }) => {
 	const user = useRecoilValue(userAtom);
 	const [liked, setLiked] = useState(post.likes.includes(user?._id));
@@ -147,7 +148,7 @@ const Actions = ({ post }) => {
 				</svg>
 
 				<RepostSVG />
-				<ShareSVG />
+				
 			</Flex>
 
 			<Flex gap={2} alignItems={"center"}>
