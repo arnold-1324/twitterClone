@@ -10,7 +10,7 @@ const messageSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["text", "image", "video"], 
+            enum: ["text", "image", "video","post"], 
             default: "text",
         },
         iv: { 
@@ -33,6 +33,9 @@ const messageSchema = new mongoose.Schema(
             type:String,
             default: "",    
         },
+
+        postReference: { type: mongoose.Schema.Types.ObjectId, ref: 'Post', default: null },
+
         reactions: [
             {
                 user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
