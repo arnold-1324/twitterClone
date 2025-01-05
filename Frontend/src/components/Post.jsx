@@ -11,6 +11,7 @@ import { useRecoilState, useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import postsAtom from "../atom/postsAtom";
 import { motion } from "framer-motion";
+import SharePost from "./SharePost";
 
 const MotionFlex = motion(Flex); // Wrapping Chakra's Flex with motion for animations
 
@@ -86,56 +87,61 @@ const Post = ({ post, postedBy }) => {
   if (!user) return null;
 
   return (
-    <Link to={`/${user.username}/post/${post._id}`}>
-      <MotionFlex
-        gap={3}
-        mb={4}
-        py={5}
-        borderWidth="1px"
-        borderRadius="md"
-        p={4}
-        shadow="md"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.6 }}
-        _hover={{
-          scale: 1.02, // Slight scale effect to simulate hover inside the card
-          boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.15)", // Elevation effect on hover
+    <MotionFlex
+      gap={3}
+      mb={4}
+      py={5}
+      borderWidth="1px"
+      borderRadius="md"
+      p={4}
+      shadow="md"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.6 }}
+      _hover={{
+        scale: 1.02,
+        boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.15)",
+      }}
+    >
+      <Avatar
+        size="md"
+        name={user.fullName}
+        src={user.profileImg}
+        onClick={(e) => {
+          e.preventDefault();
+          navigate(`/${user.username}`);
         }}
-      >
-        <Avatar
-          size="md"
-          name={user.fullName}
-          src={user.profileImg}
-          onClick={(e) => {
-            e.preventDefault();
-            navigate(`/${user.username}`);
-          }}
-        />
-        <Flex flex={1} flexDirection="column" gap={2}>
-          <Flex justifyContent="space-between">
-            <Text fontWeight="bold" fontSize="sm">{user.username}</Text>
-            <Text fontSize="xs" color="gray.500">
-              {formatDistanceToNow(new Date(post.createdAt))} ago
-            </Text>
-          </Flex>
-          <Box>
-            <Text mb={2}>{post.caption}</Text>
-            {post.images && <Image src={post.images} alt={post.caption} borderRadius="md" />}
-          </Box>
-          <Actions post={post} />
-          {user._id === currentUser?._id && (
-            <DeleteIcon
-              cursor="pointer"
-              onClick={handleDeletePost}
-              _hover={{ color: "red.500" }}
-            />
-          )}
+      />
+      <Flex flex={1} flexDirection="column" gap={2}>
+        <Flex justifyContent="space-between">
+          <Text fontWeight="bold" fontSize="sm">{user.username}</Text>
+          <Text fontSize="xs" color="gray.500">
+            {formatDistanceToNow(new Date(post.createdAt))} ago
+          </Text>
         </Flex>
-      </MotionFlex>
-    </Link>
+        <Box>
+          <Text mb={2}>{post.caption}</Text>
+          {post.images && <Image src={post.images} alt={post.caption} borderRadius="md" />}
+        </Box>
+        <Actions post={post} />
+        
+        {/* Make sure the share button doesn't trigger navigation */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <SharePost postId={post._id} />
+        </div>
+  
+        {user._id === currentUser?._id && (
+          <DeleteIcon
+            cursor="pointer"
+            onClick={handleDeletePost}
+            _hover={{ color: "red.500" }}
+          />
+        )}
+      </Flex>
+    </MotionFlex>
   );
+  
 };
 
 export default Post;

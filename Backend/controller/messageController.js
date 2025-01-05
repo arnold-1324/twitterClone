@@ -218,8 +218,13 @@ export const getMessages = async (req, res) => {
       })
       .populate({ 
           path: 'replyTo', 
-          select: 'text iv sender', 
+          select: 'text iv sender video img audio', 
           populate: { path: 'sender', select: 'username profileImg' } 
+      })
+      .populate({
+        path:'postReference',
+        select:'postedBy images',
+        populate:{path:'postedBy',select:'username profileImg'}
       })
       .lean();
 
