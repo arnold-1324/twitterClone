@@ -6,6 +6,7 @@ import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import mongoose from "mongoose";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
+import {encrypt} from "../lib/utils/Msg_encryption/encrypt.js";
 
 
 export const NewPost = async(req,res)=>{
@@ -180,6 +181,62 @@ export const deletePostsUsersCollection = async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const sharepost = async (req, res) => {
+  const { postId, conversationId, text = "" } = req.body;
+  const senderId=req.user._id;
+
+  if (!postId || !senderId || !conversationId) {
+      return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+      const post = await Post.findById(postId);
+      if (!post) {
+          return res.status(404).json({ error: "Post not found" });
+      }
+
+      // Ensure sharedBy is initialized as an array if it is undefined
+      if (!Array.isArray(post.sharedBy)) {
+          post.sharedBy = []; // Initialize it if it's not an array
+      }
+
+      // Increment the shareCount and add to the sharedBy array
+      post.shareCount += 1;
+      post.sharedBy.push({ userId: senderId, sharedAt: new Date() });
+
+      await post.save();
+
+      // Handle text encryption if there is a message
+      let encryptedMessage = { encryptedData: "", iv: "" };
+      if (text) {
+          encryptedMessage = encrypt(text);
+      }
+
+      // Create a new message with the post reference
+      const newMessage = new Message({
+          conversationId,
+          sender: senderId,
+          text: text ? encryptedMessage.encryptedData : "",
+          type: "post",
+          iv: text ? encryptedMessage.iv : "",
+          postReference: postId,
+          seen: false,
+      });
+
+      await newMessage.save();
+
+      return res.status(200).json({
+          message: "Post shared successfully!",
+          postId: postId,
+          messageId: newMessage._id,
+      });
+  } catch (error) {
+      console.error("Error in sharepost controller:", error);
+      return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 
 export const getPost = async (req, res) => {
   try {

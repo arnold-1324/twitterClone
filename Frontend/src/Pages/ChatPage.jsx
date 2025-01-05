@@ -138,7 +138,9 @@ const ChatPage = () => {
     }
   };
 
- 
+ const log=conversations.map((con)=>{
+  console.log(con._id);
+ })
 
   return (
     <Box
