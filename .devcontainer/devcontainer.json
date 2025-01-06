@@ -1,0 +1,16 @@
+{
+  "name": "Local Gitpod Environment",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "settings": {
+    "terminal.integrated.defaultProfile.linux": "bash"
+  },
+  "extensions": [
+    "ms-python.python",
+    "dbaeumer.vscode-eslint"
+  ],
+  "postCreateCommand": "npm install",
+  "remoteUser": "vscode"
+}
+
