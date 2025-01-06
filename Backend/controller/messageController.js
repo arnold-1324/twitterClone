@@ -243,17 +243,25 @@ export const getMessages = async (req, res) => {
           );
       }
 
-      const decryptedMessages = messages.map(msg => ({
-          ...msg,
-          text: msg.iv ? decrypt({ iv: msg.iv, encryptedData: msg.text }) : msg.text,
-          iv: undefined,
-          replyTo: msg.replyTo ? {
-              ...msg.replyTo,
-              text: msg.replyTo.iv ? decrypt({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : msg.replyTo.text,
-              iv: undefined,
-          } : null,
-      }));
-
+      const decryptSafely = ({ iv, encryptedData }) => {
+        try {
+            return decrypt({ iv, encryptedData });  // Try to decrypt
+        } catch (error) {
+            return 'Bad message';  // Return default message on failure
+        }
+    };
+    
+    const decryptedMessages = messages.map(msg => ({
+        ...msg,
+        text: msg.iv ? decryptSafely({ iv: msg.iv, encryptedData: msg.text }) : msg.text,
+        iv: undefined,
+        replyTo: msg.replyTo ? {
+            ...msg.replyTo,
+            text: msg.replyTo.iv ? decryptSafely({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : msg.replyTo.text,
+            iv: undefined,
+        } : null,
+    }));
+    
       const recipientSocketId = getRecipientSocketId(otherUserId);
       if (recipientSocketId) {
           io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
