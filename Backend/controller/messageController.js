@@ -141,9 +141,7 @@ export const getMessages = async (req, res) => {
           return res.status(404).json({ error: "Conversation not found" });
       }
 
-      const messages = await Message.find({ 
-          conversationId: conversation._id 
-      })
+       const messages = await Message.find({ conversationId: conversation._id })
       .sort({ createdAt: 1 })
       .populate({ 
           path: 'sender', 
@@ -155,9 +153,14 @@ export const getMessages = async (req, res) => {
           populate: { path: 'sender', select: 'username profileImg' } 
       })
       .populate({
-        path:'postReference',
-        select:'postedBy images',
-        populate:{path:'postedBy',select:'username profileImg'}
+        path: 'postReference',
+        select: 'postedBy images',
+        populate: { path: 'postedBy', select: 'username profileImg' }
+      })
+      .populate({
+        path: 'reactions',
+        select: 'user type',
+        populate: { path: 'user', select: 'username profileImg' }
       })
       .lean();
 
