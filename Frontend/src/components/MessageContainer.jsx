@@ -9,6 +9,7 @@ import {
 	Skeleton,
 	SkeletonCircle,
 	IconButton, Menu, MenuButton, MenuList, MenuItem,
+   Tooltip,
   } from "@chakra-ui/react";
   import { motion } from "framer-motion";
   import MessageInput from "./MessageInput";
@@ -23,6 +24,7 @@ import {
   import { BiArrowBack } from "react-icons/bi"; 
   import formatMessageTime from "../Utils/Timeformate";
   import { BsThreeDotsVertical,BsCheck2All } from "react-icons/bs";
+  import Reaction from "./Reaction";
 
 
   const MotionFlex = motion(Flex);
@@ -39,10 +41,12 @@ import {
     const messageEndRef = useRef(null);
     const audioRef = useRef(null);
     const [Msg, setSelectedMsg] = useRecoilState(selectedMsg);
-
+   
     const clearSelectedConversation = () => {
       setSelectedConversation({});
     };
+
+
 
     const handelselectedMsg = (message) => {
       setSelectedMsg({  
@@ -51,6 +55,7 @@ import {
         media: message.media,
         mediaType:  message.mediaType });
     };
+
 
     const handleDelete=async(messageId)=>{
       const response = await fetch("api/messages/deleteforme", {
@@ -282,7 +287,6 @@ import {
                         </Flex>
                       </Box>
                     )}
-                    
 
                     {message.postReference && (
                       <Box
@@ -326,11 +330,14 @@ import {
                       </Box>
                     )}
 
+                    {/* Emoji Picker */}
+
                     {message.text && (
                       <Text color={isOwnMessage ? "gray.200" : "gray.900"}>
                         {message.text}
                       </Text>
                     )}
+
                     {message.img && (
                       <Image src={message.img} borderRadius="10px" />
                     )}
@@ -412,6 +419,8 @@ import {
                         </Flex>
                       </Flex>
                     )}
+                    {/* reaction */}
+                    
                     {message.seen && (
                       <Box
                         color={isOwnMessage ? "blue.400" : "gray.900"}
@@ -475,7 +484,7 @@ import {
                         </MenuList>
                       </Menu>
                     </Flex>
-
+                    <Reaction messageId={message._id} />
                     <Text
                       fontSize="xs"
                       align="right"

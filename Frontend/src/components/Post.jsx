@@ -87,6 +87,7 @@ const Post = ({ post, postedBy }) => {
   if (!user) return null;
 
   return (
+    
     <MotionFlex
       gap={3}
       mb={4}
@@ -127,9 +128,7 @@ const Post = ({ post, postedBy }) => {
         <Actions post={post} />
         
         {/* Make sure the share button doesn't trigger navigation */}
-        <div onClick={(e) => e.stopPropagation()}>
-          <SharePost postId={post._id} />
-        </div>
+       
   
         {user._id === currentUser?._id && (
           <DeleteIcon
@@ -140,6 +139,7 @@ const Post = ({ post, postedBy }) => {
         )}
       </Flex>
     </MotionFlex>
+    
   );
   
 };
