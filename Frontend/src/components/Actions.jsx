@@ -1,4 +1,3 @@
-
 import {
 	Box,
 	Button,
@@ -14,13 +13,20 @@ import {
 	ModalOverlay,
 	Text,
 	useDisclosure,
+	IconButton,
+	Spinner,
+	Stack,
+	Checkbox,
+	useColorModeValue,
+	Avatar,
+	Textarea,
 } from "@chakra-ui/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
 import postsAtom from "../atom/postsAtom";
-
+import { LuSend } from "react-icons/lu";
 
 const Actions = ({ post }) => {
 	const user = useRecoilValue(userAtom);
@@ -29,9 +35,34 @@ const Actions = ({ post }) => {
 	const [isLiking, setIsLiking] = useState(false);
 	const [isReplying, setIsReplying] = useState(false);
 	const [reply, setReply] = useState("");
+	const [showModal, setShowModal] = useState(false);
+	const [conversations, setConversations] = useState([]);
+	const [selectedUsers, setSelectedUsers] = useState([]);
+	const [text, setText] = useState("");
+	const [loadingConversations, setLoadingConversations] = useState(false);
 
 	const showToast = useShowToast();
 	const { isOpen, onOpen, onClose } = useDisclosure();
+
+	useEffect(() => {
+		const getConversations = async () => {
+			setLoadingConversations(true);
+			try {
+				const res = await fetch("/api/messages/getConvo/user");
+				const data = await res.json();
+				if (data.error) {
+					console.error("Error loading conversations:", data.error);
+				} else {
+					setConversations(data);
+				}
+			} catch (error) {
+				console.error("Unable to load conversations:", error);
+			} finally {
+				setLoadingConversations(false);
+			}
+		};
+		getConversations();
+	}, []);
 
 	const handleLikeAndUnlike = async () => {
 		if (!user) return showToast("Error", "You must be logged in to like a post", "error");
@@ -107,6 +138,55 @@ const Actions = ({ post }) => {
 		}
 	};
 
+	const handleUserSelect = (convoId) => {
+		setSelectedUsers((prev) =>
+			prev.includes(convoId)
+				? prev.filter((id) => id !== convoId)
+				: [...prev, convoId]
+		);
+	};
+
+	const handleShare = async () => {
+		if (selectedUsers.length === 0) {
+			alert("Please select at least one user.");
+			return;
+		}
+
+		try {
+			const postData = selectedUsers.map((convoId) => ({
+				postId: post._id,
+				senderId: user._id,
+				conversationId: convoId,
+				text,
+			}));
+
+			const sharePostPromises = postData.map(async ({ postId, senderId, conversationId, text }) => {
+				const res = await fetch("api/posts/sharepost", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ postId, senderId, conversationId, text }),
+				});
+
+				if (!res.ok) {
+					throw new Error(`Failed to share post with conversation ${conversationId}`);
+				}
+
+				return res.json();
+			});
+
+			await Promise.all(sharePostPromises);
+			alert("Post shared successfully!");
+			setSelectedUsers([]);
+			setText("");
+			setShowModal(false);
+		} catch (error) {
+			console.error("Error sharing post:", error);
+			alert("Failed to share post. Please try again.");
+		}
+	};
+
 	return (
 		<Flex flexDirection='column'>
 			<Flex gap={3} my={2} onClick={(e) => e.preventDefault()}>
@@ -148,6 +228,15 @@ const Actions = ({ post }) => {
 				</svg>
 
 				<RepostSVG />
+				<IconButton
+					onClick={() => setShowModal(true)}
+					aria-label="Send"
+					icon={<LuSend />}
+					variant="ghost"
+					fontSize="1.5rem"
+					cursor="pointer"
+					mt={"-8px"}
+				/>
 				
 			</Flex>
 
@@ -179,6 +268,101 @@ const Actions = ({ post }) => {
 					<ModalFooter>
 						<Button colorScheme='blue' size={"sm"} mr={3} isLoading={isReplying} onClick={handleReply}>
 							Reply
+						</Button>
+					</ModalFooter>
+				</ModalContent>
+			</Modal>
+
+			<Modal isOpen={showModal} onClose={() => setShowModal(false)}>
+				<ModalOverlay />
+				<ModalContent>
+					<ModalHeader>Select Users to Share</ModalHeader>
+					<ModalCloseButton />
+					<ModalBody>
+						{loadingConversations ? (
+							<Box textAlign="center" py={4}>
+								<Spinner size="lg" />
+								<Text mt={2}>Loading conversations...</Text>
+							</Box>
+						) : (
+							<Stack
+								spacing={3}
+								maxHeight="300px"
+								overflowY="auto"
+								direction="row"
+								wrap="wrap"
+							>
+								{conversations.map((convo) => {
+									const participants = convo.participants.filter(
+										(participant) =>
+											participant._id !== convo.lastMessage.sender
+									);
+
+									return participants.map((participant) => (
+										<Box
+											key={participant._id}
+											display="flex"
+											flexDirection="column"
+											alignItems="center"
+											p={3}
+											bg={useColorModeValue("white", "gray.700")}
+											borderRadius="md"
+											boxShadow="md"
+											cursor="pointer"
+											_hover={{ bg: useColorModeValue("gray.50", "gray.600") }}
+										>
+											<Box position="relative" display="inline-block">
+												<Avatar
+													src={participant.profileImg || "../../public/aot.png"}
+													name={participant.username}
+													size="lg"
+													mb={2}
+												/>
+												<Checkbox
+													isChecked={selectedUsers.includes(convo._id)}
+													onChange={() => handleUserSelect(convo._id)}
+													size="lg"
+													position="absolute"
+													bottom="0"
+													right="0"
+													borderRadius="full"
+													zIndex={1}
+												/>
+											</Box>
+											<Text fontWeight="medium">{participant.username}</Text>
+										</Box>
+									));
+								})}
+							</Stack>
+						)}
+					</ModalBody>
+
+					{selectedUsers.length > 0 && (
+						<Box px={6} py={4}>
+							<Textarea
+								value={text}
+								onChange={(e) => setText(e.target.value)}
+								placeholder="Add a message (optional)"
+								size="sm"
+								resize="none"
+								borderRadius="md"
+								border="1px solid"
+								borderColor="gray.300"
+								mb={4}
+							/>
+						</Box>
+					)}
+
+					<ModalFooter>
+						<Button
+							colorScheme="blue"
+							onClick={handleShare}
+							isDisabled={selectedUsers.length === 0}
+						>
+							Send
+						</Button>
+						<Button onClick={() => setShowModal(false)} ml={3}>
+							Cancel
 						</Button>
 					</ModalFooter>
 				</ModalContent>

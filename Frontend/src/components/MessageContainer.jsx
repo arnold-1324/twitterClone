@@ -9,6 +9,7 @@ import {
 	Skeleton,
 	SkeletonCircle,
 	IconButton, Menu, MenuButton, MenuList, MenuItem,
+   Tooltip,
   } from "@chakra-ui/react";
   import { motion } from "framer-motion";
   import MessageInput from "./MessageInput";
@@ -23,6 +24,7 @@ import {
   import { BiArrowBack } from "react-icons/bi"; 
   import formatMessageTime from "../Utils/Timeformate";
   import { BsThreeDotsVertical,BsCheck2All } from "react-icons/bs";
+  import Reaction from "./Reaction";
 
 
   const MotionFlex = motion(Flex);
@@ -39,10 +41,12 @@ import {
     const messageEndRef = useRef(null);
     const audioRef = useRef(null);
     const [Msg, setSelectedMsg] = useRecoilState(selectedMsg);
-
+   
     const clearSelectedConversation = () => {
       setSelectedConversation({});
     };
+
+
 
     const handelselectedMsg = (message) => {
       setSelectedMsg({  
@@ -51,6 +55,7 @@ import {
         media: message.media,
         mediaType:  message.mediaType });
     };
+
 
     const handleDelete=async(messageId)=>{
       const response = await fetch("api/messages/deleteforme", {
@@ -283,11 +288,56 @@ import {
                       </Box>
                     )}
 
+                    {message.postReference && (
+                      <Box
+                        position="relative"
+                        bg="gray.500"
+                        borderRadius="md"
+                        maxW="lg"
+                        w="full"
+                        mb={4}
+                        overflow="hidden" // Ensures the content stays within the div bounds
+                      >
+                        {/* Profile and Username over the image */}
+                        <Flex
+                          position="absolute"
+                          top={2}
+                          left={2}
+                          bg="rgba(0, 0, 0, 0.0)" // Semi-transparent background for better readability
+                          p={2}
+                          borderRadius="md"
+                          align="center"
+                          zIndex={2}
+                        >
+                          <Avatar
+                            size="sm"
+                            src={message.postReference?.postedBy?.profileImg}
+                            mr={2}
+                          />
+                          <Text fontWeight="bold" color="white">
+                            {message.postReference?.postedBy?.username}
+                          </Text>
+                        </Flex>
+
+                        {/* Post Image */}
+                        <Image
+                          src={message.postReference?.images}
+                          alt="Post Image"
+                          w="full"
+                          h="300px" // Adjust the height as needed
+                          objectFit="cover" // Ensures the image fills the div without distortion
+                        />
+                      </Box>
+                    )}
+
+                    {/* Emoji Picker */}
+
                     {message.text && (
                       <Text color={isOwnMessage ? "gray.200" : "gray.900"}>
                         {message.text}
                       </Text>
                     )}
+
                     {message.img && (
                       <Image src={message.img} borderRadius="10px" />
                     )}
@@ -369,10 +419,16 @@ import {
                         </Flex>
                       </Flex>
                     )}
+                    {/* reaction */}
+                    
                     {message.seen && (
-                    <Box color={isOwnMessage ? "blue.400" : "gray.900"} mr={1} alignSelf={"flex-end"}>
-                      <BsCheck2All size={16} />
-                    </Box>
+                      <Box
+                        color={isOwnMessage ? "blue.400" : "gray.900"}
+                        mr={1}
+                        alignSelf={"flex-end"}
+                      >
+                        <BsCheck2All size={16} />
+                      </Box>
                     )}
 
                     <Flex position="absolute" top="-25px" right="0">
@@ -404,27 +460,31 @@ import {
                                 text: message.text,
                                 media:
                                   message.img || message.video || message.audio,
-                                  mediaType: message.img ? "img" : message.video ? "video" : message.audio ? "audio" : null,
+                                mediaType: message.img
+                                  ? "img"
+                                  : message.video
+                                  ? "video"
+                                  : message.audio
+                                  ? "audio"
+                                  : null,
                                 sender: isOwnMessage
                                   ? "you"
                                   : message.sender.username,
-
                               };
-                            
+
                               handelselectedMsg(data);
                             }}
                           >
                             Reply
                           </MenuItem>
-                          
-                          <MenuItem onClick={() => 
-                            handleDelete(message._id)}>
+
+                          <MenuItem onClick={() => handleDelete(message._id)}>
                             Delete
                           </MenuItem>
                         </MenuList>
                       </Menu>
                     </Flex>
-
+                    <Reaction messageId={message._id} />
                     <Text
                       fontSize="xs"
                       align="right"

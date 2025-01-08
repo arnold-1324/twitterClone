@@ -16,9 +16,11 @@ import {
   Stack,
   Checkbox,
   useColorModeValue,
+  IconButton,
 } from "@chakra-ui/react";
 import { useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
+import { LuSend } from "react-icons/lu";
 
 const SharePost = ({ postId }) => {
   const [showModal, setShowModal] = useState(false);
@@ -100,15 +102,14 @@ const SharePost = ({ postId }) => {
 
   return (
     <>
-      {/* Share Icon */}
-      <Button
+      <IconButton
         onClick={() => setShowModal(true)}
+        aria-label="Send"
+        icon={<LuSend />}
         variant="ghost"
         fontSize="1.5rem"
         cursor="pointer"
-      >
-        🔗 Share
-      </Button>
+      />
 
       {/* Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)}>
@@ -133,7 +134,8 @@ const SharePost = ({ postId }) => {
                 {conversations.map((convo) => {
                   // Filter participants, exclude sender
                   const participants = convo.participants.filter(
-                    (participant) => participant._id !== convo.lastMessage.sender
+                    (participant) =>
+                      participant._id !== convo.lastMessage.sender
                   );
 
                   return participants.map((participant) => (
@@ -210,3 +212,41 @@ const SharePost = ({ postId }) => {
 };
 
 export default SharePost;
+
+
+
+const ShareSVG = () => {
+	return (
+		<svg
+			aria-label='Share'
+			color=''
+			fill='rgb(243, 245, 247)'
+			height='20'
+			role='img'
+			viewBox='0 0 24 24'
+			width='20'
+		>
+			<title>Share</title>
+			<line
+				fill='none'
+				stroke='currentColor'
+				strokeLinejoin='round'
+				strokeWidth='2'
+				x1='22'
+				x2='9.218'
+				y1='3'
+				y2='10.083'
+			></line>
+			<polygon
+				fill='none'
+				points='11.698 20.334 22 3.001 2 3.001 9.218 10.084 11.698 20.334'
+				stroke='currentColor'
+				strokeLinejoin='round'
+				strokeWidth='2'
+			></polygon>
+		</svg>
+	);
+};
+
+
+

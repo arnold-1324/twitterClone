@@ -4,7 +4,7 @@ import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getRecipientSocketId, io } from "../socket/socket.js";
-import {encrypt,decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
+import { encrypt, decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
 import { Mongoose } from "mongoose";
 
 
@@ -128,73 +128,6 @@ export const sendMessage = async (req, res) => {
 
 
 
-// export const getMessages = async (req, res) => {
-//   const { otherUserId } = req.params;
-//   const userId = req.user._id;
-
-//   try {
-      
-//       const conversation = await Conversation.findOne({ 
-//           participants: { $all: [userId, otherUserId] } 
-          
-//       });
-
-//       if (!conversation) {
-//           return res.status(404).json({ error: "Conversation not found" });
-//       }
-
-     
-    
-      
-//       const messages = await Message.find({ conversationId: conversation._id })
-//           .sort({ createdAt: 1 })
-//           .populate({
-//               path: 'sender',
-//               select: 'username profileImg'  
-//           })
-//           .populate({
-//               path: "replyTo",
-//               select: "text iv img video audio sender",  
-//               populate: {
-//                   path: "sender",
-//                   select: "username profileImg",  
-//               },
-//           });
-
-      
-//       const decryptedMessages = messages.map(msg => {
-//           const decryptedText = decrypt({ iv: msg.iv, encryptedData: msg.text });
-//           const decryptedReplyTo = msg.replyTo ? decrypt({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : null;
-          
-
-//           return {
-//               ...msg._doc,  
-//               text: decryptedText,  
-//               iv: undefined,  
-//               replyTo: msg.replyTo ? {
-//                   ...msg.replyTo._doc,
-//                   text: decryptedReplyTo,  
-//                   iv: undefined, 
-//               } : null,
-//           };
-//       });
-
-     
-//       const recipientSocketId = getRecipientSocketId(otherUserId);
-//       if (recipientSocketId) {
-//           io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
-//       }
-
-      
-//       res.status(200).json(decryptedMessages);
-//   } catch (error) {
-     
-//       console.error("Error in getMessages:", error.message);
-
-//       res.status(500).json({ error: error.message });
-//   }
-// };
-
 export const getMessages = async (req, res) => {
   const { otherUserId } = req.params;
   const userId = req.user._id;
@@ -275,6 +208,52 @@ export const getMessages = async (req, res) => {
 };
 
 
+
+export const reactTomsg = async (req, res) => {
+  try {
+      const { messageId, emoji } = req.body;
+      const userId = req.user._id;
+
+      
+      if (!messageId || !emoji) {
+          return res.status(400).json({ error: "Message ID and emoji are required" });
+      }
+
+      
+      const message = await Message.findById(messageId);
+      if (!message) {
+          return res.status(404).json({ error: "Message not found" });
+      }
+
+      // Find if the user already reacted
+      const existingReactionIndex = message.reactions.findIndex(
+          (reaction) => reaction.user.toString() === userId.toString()
+      );
+
+      if (existingReactionIndex !== -1) {
+          // Update existing reaction
+          message.reactions[existingReactionIndex].type = emoji;
+      } else {
+          // Add new reaction
+          message.reactions.push({ user: userId, type: emoji });
+      }
+
+      // Save the message
+      await message.save();
+
+      // Populate reactions with user details
+      const populatedMessage = await Message.findById(messageId)
+          .populate("reactions.user", "username profileImg");
+
+      // Respond with updated message
+      res.status(200).json(populatedMessage);
+  } catch (error) {
+      console.error("Error in reactToMsg:", error.message);
+      res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
 export const getConversation = async (req, res) => {
   try {
     const currentUserId = req.user._id.toString();
@@ -329,15 +308,6 @@ export const getConversation = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch conversations" });
   }
 };
-
-
-
-
-
-
-
-
-
 
 export const editMessage = async (req, res) => {
     const { messageId, newText } = req.body;
@@ -532,24 +502,3 @@ export const deleteMessage = async (req, res) => {
 };
 
 
-
-export const reactTomsg = async (req,res)=>{
-    try{
-        const {messageId,reactions} = req.body;
-        const userId = req.user._id;
-
-        const message = await Message.findByIdAndUpdate(
-            { _id: messageId },
-            { $push: { reactions: { user: userId, reaction: reactions } } },
-            { new: true }
-        ).populate('sender', 'username profileImg');
-
-        if (!message) {
-            return res.status(404).json({ error: "Message not found" });
-        }
-        res.status(200).json(message);
-    } catch(error){
-        res.status(500).json({ error: error.message });
-        console.log("Error in reactToMsg:", error.message);
-    }
-}
