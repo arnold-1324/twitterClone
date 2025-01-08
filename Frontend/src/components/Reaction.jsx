@@ -15,14 +15,14 @@ const Reaction = ({ messageId }) => {
   const bgColor = useColorModeValue("white", "gray.800");
   const boxShadow = useColorModeValue("lg", "md");
 
-  const handleEmojiClick = async (id, emoji) => {
+  const handleEmojiClick = async (messageId, emoji) => {
     try {
       const response = await fetch("/api/messages/reaction", {
         method: "PUT",
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ messageId: id, emoji }),
+        body: JSON.stringify({ messageId, emoji  }),
       });
 
       if (!response.ok) {
