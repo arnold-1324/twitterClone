@@ -7,7 +7,8 @@ import {
     getConversation,
     editMessage,
     replyToMessage,
-    deleteMessage
+    deleteMessage,
+    reactTomsg
 } from '../controller/messageController.js'; 
 
 const router = express.Router();
@@ -22,6 +23,8 @@ router.get('/getConvo/user', protectRoute, getConversation);  // working but nee
 router.put('/edit', protectRoute, editMessage);    //msg encryption & decryption works
 
 router.post('/reply', protectRoute, upload.single('media'), replyToMessage);   //msg encryption & decrytion works
+
+router.put('/reaction', protectRoute,reactTomsg); 
 
 //router.put('/deleteforme',protectRoute, deleteFormeMessage); 
 
