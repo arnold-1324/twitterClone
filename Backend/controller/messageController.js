@@ -222,7 +222,8 @@ export const reactTomsg = async (req, res) => {
       
       const message = await Message.findById(messageId);
       if (!message) {
-          return res.status(404).json({ error: "Message not found" });
+          return res.status(404).json({ error: "Message not found", 
+          params:  req.body});
       }
 
       // Find if the user already reacted
