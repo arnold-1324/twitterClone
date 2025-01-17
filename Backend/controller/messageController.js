@@ -141,9 +141,7 @@ export const getMessages = async (req, res) => {
           return res.status(404).json({ error: "Conversation not found" });
       }
 
-      const messages = await Message.find({ 
-          conversationId: conversation._id 
-      })
+      const messages = await Message.find({ conversationId: conversation._id })
       .sort({ createdAt: 1 })
       .populate({ 
           path: 'sender', 
@@ -155,11 +153,17 @@ export const getMessages = async (req, res) => {
           populate: { path: 'sender', select: 'username profileImg' } 
       })
       .populate({
-        path:'postReference',
-        select:'postedBy images',
-        populate:{path:'postedBy',select:'username profileImg'}
+        path: 'postReference',
+        select: 'postedBy images',
+        populate: { path: 'postedBy', select: 'username profileImg' }
+      })
+      .populate({
+        path: 'reactions',
+        select: 'user type',
+        populate: { path: 'user', select: 'username profileImg' }
       })
       .lean();
+    
 
       const unseenMessages = messages.filter(msg => !msg.seen && msg.sender._id.toString() !== userId);
       if (unseenMessages.length > 0) {
@@ -244,7 +248,11 @@ export const reactTomsg = async (req, res) => {
 
       // Populate reactions with user details
       const populatedMessage = await Message.findById(messageId)
-          .populate("reactions.user", "username profileImg");
+          .populate({
+            path: 'reactions',
+            select: 'user type',
+            populate: { path: 'user', select: 'username profileImg' }
+          });
 
       // Respond with updated message
       res.status(200).json(populatedMessage);
@@ -341,7 +349,7 @@ export const editMessage = async (req, res) => {
              io.to(socketId).emit("messageEdited", message);
          });
 
-       // const decryptMessage = decrypt({ iv: message.iv, encryptedData: message.text });
+       
 
         const decryptMessage = (() => {
           try {

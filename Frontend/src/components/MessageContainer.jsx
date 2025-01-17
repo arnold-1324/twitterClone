@@ -8,8 +8,7 @@ import {
 	useColorModeValue,
 	Skeleton,
 	SkeletonCircle,
-	IconButton, Menu, MenuButton, MenuList, MenuItem,
-   Tooltip,
+	IconButton, Menu, MenuButton, MenuList, MenuItem,Tooltip,
   } from "@chakra-ui/react";
   import { motion } from "framer-motion";
   import MessageInput from "./MessageInput";
@@ -25,7 +24,8 @@ import {
   import formatMessageTime from "../Utils/Timeformate";
   import { BsThreeDotsVertical,BsCheck2All } from "react-icons/bs";
   import Reaction from "./Reaction";
-
+  import { FaAnglesDown } from "react-icons/fa6";
+  import LazyImage from "./LazyImage";
 
   const MotionFlex = motion(Flex);
   
@@ -54,8 +54,27 @@ import {
         text: message.text,
         media: message.media,
         mediaType:  message.mediaType });
+        
     };
 
+
+    const scrollToBottom = () => {
+      messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+
+    const updateMessageReactions = (messageId, updatedReactions) => {
+      debugger;
+      console.log("updatedReactions",updatedReactions);
+      setMessages((prevMessages) =>
+        prevMessages.map((message) =>
+          message._id === messageId
+            ? { ...message, reactions: updatedReactions }
+            : message
+        )
+      );
+      console.log(setMessages);
+    };
 
     const handleDelete=async(messageId)=>{
       const response = await fetch("api/messages/deleteforme", {
@@ -420,7 +439,7 @@ import {
                       </Flex>
                     )}
                     {/* reaction */}
-                    
+
                     {message.seen && (
                       <Box
                         color={isOwnMessage ? "blue.400" : "gray.900"}
@@ -470,6 +489,7 @@ import {
                                 sender: isOwnMessage
                                   ? "you"
                                   : message.sender.username,
+                                reaction: message.reactions,
                               };
 
                               handelselectedMsg(data);
@@ -484,7 +504,13 @@ import {
                         </MenuList>
                       </Menu>
                     </Flex>
-                    <Reaction messageId={message._id} />
+
+                   
+                      <Reaction messageId={message._id} initialReactions={message.reactions} onUpdateReactions={updateMessageReactions}  />
+
+                   
+                    
+
                     <Text
                       fontSize="xs"
                       align="right"
@@ -496,9 +522,21 @@ import {
                   </MotionFlex>
                 );
               })}
+               <div ref={messageEndRef} />   
+        <IconButton
+          onClick={scrollToBottom}
+          aria-label="Scroll to bottom"
+          position="absolute"
+          alignSelf={"flex-end"}
+          top={"430px"}
+          rounded={"full"}
+          bg={useColorModeValue("gray.800", "gray.700")}
+        >
+          <FaAnglesDown size={24} />
+        </IconButton>
         </Flex>
 
-        <div ref={messageEndRef} />
+       
         <MessageInput setMessages={setMessages} />
       </Flex>
     );
