@@ -247,7 +247,11 @@ export const reactTomsg = async (req, res) => {
 
       // Populate reactions with user details
       const populatedMessage = await Message.findById(messageId)
-          .populate("reactions.user", "username profileImg");
+          .populate({
+            path: 'reactions',
+            select: 'user type',
+            populate: { path: 'user', select: 'username profileImg' }
+          });
 
       // Respond with updated message
       res.status(200).json(populatedMessage);
