@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.lazy-image-wrapper {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .lazy-image {
+    width: 100%;
+    height: auto;
+    transition: filter 0.3s ease-out, opacity 0.3s ease-out;
+    filter: blur(20px);
+    opacity: 0.5;
+  }
+  
+  .lazy-image.loaded {
+    filter: blur(0);
+    opacity: 1;
+  }
+  
