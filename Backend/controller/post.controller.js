@@ -183,7 +183,7 @@ export const deletePostsUsersCollection = async (req, res) => {
 };
 
 export const sharepost = async (req, res) => {
-  const { postId, conversationId, text = "" } = req.body;
+  const { postId, conversationId, text } = req.body;
   const senderId=req.user._id;
 
   if (!postId || !senderId || !conversationId) {

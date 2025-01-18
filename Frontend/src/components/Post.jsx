@@ -87,6 +87,8 @@ const Post = ({ post, postedBy }) => {
   if (!user) return null;
 
   return (
+    <Link to={`/${user.username}/post/${post._id}`}>
+
     
     <MotionFlex
       gap={3}
@@ -130,6 +132,7 @@ const Post = ({ post, postedBy }) => {
           className="custom-lazy-image"
         />}
         </Box>
+        
         <Actions post={post} />
         
         {/* Make sure the share button doesn't trigger navigation */}
@@ -144,6 +147,7 @@ const Post = ({ post, postedBy }) => {
         )}
       </Flex>
     </MotionFlex>
+    </Link>
     
   );
   
