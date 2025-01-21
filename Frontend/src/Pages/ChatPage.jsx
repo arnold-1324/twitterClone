@@ -33,7 +33,7 @@ const ChatPage = () => {
   const currentUser = useRecoilValue(userAtom);
   const showToast = useShowToast();
   const { socket, onlineUsers } = useSocket();
-
+     
   const isMobileView = useBreakpointValue({ base: true, md: false }); // Mobile view condition
 
   useEffect(() => {
@@ -138,111 +138,125 @@ const ChatPage = () => {
     }
   };
 
- const log=conversations.map((con)=>{
-  console.log(con._id);
- })
+  // Check if the user is online and send the status to the Conversation component
+  const log = conversations.map((con) => {
+  
+    console.log(con._id);
+   // const isOnline = onlineUsers.includes(con.participants[0]?._id);
+   
+    return (
+      <Conversation
+        key={con._id}
+        conversation={con}
+        sx={{
+          transition: "box-shadow 0.2s ease-in-out",
+          _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },
+          ...(selectedConversation._id === con._id && {
+            boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
+          }),
+        }}
+      />
+    );
+  });
 
   return (
     <Box
-    position="absolute"
-    left="50%"
-    w={{ base: "100%", md: "80%", lg: "750px" }}
-    p={4}
-    mt="49px"
-    transform="translateX(-50%)"
-  >
-    <Flex
-      gap={4}
-      flexDirection={isMobileView && selectedConversation._id ? "column" : "row"}
-      mx="auto"
-      my="10px"
-      maxW={{ sm: "400px", md: "full" }}
+      position="absolute"
+      left="50%"
+      w={{ base: "100%", md: "80%", lg: "750px" }}
+      p={4}
+      mt="49px"
+      transform="translateX(-50%)"
     >
-      {(!isMobileView || !selectedConversation._id) && (
-        <Flex flex={30} flexDirection="column" gap={4} maxH={"600px"}>
-          <form onSubmit={handleConversationSearch}>
-            <Flex gap={2}>
-              <Input
-                placeholder="Search for a user"
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-              />
-              <Button
-                type="submit"
-                isLoading={searchingUser}
-                size="sm"
-                aria-label="Search for user"
-              >
-                <SearchIcon />
-              </Button>
-            </Flex>
-          </form>
-  
-          <Box
-            flex="1"
-            maxH={{ base: "400px", md: "500px" }} 
-            overflowY="auto" 
-            sx={{
-              "&::-webkit-scrollbar": { display: "none" }, 
-              "-ms-overflow-style": "none", 
-              "scrollbar-width": "none", 
-            }}
-          >
-            {loadingConversations ? (
-              [0, 1, 2, 3].map((_, i) => (
-                <Flex key={i} gap={4} alignItems="center">
-                  <SkeletonCircle size="10" />
-                  <Flex flexDirection="column" gap={2} w="full">
-                    <Skeleton h="10px" w="80px" />
-                    <Skeleton h="8px" w="90%" />
-                  </Flex>
-                </Flex>
-              ))
-            ) : conversations.length ? (
-              conversations.map((conversation) => (
-                <Conversation
-                  key={conversation._id}
-                  isOnline={onlineUsers.includes(conversation.participants[0]?._id)}
-                  conversation={conversation}
-                  sx={{
-                    transition: "box-shadow 0.2s ease-in-out",
-                    _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },
-                    ...(selectedConversation._id === conversation._id && {
-                      boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
-                    }),
-                  }}
+      <Flex
+        gap={4}
+        flexDirection={isMobileView && selectedConversation._id ? "column" : "row"}
+        mx="auto"
+        my="10px"
+        maxW={{ sm: "400px", md: "full" }}
+      >
+        {(!isMobileView || !selectedConversation._id) && (
+          <Flex flex={30} flexDirection="column" gap={4} maxH={"600px"}>
+            <form onSubmit={handleConversationSearch}>
+              <Flex gap={2}>
+                <Input
+                  placeholder="Search for a user"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
                 />
-              ))
-            ) : (
-              <Text>No conversations found.</Text>
-            )}
-          </Box>
-        </Flex>
-      )}
-  
-      {selectedConversation._id ? (
-        <Flex flex={70} flexDirection="column" gap={2}>
-          
-          <MessageContainer isMobileView={isMobileView} setSelectedConversation={setSelectedConversation} />
-        </Flex>
-      ) : (
-        !isMobileView && (
-          <Flex
-            flex={70}
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            h="400px"
-            borderRadius="md"
-          >
-            <GiConversation size={100} />
-            <Text>Select a conversation to start messaging</Text>
+                <Button
+                  type="submit"
+                  isLoading={searchingUser}
+                  size="sm"
+                  aria-label="Search for user"
+                >
+                  <SearchIcon />
+                </Button>
+              </Flex>
+            </form>
+
+            <Box
+              flex="1"
+              maxH={{ base: "400px", md: "500px" }}
+              overflowY="auto"
+              sx={{
+                "&::-webkit-scrollbar": { display: "none" },
+                "-ms-overflow-style": "none",
+                "scrollbar-width": "none",
+              }}
+            >
+              {loadingConversations ? (
+                [0, 1, 2, 3].map((_, i) => (
+                  <Flex key={i} gap={4} alignItems="center">
+                    <SkeletonCircle size="10" />
+                    <Flex flexDirection="column" gap={2} w="full">
+                      <Skeleton h="10px" w="80px" />
+                      <Skeleton h="8px" w="90%" />
+                    </Flex>
+                  </Flex>
+                ))
+              ) : conversations.length ? (
+                conversations.map((conversation) => (
+                  <Conversation
+                    key={conversation._id}
+                    conversation={conversation}
+                    sx={{
+                      transition: "box-shadow 0.2s ease-in-out",
+                      _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },
+                      ...(selectedConversation._id === conversation._id && {
+                        boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
+                      }),
+                    }}
+                  />
+                ))
+              ) : (
+                <Text>No conversations found.</Text>
+              )}
+            </Box>
           </Flex>
-        )
-      )}
-    </Flex>
-  </Box>
-  
+        )}
+
+        {selectedConversation._id ? (
+          <Flex flex={70} flexDirection="column" gap={2}>
+            <MessageContainer isMobileView={isMobileView} setSelectedConversation={setSelectedConversation} />
+          </Flex>
+        ) : (
+          !isMobileView && (
+            <Flex
+              flex={70}
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              h="400px"
+              borderRadius="md"
+            >
+              <GiConversation size={100} />
+              <Text>Select a conversation to start messaging</Text>
+            </Flex>
+          )
+        )}
+      </Flex>
+    </Box>
   );
 };
 

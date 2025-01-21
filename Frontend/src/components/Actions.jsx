@@ -64,48 +64,69 @@ const Actions = ({ post }) => {
 		getConversations();
 	}, []);
 
-	const handleLikeAndUnlike = async () => {
+	useEffect(() => {
+		
+		if (user && post.likes) {
+		  setLiked(post.likes.some((like) => like._id === user._id));
+		}
+	  }, [user, post.likes]);
+	  
+	  const handleLikeAndUnlike = async () => {
 		if (!user) return showToast("Error", "You must be logged in to like a post", "error");
 		if (isLiking) return;
+	  
 		setIsLiking(true);
-		try {
-			const res = await fetch("/api/posts/like/" + post._id, {
-				method: "PUT",
-				headers: {
-					"Content-Type": "application/json",
+	  
+		const updatedPost = {
+		  ...post,
+		  likes: liked
+			? post.likes.filter((like) => like._id !== user._id) 
+			: [
+				...post.likes,
+				{
+				  _id: user._id,        
+				  username: user.username, 
+				  profileImg: user.profileImg, 
 				},
-			});
-			const data = await res.json();
-			if (data.error) return showToast("Error", data.error, "error");
-
-			if (!liked) {
-				
-				const updatedPosts = posts.map((p) => {
-					if (p._id === post._id) {
-						return { ...p, likes: [...p.likes, user._id] };
-					}
-					return p;
-				});
-				setPosts(updatedPosts);
-			} else {
-				
-				const updatedPosts = posts.map((p) => {
-					if (p._id === post._id) {
-						return { ...p, likes: p.likes.filter((id) => id !== user._id) };
-					}
-					return p;
-				});
-				setPosts(updatedPosts);
-			}
-
-			setLiked(!liked);
+			  ],
+		};
+	  
+		
+		setPosts((prevPosts) =>
+		  prevPosts.map((p) => (p._id === post._id ? updatedPost : p))
+		);
+	  
+		
+		setLiked((prevLiked) => !prevLiked);
+	  
+		try {
+		  const res = await fetch("api/posts/like/" + post._id, {
+			method: "PUT",
+			headers: {
+			  "Content-Type": "application/json",
+			},
+		  });
+	  
+		  const data = await res.json();
+		  if (data.error) {
+			showToast("Error", data.error, "error");
+			
+			setPosts((prevPosts) =>
+			  prevPosts.map((p) => (p._id === post._id ? post : p))
+			);
+		  }
 		} catch (error) {
-			showToast("Error", error.message, "error");
+		  showToast("Error", error.message, "error");
+		 
+		  setPosts((prevPosts) =>
+			prevPosts.map((p) => (p._id === post._id ? post : p))
+		  );
 		} finally {
-			setIsLiking(false);
+		  setIsLiking(false);
 		}
-	};
-
+	  };
+	  
+	  
 	const handleReply = async () => {
 		if (!user) return showToast("Error", "You must be logged in to reply to a post", "error");
 		if (isReplying) return;
@@ -191,19 +212,19 @@ const Actions = ({ post }) => {
 		<Flex flexDirection='column' marginLeft={"-24px"} mt={2}>
 			<Flex gap={3} my={1}  onClick={(e) => e.preventDefault()}>
 				<svg
-					aria-label='Like'
+					aria-label="Like"
 					color={liked ? "rgb(237, 73, 86)" : ""}
 					fill={liked ? "rgb(237, 73, 86)" : "transparent"}
-					height='19'
-					role='img'
-					viewBox='0 0 24 22'
-					width='20'
+					height="19"
+					role="img"
+					viewBox="0 0 24 22"
+					width="20"
 					onClick={handleLikeAndUnlike}
 				>
 					<path
-						d='M1 7.66c0 4.575 3.899 9.086 9.987 12.934.338.203.74.406 1.013.406.283 0 .686-.203 1.013-.406C19.1 16.746 23 12.234 23 7.66 23 3.736 20.245 1 16.672 1 14.603 1 12.98 1.94 12 3.352 11.042 1.952 9.408 1 7.328 1 3.766 1 1 3.736 1 7.66Z'
-						stroke='currentColor'
-						strokeWidth='2'
+						d="M1 7.66c0 4.575 3.899 9.086 9.987 12.934.338.203.74.406 1.013.406.283 0 .686-.203 1.013-.406C19.1 16.746 23 12.234 23 7.66 23 3.736 20.245 1 16.672 1 14.603 1 12.98 1.94 12 3.352 11.042 1.952 9.408 1 7.328 1 3.766 1 1 3.736 1 7.66Z"
+						stroke="currentColor"
+						strokeWidth="2"
 					></path>
 				</svg>
 
@@ -242,11 +263,14 @@ const Actions = ({ post }) => {
 
 			<Flex gap={2} alignItems={"center"}>
 				<Text color={"gray.light"} fontSize='sm'>
-					{post.replies.length} replies
+					{post.likes.length} likes
 				</Text>
 				<Box w={0.5} h={0.5} borderRadius={"full"} bg={"gray.light"}></Box>
 				<Text color={"gray.light"} fontSize='sm'>
-					{post.likes.length} likes
+					{post.replies.length} replies
+				</Text>
+				<Text color={"gray.light"} fontSize='sm'>
+					{post.shareCount} shares
 				</Text>
 			</Flex>
 
