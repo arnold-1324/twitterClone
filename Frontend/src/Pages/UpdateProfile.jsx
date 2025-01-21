@@ -1,5 +1,6 @@
 import { Button, Flex, FormControl, FormLabel, Heading, Input, Stack, useColorModeValue, Avatar, Center } from "@chakra-ui/react";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect,useNavi } from "react";
+import { useNavigate } from 'react-router-dom';
 import { useRecoilState } from "recoil";
 import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
@@ -18,6 +19,7 @@ export default function UpdateProfilePage() {
     profileImg: "",
   });
 
+  const navigate= useNavigate();
   const [mediaUrl, setMediaUrl] = useState("");
   const fileRef = useRef(null);
   const [updating, setUpdating] = useState(false);
@@ -49,6 +51,11 @@ export default function UpdateProfilePage() {
       reader.readAsDataURL(file);
     }
   };
+
+const handlecancle=()=>{
+  navigate(`/${user.username}`);
+}
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -145,6 +152,7 @@ export default function UpdateProfilePage() {
                 _hover={{
                   bg: "red.500",
                 }}
+               onClick={handlecancle} 
               >
                 Cancel
               </Button>

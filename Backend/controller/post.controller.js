@@ -184,59 +184,70 @@ export const deletePostsUsersCollection = async (req, res) => {
 
 export const sharepost = async (req, res) => {
   const { postId, conversationId, text } = req.body;
-  const senderId=req.user._id;
+  const senderId = req.user._id;
 
   if (!postId || !senderId || !conversationId) {
-      return res.status(400).json({ error: "Missing required fields" });
+    return res.status(400).json({ error: "Missing required fields" });
   }
 
   try {
-      const post = await Post.findById(postId);
-      if (!post) {
-          return res.status(404).json({ error: "Post not found" });
-      }
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
 
-      // Ensure sharedBy is initialized as an array if it is undefined
-      if (!Array.isArray(post.sharedBy)) {
-          post.sharedBy = []; // Initialize it if it's not an array
-      }
+    // Ensure sharedBy is initialized as an array if not already
+    if (!Array.isArray(post.sharedBy)) {
+      post.sharedBy = [];
+    }
 
-      // Increment the shareCount and add to the sharedBy array
-      post.shareCount += 1;
-      post.sharedBy.push({ userId: senderId, sharedAt: new Date() });
+    // Increment shareCount and add the sender to sharedBy array
+    post.shareCount += 1;
+    post.sharedBy.push({ userId: senderId, sharedAt: new Date() });
 
-      await post.save();
+    // Mark the fields as modified to ensure they get saved correctly
+    post.markModified('shareCount');
+    post.markModified('sharedBy');
 
-      // Handle text encryption if there is a message
-      let encryptedMessage = { encryptedData: "", iv: "" };
-      if (text) {
-          encryptedMessage = encrypt(text);
-      }
+    // Save the post after updates
+    await post.save();
 
-      // Create a new message with the post reference
-      const newMessage = new Message({
-          conversationId,
-          sender: senderId,
-          text: text ? encryptedMessage.encryptedData : "",
-          type: "post",
-          iv: text ? encryptedMessage.iv : "",
-          postReference: postId,
-          seen: false,
-      });
+    // Handle text encryption only if text is provided
+    let encryptedMessage = { encryptedData: "", iv: "" };
+    if (text) {
+      encryptedMessage = encrypt(text);
+    }
 
-      await newMessage.save();
+    // Create the new message, text is optional
+    const newMessage = new Message({
+      conversationId,
+      sender: senderId,
+      text: text ? encryptedMessage.encryptedData : "",  // If no text, leave it empty
+      type: "post",
+      iv: text ? encryptedMessage.iv : "",  // Only add iv if text exists
+      postReference: postId,
+      seen: false,
+    });
 
-      return res.status(200).json({
-          message: "Post shared successfully!",
-	  post:post,
-          postId: postId,
-          messageId: newMessage._id,
-      });
+    await newMessage.save();
+
+    // Fetch the updated post to send back in the response
+    const updatedPost = await Post.findById(postId);
+
+    return res.status(200).json({
+      message: "Post shared successfully!",
+      post: updatedPost,
+      postsharedBy: updatedPost.sharedBy,
+      count: updatedPost.shareCount,
+      postId: postId,
+      messageId: newMessage._id,
+    });
   } catch (error) {
-      console.error("Error in sharepost controller:", error);
-      return res.status(500).json({ error: "Internal server error" });
+    console.error("Error in sharepost controller:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 
 export const getPost = async (req, res) => {
@@ -285,7 +296,11 @@ export const getUserPosts = async (req, res) => {
 			return res.status(404).json({ error: "User not found" });
 		}
 
-		const posts = await Post.find({ postedBy: user._id }).sort({ createdAt: -1 });
+    const posts = await Post.find({ postedBy: user._id }).sort({ createdAt: -1 })
+      .populate({
+        path: "likes",
+        select: "username profileImg",
+      });;
 
 		res.status(200).json(posts);
 	} catch (error) {
