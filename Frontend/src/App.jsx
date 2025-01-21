@@ -1,22 +1,22 @@
-import { Container,Box } from "@chakra-ui/react"
-import { Routes, Route, useLocation } from 'react-router-dom';
-import Userpage from "./Pages/Userpage";
-import PostPage from "./Pages/PostPage";
+import React, { Suspense, useEffect } from "react";
+import { Container, Box } from "@chakra-ui/react";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import Header from "./components/Header";
-import AuthPage from "./Pages/AuthPage";
-import Home from "./Pages/Home";
-import { Navigate } from "react-router-dom";
-import { useRecoilValue } from "recoil";
+import { useRecoilValue, useSetRecoilState } from "recoil";
 import userAtom from "./atom/userAtom";
-import ChatPage from "./Pages/ChatPage";
-import UpdateProfile from "./Pages/UpdateProfile";
-import ResetPasswordForm from "./components/ForgotpassCard";
-import CreatePost from "./components/CreatePost";
-import NotificationPage from "./Pages/NotificationPage";
-import { useSetRecoilState } from 'recoil';
 import NotifyAtom from "./atom/notifyAtom";
 import useShowToast from "./hooks/useShowToast";
-import { useEffect } from "react";
+
+// Lazy-loaded components
+const Userpage = React.lazy(() => import("./Pages/Userpage"));
+const PostPage = React.lazy(() => import("./Pages/PostPage"));
+const AuthPage = React.lazy(() => import("./Pages/AuthPage"));
+const Home = React.lazy(() => import("./Pages/Home"));
+const ChatPage = React.lazy(() => import("./Pages/ChatPage"));
+const UpdateProfile = React.lazy(() => import("./Pages/UpdateProfile"));
+const ResetPasswordForm = React.lazy(() => import("./components/ForgotpassCard"));
+const CreatePost = React.lazy(() => import("./components/CreatePost"));
+const NotificationPage = React.lazy(() => import("./Pages/NotificationPage"));
 
 function App() {
   const { pathname } = useLocation();
@@ -42,9 +42,6 @@ function App() {
     fetchNotifications();
   }, [setNotify, showToast]);
 
-  
-
-
   return (
     <Box position={"relative"} w="full" minHeight="100vh">
       <Container
@@ -55,20 +52,23 @@ function App() {
         flexDirection="column"
       >
         <Header />
-        
-        {/* Position CreatePost button outside Routes to display on all pages */}
-        {user && <CreatePost />}
-        
-        <Routes>
-          <Route path="/" element={user ? <Home /> : <Navigate to="/auth" />} />
-          <Route path="/auth" element={!user ? <AuthPage /> : <Navigate to="/" />} />
-          <Route path="/auth/reset-password/:token" element={<ResetPasswordForm />} />
-          <Route path="/update" element={user ? <UpdateProfile /> : <Navigate to="/auth" />} />
-          <Route path="/:username" element={user ? <Userpage /> : <Navigate to="/auth" />} />
-          <Route path="/chat" element={user ? <ChatPage /> : <Navigate to="/auth" />} />
-          <Route path="/notifications" element={user ? <NotificationPage /> : <Navigate to="/auth" />} />
-          <Route path="/:username/post/:pid" element={<PostPage />} />
-        </Routes>
+        {user && (
+          <Suspense fallback={<div>Loading CreatePost...</div>}>
+            <CreatePost />
+          </Suspense>
+        )}
+        <Suspense fallback={<div>Loading...</div>}>
+          <Routes>
+            <Route path="/" element={user ? <Home /> : <Navigate to="/auth" />} />
+            <Route path="/auth" element={!user ? <AuthPage /> : <Navigate to="/" />} />
+            <Route path="/auth/reset-password/:token" element={<ResetPasswordForm />} />
+            <Route path="/update" element={user ? <UpdateProfile /> : <Navigate to="/auth" />} />
+            <Route path="/:username" element={user ? <Userpage /> : <Navigate to="/auth" />} />
+            <Route path="/chat" element={user ? <ChatPage /> : <Navigate to="/auth" />} />
+            <Route path="/notifications" element={user ? <NotificationPage /> : <Navigate to="/auth" />} />
+            <Route path="/:username/post/:pid" element={<PostPage />} />
+          </Routes>
+        </Suspense>
       </Container>
     </Box>
   );

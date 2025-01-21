@@ -11,7 +11,7 @@ import { useRecoilState, useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import postsAtom from "../atom/postsAtom";
 import { motion } from "framer-motion";
-import SharePost from "./SharePost";
+import LazyImage from "./LazyImage";
 
 const MotionFlex = motion(Flex); // Wrapping Chakra's Flex with motion for animations
 
@@ -87,6 +87,8 @@ const Post = ({ post, postedBy }) => {
   if (!user) return null;
 
   return (
+    <Link to={`/${user.username}/post/${post._id}`}>
+
     
     <MotionFlex
       gap={3}
@@ -123,8 +125,14 @@ const Post = ({ post, postedBy }) => {
         </Flex>
         <Box>
           <Text mb={2}>{post.caption}</Text>
-          {post.images && <Image src={post.images} alt={post.caption} borderRadius="md" />}
+          {post.images && 
+          <LazyImage
+          src={post.images} alt={post.caption}
+          errorPlaceholder="https://via.placeholder.com/150?text=Error"
+          className="custom-lazy-image"
+        />}
         </Box>
+        
         <Actions post={post} />
         
         {/* Make sure the share button doesn't trigger navigation */}
@@ -139,6 +147,7 @@ const Post = ({ post, postedBy }) => {
         )}
       </Flex>
     </MotionFlex>
+    </Link>
     
   );
   

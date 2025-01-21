@@ -89,9 +89,9 @@ export const getUserProfile = async (req, res) => {
       let user;
 
       if (mongoose.Types.ObjectId.isValid(query)) {
-          user = await User.findOne({ _id: query }).select("-password -updatedAt");
+          user = await User.findOne({ _id: query }).select("-password -updatedAt -verificationToken -verificationTokenExpiresAt");
       } else {
-          user = await User.findOne({ username: query }).select("-password -updatedAt");
+          user = await User.findOne({ username: query }).select("-password -updatedAt -verificationToken -verificationTokenExpiresAt");
       }
 
       if (!user) return res.status(404).json({ error: "User not found" });

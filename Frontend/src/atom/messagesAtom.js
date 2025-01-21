@@ -18,3 +18,9 @@ export const selectedMsg =atom({
     media: null,
     mediaType: null},
 });
+
+export const messagesAtom = atom({
+    key:"messagesAtom",
+    default:[],
+});
+
