@@ -228,6 +228,7 @@ export const sharepost = async (req, res) => {
 
       return res.status(200).json({
           message: "Post shared successfully!",
+	  post:post,
           postId: postId,
           messageId: newMessage._id,
       });
