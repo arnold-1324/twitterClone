@@ -141,7 +141,9 @@ export const getMessages = async (req, res) => {
           return res.status(404).json({ error: "Conversation not found" });
       }
 
-       const messages = await Message.find({ conversationId: conversation._id })
+
+      const messages = await Message.find({ conversationId: conversation._id })
+
       .sort({ createdAt: 1 })
       .populate({ 
           path: 'sender', 
@@ -163,6 +165,7 @@ export const getMessages = async (req, res) => {
         populate: { path: 'user', select: 'username profileImg' }
       })
       .lean();
+    
 
       const unseenMessages = messages.filter(msg => !msg.seen && msg.sender._id.toString() !== userId);
       if (unseenMessages.length > 0) {
@@ -348,7 +351,7 @@ export const editMessage = async (req, res) => {
              io.to(socketId).emit("messageEdited", message);
          });
 
-       // const decryptMessage = decrypt({ iv: message.iv, encryptedData: message.text });
+       
 
         const decryptMessage = (() => {
           try {

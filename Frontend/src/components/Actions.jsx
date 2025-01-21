@@ -188,8 +188,8 @@ const Actions = ({ post }) => {
 	};
 
 	return (
-		<Flex flexDirection='column'>
-			<Flex gap={3} my={2} onClick={(e) => e.preventDefault()}>
+		<Flex flexDirection='column' marginLeft={"-24px"} mt={2}>
+			<Flex gap={3} my={1}  onClick={(e) => e.preventDefault()}>
 				<svg
 					aria-label='Like'
 					color={liked ? "rgb(237, 73, 86)" : ""}
