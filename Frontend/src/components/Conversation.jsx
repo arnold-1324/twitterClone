@@ -7,6 +7,7 @@ import {
 	Stack,
 	Text,
 	WrapItem,
+	border,
 	useColorModeValue,
   } from "@chakra-ui/react";
   import { useRecoilState, useRecoilValue } from "recoil";
@@ -21,22 +22,26 @@ import {
 	  selectedConversationAtom
 	);
   
+
 	const hoverBgColor = useColorModeValue("gray.100", "gray.700");
 	const selectedBgColor = useColorModeValue("gray.200", "gray.600");
-  
+	
 	// Select the first participant who is not the sender
 	const user =
-	  conversation.participants.find(
+	conversation.participants.find(
 		(participant) => participant._id !== conversation.lastMessage.sender
-	  ) || conversation.participants[0]; // Fallback to the first participant if no match
-  
+	) || conversation.participants[0]; // Fallback to the first participant if no match
+	
 	const lastMessage = conversation.lastMessage || {};
-  
-	// Handle conversation selection
+	
+
+	
+	
+	console.log(isOnline+'   ' + user.username);
 	const handleSelectConversation = () => {
-	  if (user) {
-		setSelectedConversation({
-		  _id: conversation._id,
+		if (user) {
+			setSelectedConversation({
+				_id: conversation._id,
 		  userId: user._id,
 		  userProfilePic: user.profileImg,
 		  username: user.username,
@@ -62,21 +67,23 @@ import {
 		borderRadius={"md"}
 		boxShadow="md"
 	  >
-		{/* Avatar and Status */}
+		
 		<WrapItem>
 		  <Avatar
 			size={"md"}
 			src={user?.profileImg || ""}
 			name={user?.username || "Unknown"}
 			borderRadius="full"
+			isOnline={border==="2px solid green.400"}
+			
 		  >
 			{isOnline && <AvatarBadge boxSize="1em" bg="green.400" />}
 		  </Avatar>
 		</WrapItem>
   
-		{/* Conversation Details */}
+		
 		<Stack direction={"column"} fontSize={"sm"} flex="1">
-		  {/* Username with verified badge */}
+		 
 		  <Text fontWeight="bold" display={"flex"} alignItems={"center"}>
 			{user?.username || "Unknown"}
 			{user?.isVerified && (
@@ -107,5 +114,9 @@ import {
 	);
   };
   
+  Conversation.defaultProps = {
+	isOnline: true, 
+  };
+
+
   export default Conversation;
-  
