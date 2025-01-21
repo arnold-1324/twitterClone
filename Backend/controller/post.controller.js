@@ -263,7 +263,12 @@ export const getFeedPosts = async (req, res) => {
     const following = user.following;
 
    
-    const feedPosts = await Post.find({ postedBy: { $in: following } }).sort({ createdAt: -1 });
+   const feedPosts = await Post.find({ postedBy: { $in: following } })
+  .sort({ createdAt: -1 })
+  .populate({
+    path: "likes", 
+    select: "username profileImg", 
+  });
     res.status(200).json(feedPosts);
   } catch (err) {
     console.error('Error in getFeedPosts controller:', err);
