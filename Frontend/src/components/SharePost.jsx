@@ -21,12 +21,16 @@ import {
 import { useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import { LuSend } from "react-icons/lu";
+import postsAtom from "../atom/postsAtom";
+import { useRecoilState } from "recoil";
+
 
 const SharePost = ({ postId }) => {
   const [showModal, setShowModal] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]); // Selected conversation ids
   const [text, setText] = useState("");
+  const [posts, setPosts] = useRecoilState(postsAtom); 
   const user = useRecoilValue(userAtom); // Current user data
   const [loadingConversations, setLoadingConversations] = useState(false);
 
@@ -51,6 +55,10 @@ const SharePost = ({ postId }) => {
     getConversations();
   }, []);
 
+
+
+
+
   const handleUserSelect = (convoId) => {
     setSelectedUsers((prev) =>
       prev.includes(convoId)
@@ -64,7 +72,7 @@ const SharePost = ({ postId }) => {
       alert("Please select at least one user.");
       return;
     }
-    
+  
     try {
       const postData = selectedUsers.map((convoId) => ({
         postId,
@@ -72,25 +80,46 @@ const SharePost = ({ postId }) => {
         conversationId: convoId,
         text,
       }));
-
+  
       const sharePostPromises = postData.map(async ({ postId, senderId, conversationId, text }) => {
-        const res = await fetch("api/posts/sharepost", {
+        const res = await fetch("/api/posts/sharepost", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ postId, senderId, conversationId, text }),
         });
-
+  
         if (!res.ok) {
           throw new Error(`Failed to share post with conversation ${conversationId}`);
         }
-
-        return res.json();
+  
+        const data = await res.json();
+  
+        // Check the response from the backend and update shareCount
+        if (data && data.post && data.post._id) {
+          setPosts((prevPosts) =>
+            prevPosts.map((post) =>
+              post._id === data.post._id
+                ? { ...post, shareCount: data.post.shareCount } // Update shareCount with the value from response
+                : post
+            )
+          );
+        } else {
+          console.error("Error updating share count:", data.error);
+        }
       });
-
-      await Promise.all(sharePostPromises);
-      alert("Post shared successfully!");
+  
+      // Wait for all promises to resolve
+      await Promise.all(sharePostPromises)
+        .then(() => {
+          console.log("All posts shared successfully");
+        })
+        .catch((error) => {
+          console.error("Error in sharing posts:", error);
+        });
+  
+      // Reset states
       setSelectedUsers([]);
       setText("");
       setShowModal(false);
@@ -99,7 +128,7 @@ const SharePost = ({ postId }) => {
       alert("Failed to share post. Please try again.");
     }
   };
-
+  
   return (
     <>
       <IconButton

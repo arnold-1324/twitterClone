@@ -1,6 +1,6 @@
 import { Avatar } from "@chakra-ui/avatar";
 import { Image } from "@chakra-ui/image";
-import { Box, Flex, Text, Skeleton, SkeletonCircle, SkeletonText,AvatarGroup  } from "@chakra-ui/react";
+import { Box, Flex, Text, Skeleton, SkeletonCircle, SkeletonText,AvatarGroup } from "@chakra-ui/react";
 import { Link, useNavigate } from "react-router-dom";
 import Actions from "./Actions";
 import { useEffect, useState } from "react";
@@ -132,14 +132,13 @@ const Post = ({ post, postedBy }) => {
           className="custom-lazy-image"
         />}
         </Box>
-        <AvatarGroup size="sm" stacking="last-on-top" 
-        style={{ marginLeft: "-41px", marginTop: "22px" }}>
-        {post.likes.map((item) => (
-          <Avatar key={item._id} src={item.profileImg} name={item.username} size="xs" />
-        ))}
-        <Avatar fallback="+3" size="xs" />
-      </AvatarGroup>
-
+        
+          <AvatarGroup size="sm" stacking="last-on-top"
+            style={{ marginLeft: "-41px", marginTop: "22px" }}>
+            {post.likes.slice(-5).reverse().map((item) => (
+              <Avatar key={item._id} src={item.profileImg} name={item.username} size="xs" />
+            ))}
+          </AvatarGroup>
         <Actions post={post} />
         
         {/* Make sure the share button doesn't trigger navigation */}

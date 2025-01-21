@@ -35,16 +35,17 @@ const postSchema = new mongoose.Schema({
             type: String,
             required: true,
         },
-        sharedBy: [{
-            userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-            sharedAt: { type: Date, default: Date.now },
-        }],
-        shareCount: { type: Number, default: 0 },
+        
         createdAt: {
             type: Date,
             default: Date.now,
         },
     }],
+    sharedBy: [{
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        sharedAt: { type: Date, default: Date.now },
+    }],
+    shareCount: { type: Number, default: 0 },
 }, {
     timestamps: true,
 });
