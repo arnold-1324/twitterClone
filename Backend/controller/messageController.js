@@ -141,7 +141,9 @@ export const getMessages = async (req, res) => {
           return res.status(404).json({ error: "Conversation not found" });
       }
 
+
       const messages = await Message.find({ conversationId: conversation._id })
+
       .sort({ createdAt: 1 })
       .populate({ 
           path: 'sender', 
