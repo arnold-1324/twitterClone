@@ -5,8 +5,8 @@ import Post from "../components/Post";
 import { useRecoilState } from "recoil";
 import postsAtom from "../atom/postsAtom";
 import SuggestedUsers from "../components/SuggestedUsers";
-//import SongPage from "../components/SongPage";
-import StoryEditPage from "../components/StoryEditPage";
+import SongPage from "../components/SongPage";
+//import StoryEditPage from "../components/StoryEditPage";
 
 const HomePage = () => {
   const [posts, setPosts] = useRecoilState(postsAtom);
@@ -45,8 +45,8 @@ const HomePage = () => {
             <Spinner size="xl" />
           </Flex>
         )}
-        {/* <SongPage /> */}
-        <StoryEditPage />
+        <SongPage /> 
+        {/* <StoryEditPage /> */}
         {posts.map((post) => (
           <Post key={post._id} post={post} postedBy={post.postedBy} />
         ))}
