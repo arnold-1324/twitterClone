@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Box, Flex, Input, Button, Grid, Spinner, Text } from "@chakra-ui/react";
+import { Box, Flex, Input, Button, Grid, Spinner, Text, IconButton } from "@chakra-ui/react";
+import { FaDownload, FaHeart } from "react-icons/fa";
+import { useToast } from "@chakra-ui/react";
 import axios from "axios";
 import SongCard from "./SongCard";
 import Controls from "./MusicPlayer/Controls";
@@ -8,6 +10,7 @@ import Seekbar from "./MusicPlayer/Seekbar";
 import Track from "./MusicPlayer/Track";
 import VolumeBar from "./MusicPlayer/VolumeBar";
 import "./SongPage.css"; // Import CSS for rotating animation
+import useDownloadSong from "../hooks/useDownloadSong";
 
 const SongPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -23,6 +26,8 @@ const SongPage = () => {
   const [duration, setDuration] = useState(0);
   const [repeat, setRepeat] = useState(false);
   const [shuffle, setShuffle] = useState(false);
+  const toast = useToast();
+  const { downloadSong, showAnimation } = useDownloadSong();
 
   const searchSongs = async () => {
     if (!searchQuery) return;
@@ -59,7 +64,7 @@ const SongPage = () => {
     }
   };
 
-  const fetchSongDetails = async (songId) => {
+  const fetchSongDetails = async (songId,SongCoverImg) => {
     try {
       const response = await axios.get(`https://spotify23.p.rapidapi.com/tracks/`, {
         params: { ids: songId },
@@ -74,7 +79,7 @@ const SongPage = () => {
         id: data.id,
         title: data.name,
         subtitle: data.artists.map(artist => artist.name).join(", "),
-        image: data.album.images[0].url,
+        image: SongCoverImg,
         previewUrl: data.preview_url,
         lyrics: data.lyrics || [],
       };
@@ -88,7 +93,7 @@ const SongPage = () => {
     if (currentSong?.id === song.id && isPlaying) {
       setIsPlaying(false);
     } else {
-      const songDetails = await fetchSongDetails(song.id);
+      const songDetails = await fetchSongDetails(song.id,song.image);
       if (songDetails) {
         setCurrentSong(songDetails);
         setIsPlaying(true);
@@ -109,6 +114,28 @@ const SongPage = () => {
 
   return (
     <Box p={6} bg="gray.900" minH="100vh">
+      {showAnimation && (
+        <Box
+          position="fixed"
+          top="0"
+          left="0"
+          width="100%"
+          height="100%"
+          bg="rgba(0, 0, 0, 0.8)"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          zIndex="1000"
+        >
+          <Box className="wave-animation">
+            <FaHeart className="heart-icon cracked-heart" />
+            
+          </Box>
+          <Text fontSize="4xl" color="white" textAlign="center" mt={4}>
+            Downloading...
+          </Text>
+        </Box>
+      )}
       <Text fontSize="3xl" color="white" mb={6} textAlign="center">
         Spotify Song Search
       </Text>
@@ -161,18 +188,28 @@ const SongPage = () => {
       {currentSong && (
         <Box mt={6} p={4} bg="gray.800" borderRadius="md">
           <Track isPlaying={isPlaying} isActive={true} activeSong={currentSong} />
-          <Controls
-            isPlaying={isPlaying}
-            isActive={true}
-            repeat={repeat}
-            setRepeat={setRepeat}
-            shuffle={shuffle}
-            setShuffle={setShuffle}
-            currentSongs={songs}
-            handlePlayPause={() => setIsPlaying(!isPlaying)}
-            handlePrevSong={() => setCurrentSong(songs[(songs.indexOf(currentSong) - 1 + songs.length) % songs.length])}
-            handleNextSong={() => setCurrentSong(songs[(songs.indexOf(currentSong) + 1) % songs.length])}
-          />
+          <Flex justify="space-between" alignItems="center">
+            <Controls
+              isPlaying={isPlaying}
+              isActive={true}
+              repeat={repeat}
+              setRepeat={setRepeat}
+              shuffle={shuffle}
+              setShuffle={setShuffle}
+              currentSongs={songs}
+              handlePlayPause={() => setIsPlaying(!isPlaying)}
+              handlePrevSong={() => setCurrentSong(songs[(songs.indexOf(currentSong) - 1 + songs.length) % songs.length])}
+              handleNextSong={() => setCurrentSong(songs[(songs.indexOf(currentSong) + 1) % songs.length])}
+            />
+            <IconButton
+              icon={<FaDownload />}
+              colorScheme="teal"
+              size="lg"
+              onClick={() => downloadSong(currentSong)}
+              aria-label="Download Song"
+              className="download-btn"
+            />
+          </Flex>
           <Seekbar
             value={appTime}
             min="0"
