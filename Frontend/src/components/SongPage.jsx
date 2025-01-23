@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Box, Flex, Input, Button, Grid, Spinner, useToast, Text } from "@chakra-ui/react";
+import { Box, Flex, Input, Button, Grid, Spinner, Text } from "@chakra-ui/react";
 import axios from "axios";
 import SongCard from "./SongCard";
+import Controls from "./MusicPlayer/Controls";
+import Player from "./MusicPlayer/Player";
+import Seekbar from "./MusicPlayer/Seekbar";
+import Track from "./MusicPlayer/Track";
+import VolumeBar from "./MusicPlayer/VolumeBar";
 import "./SongPage.css"; // Import CSS for rotating animation
 
 const SongPage = () => {
@@ -12,7 +17,12 @@ const SongPage = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [lyrics, setLyrics] = useState([]);
   const [currentStanza, setCurrentStanza] = useState(0);
-  const toast = useToast();
+  const [volume, setVolume] = useState(0.3);
+  const [seekTime, setSeekTime] = useState(0);
+  const [appTime, setAppTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [repeat, setRepeat] = useState(false);
+  const [shuffle, setShuffle] = useState(false);
 
   const searchSongs = async () => {
     if (!searchQuery) return;
@@ -40,29 +50,51 @@ const SongPage = () => {
         image: item.data.albumOfTrack.coverArt.sources[0].url,
         previewUrl: item.data.preview_url,
         lyrics: item.data.lyrics || [],
-         // Assuming lyrics are part of the API response
       }));
       setSongs(songsData);
-      console.log(songsData);
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Something went wrong while fetching songs.",
-        status: "error",
-      });
+      console.error("Error fetching songs:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const playSong = (song) => {
-    if (currentSong?.previewUrl === song.previewUrl && isPlaying) {
+  const fetchSongDetails = async (songId) => {
+    try {
+      const response = await axios.get(`https://spotify23.p.rapidapi.com/tracks/`, {
+        params: { ids: songId },
+        headers: {
+          "x-rapidapi-key": "c263dc9547msh6a3b8befac77f1ep1903f6jsn85c748a598a3",
+          "x-rapidapi-host": "spotify23.p.rapidapi.com",
+        },
+      });
+
+      const data = response.data.tracks[0];
+      return {
+        id: data.id,
+        title: data.name,
+        subtitle: data.artists.map(artist => artist.name).join(", "),
+        image: data.album.images[0].url,
+        previewUrl: data.preview_url,
+        lyrics: data.lyrics || [],
+      };
+    } catch (error) {
+      console.error("Error fetching song details:", error);
+      return null;
+    }
+  };
+
+  const playSong = async (song) => {
+    if (currentSong?.id === song.id && isPlaying) {
       setIsPlaying(false);
     } else {
-      setCurrentSong(song);
-      setIsPlaying(true);
-      setLyrics(song.lyrics);
-      setCurrentStanza(0);
+      const songDetails = await fetchSongDetails(song.id);
+      if (songDetails) {
+        setCurrentSong(songDetails);
+        setIsPlaying(true);
+        setLyrics(songDetails.lyrics);
+        setCurrentStanza(0);
+      }
     }
   };
 
@@ -70,7 +102,7 @@ const SongPage = () => {
     if (isPlaying) {
       const interval = setInterval(() => {
         setCurrentStanza((prev) => (prev + 1) % lyrics.length);
-      }, 3000); // Change stanza every 3 seconds
+      }, 3000);
       return () => clearInterval(interval);
     }
   }, [isPlaying, lyrics.length]);
@@ -114,7 +146,7 @@ const SongPage = () => {
               <SongCard
                 key={index}
                 song={song}
-                isPlaying={currentSong?.previewUrl === song.previewUrl && isPlaying}
+                isPlaying={currentSong?.id === song.id && isPlaying}
                 onPlay={() => playSong(song)}
               />
             ))
@@ -127,13 +159,40 @@ const SongPage = () => {
       )}
 
       {currentSong && (
-        <audio
-          src={currentSong.previewUrl}
-          autoPlay={isPlaying}
-          onEnded={() => setIsPlaying(false)}
-          controls
-          style={{ display: "none" }}
-        />
+        <Box mt={6} p={4} bg="gray.800" borderRadius="md">
+          <Track isPlaying={isPlaying} isActive={true} activeSong={currentSong} />
+          <Controls
+            isPlaying={isPlaying}
+            isActive={true}
+            repeat={repeat}
+            setRepeat={setRepeat}
+            shuffle={shuffle}
+            setShuffle={setShuffle}
+            currentSongs={songs}
+            handlePlayPause={() => setIsPlaying(!isPlaying)}
+            handlePrevSong={() => setCurrentSong(songs[(songs.indexOf(currentSong) - 1 + songs.length) % songs.length])}
+            handleNextSong={() => setCurrentSong(songs[(songs.indexOf(currentSong) + 1) % songs.length])}
+          />
+          <Seekbar
+            value={appTime}
+            min="0"
+            max={duration}
+            onInput={(event) => setSeekTime(event.target.value)}
+            setSeekTime={setSeekTime}
+            appTime={appTime}
+          />
+          <Player
+            activeSong={currentSong}
+            volume={volume}
+            isPlaying={isPlaying}
+            seekTime={seekTime}
+            repeat={repeat}
+            onEnded={() => setIsPlaying(false)}
+            onTimeUpdate={(event) => setAppTime(event.target.currentTime)}
+            onLoadedData={(event) => setDuration(event.target.duration)}
+          />
+          <VolumeBar value={volume} min="0" max="1" onChange={(event) => setVolume(event.target.value)} setVolume={setVolume} />
+        </Box>
       )}
 
       {lyrics.length > 0 && (
