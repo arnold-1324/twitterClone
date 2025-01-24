@@ -7,7 +7,7 @@ import postsAtom from "../atom/postsAtom";
 import SuggestedUsers from "../components/SuggestedUsers";
 import SongPage from "../components/SongPage";
 //import StoryEditPage from "../components/StoryEditPage";
-import UploadAndMerge from "../components/UploadAndMerge";
+
 
 
 const HomePage = () => {
@@ -47,7 +47,6 @@ const HomePage = () => {
             <Spinner size="xl" />
           </Flex>
         )}
-        <UploadAndMerge />
         <SongPage /> 
         {/* <StoryEditPage /> */}
         {posts.map((post) => (
