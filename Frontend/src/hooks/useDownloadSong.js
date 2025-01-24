@@ -31,7 +31,7 @@ const useDownloadSong = () => {
     } finally {
       setTimeout(() => {
         setShowAnimation(false);
-      }, 2000); 
+      }, 3000); 
     }
   };
 
