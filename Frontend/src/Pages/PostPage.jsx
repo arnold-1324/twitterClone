@@ -1,4 +1,4 @@
-import { Avatar, Box, Button, Divider, Flex, Image, Spinner, Text } from "@chakra-ui/react";
+import { Avatar, Box, Button, Divider, Flex, Image, Spinner, Text ,AvatarGroup} from "@chakra-ui/react";
 import Actions from "../components/Actions";
 import { useEffect, useState } from "react";
 import Comment from "../components/Comment";
@@ -113,6 +113,14 @@ const PostPage = () => {
           <Image src={currentPost.images} w={"full"} />
         </Box>
       )}
+
+      <AvatarGroup size="sm" stacking="last-on-top"
+        style={{ marginLeft: "-41px", marginTop: "22px" }}>
+        {currentPost.likes.slice(-5).reverse().map((item) => (
+          <Avatar key={item._id} src={item.profileImg} name={item.username} size="xs" />
+        ))}
+      </AvatarGroup>
+
 
       <Flex gap={3} my={3}>
         <Actions post={currentPost} />
