@@ -12,6 +12,7 @@ import VolumeBar from "./MusicPlayer/VolumeBar";
 import "./SongPage.css"; // Import CSS for rotating animation
 import useDownloadSong from "../hooks/useDownloadSong";
 import loaderSvg from "../assets/loader.svg";
+import Lyrics from "./Lyrics"; // Import the new Lyrics component
 
 const SongPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -65,7 +66,7 @@ const SongPage = () => {
     }
   };
 
-  const fetchSongDetails = async (songId,SongCoverImg) => {
+  const fetchSongDetails = async (songId, SongCoverImg) => {
     try {
       const response = await axios.get(`https://spotify23.p.rapidapi.com/tracks/`, {
         params: { ids: songId },
@@ -75,14 +76,24 @@ const SongPage = () => {
         },
       });
 
+      const lyricsResponse = await axios.get(`https://spotify23.p.rapidapi.com/track_lyrics/`, {
+        params: { id: songId },
+        headers: {
+          "x-rapidapi-key": "c263dc9547msh6a3b8befac77f1ep1903f6jsn85c748a598a3",
+          "x-rapidapi-host": "spotify23.p.rapidapi.com",
+        },
+      });
+
       const data = response.data.tracks[0];
+      const lyricsData = lyricsResponse.data.lyrics.lines.map(line => line.words);
+
       return {
         id: data.id,
         title: data.name,
         subtitle: data.artists.map(artist => artist.name).join(", "),
         image: SongCoverImg,
         previewUrl: data.preview_url,
-        lyrics: data.lyrics || [],
+        lyrics: lyricsData,
       };
     } catch (error) {
       console.error("Error fetching song details:", error);
@@ -94,7 +105,7 @@ const SongPage = () => {
     if (currentSong?.id === song.id && isPlaying) {
       setIsPlaying(false);
     } else {
-      const songDetails = await fetchSongDetails(song.id,song.image);
+      const songDetails = await fetchSongDetails(song.id, song.image);
       if (songDetails) {
         setCurrentSong(songDetails);
         setIsPlaying(true);
@@ -231,21 +242,7 @@ const SongPage = () => {
             onLoadedData={(event) => setDuration(event.target.duration)}
           />
           <VolumeBar value={volume} min="0" max="1" onChange={(event) => setVolume(event.target.value)} setVolume={setVolume} />
-        </Box>
-      )}
-
-      {lyrics.length > 0 && (
-        <Box mt={6} p={4} bg="gray.800" borderRadius="md">
-          {lyrics.map((stanza, index) => (
-            <Text
-              key={index}
-              color={index === currentStanza ? "green.500" : "white"}
-              fontSize="lg"
-              mb={2}
-            >
-              {stanza}
-            </Text>
-          ))}
+          <Lyrics lyrics={lyrics} currentTime={appTime} isPlaying={isPlaying} />
         </Box>
       )}
     </Box>
