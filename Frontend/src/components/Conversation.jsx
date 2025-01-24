@@ -37,7 +37,6 @@ import {
 
 	
 	
-	console.log(isOnline+'   ' + user.username);
 	const handleSelectConversation = () => {
 		if (user) {
 			setSelectedConversation({
