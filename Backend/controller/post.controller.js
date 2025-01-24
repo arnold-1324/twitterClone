@@ -252,7 +252,11 @@ export const sharepost = async (req, res) => {
 
 export const getPost = async (req, res) => {
   try {
-		const post = await Post.findById(req.params.id);
+		const post = await Post.findById(req.params.id)
+    .populate({
+      path: "likes", 
+      select: "username profileImg", 
+    });;
 
 		if (!post) {
 			return res.status(404).json({ error: "Post not found" });
