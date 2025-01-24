@@ -11,6 +11,7 @@ import Track from "./MusicPlayer/Track";
 import VolumeBar from "./MusicPlayer/VolumeBar";
 import "./SongPage.css"; // Import CSS for rotating animation
 import useDownloadSong from "../hooks/useDownloadSong";
+import loaderSvg from "../assets/loader.svg";
 
 const SongPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -128,8 +129,9 @@ const SongPage = () => {
           zIndex="1000"
         >
           <Box className="wave-animation">
+            <img src={loaderSvg} alt="loader" className="loader-svg left" />
             <FaHeart className="heart-icon cracked-heart" />
-            
+            <img src={loaderSvg} alt="loader" className="loader-svg right" />
           </Box>
           <Text fontSize="4xl" color="white" textAlign="center" mt={4}>
             Downloading...

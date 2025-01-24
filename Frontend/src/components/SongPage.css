@@ -75,6 +75,22 @@
   animation: crack 2s forwards;
 }
 
+.loader-svg {
+  width: 120px;
+  height: 120px;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.loader-svg.left {
+  left: -60px;
+}
+
+.loader-svg.right {
+  right: -60px;
+}
+
 .music-waves {
   position: absolute;
   top: 50%;
