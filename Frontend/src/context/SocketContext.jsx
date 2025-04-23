@@ -16,10 +16,11 @@ export const SocketContextProvider = ({ children }) => {
 	const user = useRecoilValue(userAtom);
 
 	useEffect(() => {
-		const socket = io("/", {
-			query: {
-				userId: user?._id,
-			},
+		if (!user?._id) return;
+		// Connect to backend socket.io server on port 5000
+		const socket = io("http://localhost:5000", {
+			query: { userId: user._id },
+			transports: ["websocket"], 
 		});
 
 		setSocket(socket);
@@ -27,7 +28,10 @@ export const SocketContextProvider = ({ children }) => {
 		socket.on("getOnlineUsers", (users) => {
 			setOnlineUsers(users);
 		});
-		return () => socket && socket.close();
+
+		return () => {
+			socket.disconnect();
+		};
 	}, [user?._id]);
 
 	return <SocketContext.Provider value={{ socket, onlineUsers }}>{children}</SocketContext.Provider>;

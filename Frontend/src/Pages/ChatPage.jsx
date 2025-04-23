@@ -142,10 +142,11 @@ const ChatPage = () => {
   const log = conversations.map((con) => {
   
     console.log(con._id);
-   // const isOnline = onlineUsers.includes(con.participants[0]?._id);
+    const isOnline = onlineUsers.includes(con.participants[0]?._id);
    
     return (
       <Conversation
+      isOnline={isOnline}
         key={con._id}
         conversation={con}
         sx={{
@@ -220,6 +221,7 @@ const ChatPage = () => {
                   <Conversation
                     key={conversation._id}
                     conversation={conversation}
+                    onlineUsers={onlineUsers}
                     sx={{
                       transition: "box-shadow 0.2s ease-in-out",
                       _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },

@@ -16,7 +16,7 @@ import {
   import { selectedConversationAtom } from "../atom/messagesAtom";
   import formatMessageTime from "../Utils/Timeformate";
 
-  const Conversation = ({ conversation, isOnline }) => {
+  const Conversation = ({ conversation, onlineUsers }) => {
 	const currentUser = useRecoilValue(userAtom);
 	const [selectedConversation, setSelectedConversation] = useRecoilState(
 	  selectedConversationAtom
@@ -26,11 +26,11 @@ import {
 	const hoverBgColor = useColorModeValue("gray.100", "gray.700");
 	const selectedBgColor = useColorModeValue("gray.200", "gray.600");
 	
-	// Select the first participant who is not the sender
-	const user =
-	conversation.participants.find(
-		(participant) => participant._id !== conversation.lastMessage.sender
-	) || conversation.participants[0]; // Fallback to the first participant if no match
+	// Find the participant who is not the current user
+	const otherParticipant = conversation.participants.find(
+		(p) => p._id !== currentUser._id
+	);
+	const isOnline = otherParticipant && onlineUsers.includes(otherParticipant._id);
 	
 	const lastMessage = conversation.lastMessage || {};
 	
@@ -38,12 +38,12 @@ import {
 	
 	
 	const handleSelectConversation = () => {
-		if (user) {
+		if (otherParticipant) {
 			setSelectedConversation({
 				_id: conversation._id,
-		  userId: user._id,
-		  userProfilePic: user.profileImg,
-		  username: user.username,
+		  userId: otherParticipant._id,
+		  userProfilePic: otherParticipant.profileImg,
+		  username: otherParticipant.username,
 		});
 	  }
 	};
@@ -70,11 +70,10 @@ import {
 		<WrapItem>
 		  <Avatar
 			size={"md"}
-			src={user?.profileImg || ""}
-			name={user?.username || "Unknown"}
+			src={otherParticipant?.profileImg || ""}
+			name={otherParticipant?.username || "Unknown"}
 			borderRadius="full"
-			isOnline={border==="2px solid green.400"}
-			
+			isOnline={isOnline}
 		  >
 			{isOnline && <AvatarBadge boxSize="1em" bg="green.400" />}
 		  </Avatar>
@@ -84,8 +83,8 @@ import {
 		<Stack direction={"column"} fontSize={"sm"} flex="1">
 		 
 		  <Text fontWeight="bold" display={"flex"} alignItems={"center"}>
-			{user?.username || "Unknown"}
-			{user?.isVerified && (
+				{otherParticipant?.username || "Unknown"}
+			{otherParticipant?.isVerified && (
 			  <Image src="/verified.png" w={4} h={4} ml={2} alt="verified" />
 			)}
 		  </Text>
@@ -114,7 +113,7 @@ import {
   };
   
   Conversation.defaultProps = {
-	isOnline: true, 
+	onlineUsers: [], 
   };
 
 

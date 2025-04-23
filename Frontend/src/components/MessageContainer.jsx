@@ -22,6 +22,7 @@ import messageSound from "../assets/sounds/message.mp3";
 import { BiArrowBack } from "react-icons/bi";
 import { FaAnglesDown } from "react-icons/fa6";
 import Message from "./Message";
+import TypingIndicator from "./TypingIndicator";
 
 const MotionFlex = motion(Flex);
 
@@ -37,6 +38,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   const messageEndRef = useRef(null);
   const [Msg, setSelectedMsg] = useRecoilState(selectedMsg);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [typingUsers, setTypingUsers] = useState([]);
 
   const clearSelectedConversation = () => {
     setSelectedConversation({});
@@ -148,6 +150,17 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     getMessages();
   }, [selectedConversation.userId, selectedConversation.mock]);
 
+  useEffect(() => {
+    if (!socket || !selectedConversation._id) return;
+    const handleTypingStatus = ({ conversationId, typingUsers }) => {
+      if (conversationId === selectedConversation._id) {
+        setTypingUsers(typingUsers.filter((id) => id !== currentUser._id));
+      }
+    };
+    socket.on("typingStatus", handleTypingStatus);
+    return () => socket.off("typingStatus", handleTypingStatus);
+  }, [socket, selectedConversation._id, currentUser._id]);
+
   return (
     <Flex
       flex="70"
@@ -249,6 +262,20 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
               </Box>
             );
           })}
+          
+        {typingUsers.length > 0 && (
+          <TypingIndicator
+            usernames={typingUsers.length === 1
+              ? [selectedConversation.username]
+              : typingUsers.map((id) => {
+                  const participant = (selectedConversation.participants || []).find(
+                    (p) => p._id === id
+                  );
+                  return participant ? participant.username : "Someone";
+                })
+            }
+          />
+        )}
         <div ref={messageEndRef} />
         <IconButton
           onClick={scrollToBottom}
