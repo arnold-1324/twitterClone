@@ -38,10 +38,10 @@ const Message = ({
     <MotionFlex
       direction="column"
       alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
-      width={message.audio && "73%"}
+      width={message.audio && "93%"}
       height={message.audio && "90px"}
       rounded={message.audio && "full"}
-      maxWidth={"45%"}
+      maxWidth={"60%"}
       p={1}
       mt={2}
       borderRadius="15px"
@@ -174,38 +174,9 @@ const Message = ({
         </video>
       )}
       {message.audio && (
-        <Flex
-          direction="row"
-          alignItems="center"
-          gap={4}
-          w="100%"
-          justify="flex-start"
-          p={2}
-        >
-          <Flex
-            direction="column"
-            w="100%"
-            bg="gray.900"
-            borderRadius="md"
-            p={4}
-            boxShadow="lg"
-            alignItems="center"
-            justify="center"
-            rounded={"full"}
-            height={"70px"}
-            mb={2}
-          >
-            <Flex
-              direction="row"
-              alignItems="center"
-              justify="center"
-              w="100%"
-              gap={4}
-            >
-              <AudioPlayer src={message.audio} />
-            </Flex>
-          </Flex>
-        </Flex>
+
+        <AudioPlayer audioUrl={message.audio} />
+
       )}
       {message.seen && (
         <Box

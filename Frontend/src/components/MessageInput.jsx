@@ -16,7 +16,8 @@ import { BsFillImageFill } from "react-icons/bs";
 import { motion } from "framer-motion";
 import { selectedConversationAtom, selectedMsg } from "../atom/messagesAtom";
 import { useRecoilState, useRecoilValue } from "recoil";
-import MediaThumbnail from "../Utils/Thumbnail";
+import useUploadWithProgress from "../hooks/useUploadWithProgress";
+import UploadProgressBar from "./UploadProgressBar";
 import { useSocket } from "../context/SocketContext";
 
 const MotionFlex = motion(Flex);
@@ -29,6 +30,7 @@ const MessageInput = ({ setMessages }) => {
     const [audioPreview, setAudioPreview] = useState(null);
     const [mediaFile, setMediaFile] = useState(null);
     const [mediaPreview, setMediaPreview] = useState(null);
+    const { progress, isUploading, error, upload } = useUploadWithProgress();
     const mediaRecorderRef = useRef(null);
     const recipient = useRecoilValue(selectedConversationAtom);
     const toast = useToast();
@@ -37,6 +39,8 @@ const MessageInput = ({ setMessages }) => {
     const { socket } = useSocket();
     const lastTyping = useRef(0);
     const typingTimeout = useRef(null);
+    const [uploadProgress, setUploadProgress] = useState(0);
+
 
     useEffect(() => {
         if (!socket || !recipient._id) return;
@@ -45,6 +49,13 @@ const MessageInput = ({ setMessages }) => {
             socket.emit("leaveRoom", recipient._id);
         };
     }, [socket, recipient._id]);
+
+    useEffect(() => {
+        if (!socket) return;
+        const handleProgress = ({ percent }) => setUploadProgress(Number(percent));
+        socket.on("uploadProgress", handleProgress);
+        return () => socket.off("uploadProgress", handleProgress);
+      }, [socket]);
 
     console.log(replyMsg);
     const isValidReply =
@@ -59,61 +70,67 @@ const MessageInput = ({ setMessages }) => {
     const handleSendMessage = async (e) => {
         e.preventDefault();
         if (!messageText && !audioBlob && !mediaFile) return;
-        console.log(replyMsg + "reply");
         setIsSending(true);
-
         try {
             const formData = new FormData();
             formData.append("message", messageText);
             formData.append("recipientId", recipient.userId);
-
             if (replyMsg.id != "") {
                 formData.append("messageId", replyMsg.id);
             }
-
             if (audioBlob) {
                 formData.append("media", audioBlob, "voice-message.webm");
             }
-
             if (mediaFile) {
                 formData.append("media", mediaFile);
             }
-
             let url = "/api/messages/send";
             if (replyMsg.id != "") {
                 url = "/api/messages/reply";
             }
-
-            const res = await fetch(url, {
-                method: "POST",
-                body: formData,
+            await new Promise((resolve, reject) => {
+                upload(
+                    url,
+                    formData,
+                    (data) => {
+                        if (data.error) {
+                            toast({
+                                title: "Error",
+                                description: data.error,
+                                status: "error",
+                                duration: 5000,
+                                isClosable: true,
+                            });
+                            reject();
+                            return;
+                        }
+                        setMessages((messages) => [...messages, data]);
+                        setMessageText("");
+                        setAudioBlob(null);
+                        setAudioPreview(null);
+                        setMediaFile(null);
+                        setMediaPreview(null);
+                        setReply(prevState => ({
+                            ...prevState,
+                            id: "",
+                            text: '',
+                            media: null,
+                            mediaType: null,
+                        }));
+                        resolve();
+                    },
+                    (err) => {
+                        toast({
+                            title: "Error",
+                            description: err,
+                            status: "error",
+                            duration: 5000,
+                            isClosable: true,
+                        });
+                        reject();
+                    }
+                );
             });
-
-            const data = await res.json();
-            if (data.error) {
-                toast({
-                    title: "Error",
-                    description: data.error,
-                    status: "error",
-                    duration: 5000,
-                    isClosable: true,
-                });
-                return;
-            }
-
-            setMessages((messages) => [...messages, data]);
-            setMessageText("");
-            setAudioBlob(null);
-            setAudioPreview(null);
-            setMediaFile(null);
-            setMediaPreview(null);
-            setReply(prevState => ({
-                ...prevState,
-                id: "",
-                text: '',
-                media: null,
-                mediaType: null,
-            }));
         } catch (error) {
             toast({
                 title: "Error",
@@ -131,7 +148,6 @@ const MessageInput = ({ setMessages }) => {
         setMessageText(e.target.value);
         if (!socket || !recipient._id) return;
         const now = Date.now();
-        // Debounce: only emit 'typing' if not sent in the last 300ms
         if (now - lastTyping.current > 300) {
             socket.emit("typing", {
                 conversationId: recipient._id,
@@ -139,7 +155,6 @@ const MessageInput = ({ setMessages }) => {
             });
             lastTyping.current = now;
         }
-        // Debounce: clear and set a new timeout to emit stop typing after 1.5s of inactivity
         if (typingTimeout.current) clearTimeout(typingTimeout.current);
         typingTimeout.current = setTimeout(() => {
             socket.emit("typing", {
@@ -212,6 +227,13 @@ const MessageInput = ({ setMessages }) => {
 
     return (
         <Box w="full">
+            {uploadProgress > 0 && uploadProgress < 100 && (
+                <UploadProgressBar progress={uploadProgress} fileName={mediaFile?.name || audioBlob ? "Audio" : ""} />
+            )}
+
+            {isUploading && (
+                <UploadProgressBar progress={progress} fileName={mediaFile?.name || audioBlob ? "Audio" : ""} />
+            )}
 
             {isValidReply && (
                 <Box

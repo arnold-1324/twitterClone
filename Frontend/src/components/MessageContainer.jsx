@@ -23,6 +23,7 @@ import { BiArrowBack } from "react-icons/bi";
 import { FaAnglesDown } from "react-icons/fa6";
 import Message from "./Message";
 import TypingIndicator from "./TypingIndicator";
+import AudioPlayer from "./AudioPlayer";
 
 const MotionFlex = motion(Flex);
 
@@ -260,8 +261,10 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                   handleHighlightMessage={handleHighlightMessage}
                 />
               </Box>
+
             );
           })}
+           
         <div ref={messageEndRef} />
         <IconButton
           onClick={scrollToBottom}
