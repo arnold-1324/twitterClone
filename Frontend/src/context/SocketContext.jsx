@@ -17,10 +17,10 @@ export const SocketContextProvider = ({ children }) => {
 
 	useEffect(() => {
 		if (!user?._id) return;
-		// Connect to backend socket.io server on port 5000
 		const socket = io("http://localhost:5000", {
 			query: { userId: user._id },
-			transports: ["websocket"], 
+			transports: ["websocket"],
+			reconnection: true,
 		});
 
 		setSocket(socket);
@@ -33,6 +33,15 @@ export const SocketContextProvider = ({ children }) => {
 			socket.disconnect();
 		};
 	}, [user?._id]);
+
+	useEffect(() => {
+		if (!socket || !user?._id) return;
+		const handleReconnect = () => {
+			socket.emit("setUserId", user._id);
+		};
+		socket.on("reconnect", handleReconnect);
+		return () => socket.off("reconnect", handleReconnect);
+	}, [socket, user?._id]);
 
 	return <SocketContext.Provider value={{ socket, onlineUsers }}>{children}</SocketContext.Provider>;
 };

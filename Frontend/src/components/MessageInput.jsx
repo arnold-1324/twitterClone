@@ -36,6 +36,7 @@ const MessageInput = ({ setMessages }) => {
     const [reply, setReply] = useRecoilState(selectedMsg);
     const { socket } = useSocket();
     const lastTyping = useRef(0);
+    const typingTimeout = useRef(null);
 
     useEffect(() => {
         if (!socket || !recipient._id) return;
@@ -130,6 +131,7 @@ const MessageInput = ({ setMessages }) => {
         setMessageText(e.target.value);
         if (!socket || !recipient._id) return;
         const now = Date.now();
+        // Debounce: only emit 'typing' if not sent in the last 300ms
         if (now - lastTyping.current > 300) {
             socket.emit("typing", {
                 conversationId: recipient._id,
@@ -137,9 +139,9 @@ const MessageInput = ({ setMessages }) => {
             });
             lastTyping.current = now;
         }
-        // Stop typing after 1.5s of inactivity
-        if (handleTyping.timeout) clearTimeout(handleTyping.timeout);
-        handleTyping.timeout = setTimeout(() => {
+        // Debounce: clear and set a new timeout to emit stop typing after 1.5s of inactivity
+        if (typingTimeout.current) clearTimeout(typingTimeout.current);
+        typingTimeout.current = setTimeout(() => {
             socket.emit("typing", {
                 conversationId: recipient._id,
                 isTyping: false,
