@@ -2,8 +2,8 @@ import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import bodyParser from "body-parser";
-
-
+import { createServer } from "http";
+import { setupSocket } from "./socket/socket.js";
 
 import AuthRoutes from "./routers/auth.routers.js";
 import UserRoutes from "./routers/user.routers.js";
@@ -14,9 +14,8 @@ import MessageRoutes from "./routers/message.routers.js";
 
 dotenv.config();
 
-const app=express();
-const PORT=process.env.PORT || 5000;
-
+const app = express();
+const PORT = process.env.PORT || 5000;
 
 app.use(cookieParser());
 app.use(express.json());
@@ -31,8 +30,10 @@ app.use("/api/notification",Notification);
 app.use("/api/messages",MessageRoutes);
 app.use('/uploads', express.static('uploads'));
 
+const httpServer = createServer(app);
+setupSocket(httpServer);
 
-app.listen(PORT,()=>{
+httpServer.listen(PORT, () => {
     console.log(`server is running in the port ${PORT}`);
     connectmongoDB();
 });

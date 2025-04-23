@@ -3,10 +3,8 @@ import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getRecipientSocketId, io } from "../socket/socket.js";
+import { getIO, getRecipientSocketId } from "../socket/socket.js";
 import { encrypt, decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
-import { Mongoose } from "mongoose";
-
 
 
 export const sendMessage = async (req, res) => {
@@ -98,6 +96,7 @@ export const sendMessage = async (req, res) => {
     console.log(newMessage);
 
     // Notify recipient via socket (if online)
+    const io = getIO();
     const recipientSocketId = getRecipientSocketId(recipientId);
     if (recipientSocketId) {
       io.to(recipientSocketId).emit("newMessage", newMessage);
@@ -201,6 +200,7 @@ export const getMessages = async (req, res) => {
         } : null,
     }));
     
+      const io = getIO();
       const recipientSocketId = getRecipientSocketId(otherUserId);
       if (recipientSocketId) {
           io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
@@ -347,6 +347,7 @@ export const editMessage = async (req, res) => {
 
         
          const recipientSocketIds = getRecipientSocketIds(conversation.participants);
+         const io = getIO();
          recipientSocketIds.forEach(socketId => {
              io.to(socketId).emit("messageEdited", message);
          });
@@ -500,6 +501,7 @@ export const deleteMessage = async (req, res) => {
       }
 
       await Message.findByIdAndDelete(messageId);
+      const io = getIO();
       const recipientSocketId = getRecipientSocketId(message.recipient);
       if (recipientSocketId) {
           io.to(recipientSocketId).emit("messageDeleted", { messageId });
