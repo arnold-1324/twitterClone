@@ -34,7 +34,7 @@ const Reaction = ({ messageId, initialReactions = [], onUpdateReactions }) => {
       const updatedMessage = await response.json();
 
       console.log("API Response:", updatedMessage); 
-      showToast({ type: "success", title: "Reaction added" });
+      showToast("Success", "Reaction added", "success");
 
       if (!Array.isArray(updatedMessage.reactions)) {
         throw new Error("API returned invalid reactions data");
@@ -49,7 +49,7 @@ const Reaction = ({ messageId, initialReactions = [], onUpdateReactions }) => {
       }
     } catch (error) {
       console.error("Error handling reaction:", error);
-      showToast({ type: "error", title: error.message });
+      showToast("Error", error.message, "error");
     } finally {
       setLoading(false);
     }

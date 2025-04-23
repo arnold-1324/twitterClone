@@ -19,6 +19,7 @@ import Reaction from "./Reaction";
 import formatMessageTime from "../Utils/Timeformate";
 import userAtom from "../atom/userAtom";
 import { useRecoilValue } from "recoil";
+import AudioPlayer from "./AudioPlayer";
 
 const MotionFlex = motion(Flex);
 const Message = ({
@@ -201,45 +202,7 @@ const Message = ({
               w="100%"
               gap={4}
             >
-              <motion.div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "10px",
-                  borderRadius: "50%",
-                  backgroundColor: "green",
-                  cursor: "pointer",
-                  boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.2)",
-                }}
-                onClick={() => {
-                  if (isPlaying) {
-                    document
-                      .getElementById("audioPlayer")
-                      .pause();
-                  } else {
-                    document.getElementById("audioPlayer").play();
-                  }
-                  setIsPlaying(!isPlaying);
-                }}
-              >
-                {isPlaying ? (
-                  <FaPause size={20} color="white" />
-                ) : (
-                  <FaPlay size={20} color="white" />
-                )}
-              </motion.div>
-
-              <motion.audio
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => setIsPlaying(false)}
-                id="audioPlayer"
-                ref={audioRef}
-                style={{ display: "none" }}
-              >
-                <source src={message.audio} type="audio/mp3" />
-              </motion.audio>
+              <AudioPlayer src={message.audio} />
             </Flex>
           </Flex>
         </Flex>
