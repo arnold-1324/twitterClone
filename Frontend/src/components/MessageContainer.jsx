@@ -164,142 +164,123 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
   return (
     <Flex
-      flex="70"
-      bg={useColorModeValue("gray.900", "black")}
-      borderRadius="md"
-      p={4}
-      flexDirection="column"
-      maxW="496.22px"
-      maxH="537.05px"
-      overflow="hidden"
-    >
-      <Flex w="full" h={12} alignItems="center" gap={2} mb={2}>
-        {isMobileView && (
-          <IconButton
-            icon={<BiArrowBack />}
-            aria-label="Back to conversations"
-            onClick={clearSelectedConversation}
-            alignSelf="flex-start"
-          />
-        )}
-        <Avatar src={selectedConversation.userProfilePic} size="sm" />
-        <Text display="flex" alignItems="center">
-          {selectedConversation.username}{" "}
-          <Image src="/verified.png" w={4} h={4} ml={1} />
-        </Text>
-      </Flex>
-
-      <Divider />
-
-      <Flex
-        flexDir="column"
-        gap={14}
-        my={4}
-        p={2}
-        height="calc(400px - 2rem)"
-        overflowY="auto"
-        overflowX="hidden"
-        borderRadius="md"
-        bg={useColorModeValue("gray.800", "black")}
-        boxShadow="md"
-        sx={{
-          "::-webkit-scrollbar": {
-            width: "8px",
-          },
-          "::-webkit-scrollbar-track": {
-            background: "#f1f1f1", 
-          },
-          "::-webkit-scrollbar-thumb": {
-            background: "#888", 
-            borderRadius: "50%", 
-          },
-          "::-webkit-scrollbar-thumb:hover": {
-            background: "#555", 
-          },
-        }}
-      >
-        {loadingMessages
-          ? [...Array(5)].map((_, i) => (
-            <MotionFlex
-              key={i}
-              gap={2}
-              alignItems="center"
-              p={1}
-              borderRadius="md"
-              alignSelf={i % 2 === 0 ? "flex-start" : "flex-end"}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              {i % 2 === 0 && <SkeletonCircle size={7} />}
-              <Flex flexDir={"column"} gap={2}>
-                <Skeleton h="8px" w="250px" />
-                <Skeleton h="8px" w="250px" />
-                <Skeleton h="8px" w="250px" />
-                <Skeleton h="8px" w="250px" />
-              </Flex>
-              {i % 2 === 0 && <SkeletonCircle size={7} />}
-            </MotionFlex>
-          ))
-          : messages.map((message) => {
-            const isOwnMessage =
-              currentUser._id === message.sender._id ||
-              currentUser._id === message.sender.id ||
-              currentUser._id === message.sender;
-            const isHighlighted = highlightedMessageId === message._id;
-            return (
-              <Box
-                key={message._id}
-                bg={isHighlighted ? "green.900" : "transparent"}
-              >
-                <Message
-                  message={message}
-                  isOwnMessage={isOwnMessage}
-                  handelselectedMsg={handelselectedMsg}
-                  handleDelete={handleDelete}
-                  updateMessageReactions={updateMessageReactions}
-                  handleHighlightMessage={handleHighlightMessage}
-                />
-              </Box>
-
-            );
-          })}
-           
-        <div ref={messageEndRef} />
+    flex="70"
+    bg={useColorModeValue("gray.900", "black")}
+    borderRadius="md"
+    p={4}
+    flexDirection="column"
+    maxW="496.22px"
+    maxH="537.05px"
+    overflow="hidden"
+  >
+    <Flex w="full" h={12} alignItems="center" gap={2} mb={2}>
+      {isMobileView && (
         <IconButton
-          onClick={scrollToBottom}
-          aria-label="Scroll to bottom"
-          position="absolute"
-          alignSelf={"flex-end"}
-          top={"430px"}
-          rounded={"full"}
-          bg={useColorModeValue("gray.800", "gray.700")}
-        >
-          <FaAnglesDown size={24} />
-        </IconButton>
-      </Flex>
-     {typingUsers.length > 0 && ( 
-        <Box w="100%" px={2} pb={1} position="relative">
-          <TypingIndicator
-             usernames={
-               (selectedConversation.participants && selectedConversation.participants.length > 2)
-                 ? (typingUsers.length === 1
-                     ? [selectedConversation.username]
-                     : typingUsers.map((id) => {
-                         const participant = (selectedConversation.participants || []).find(
-                           (p) => p._id === id
-                         );
-                         return participant ? participant.username : "Someone";
-                       })
-                   )
-                 : [] 
-             }
-           
-          />
-        </Box>
-       )} 
-      <MessageInput setMessages={setMessages} />
+          icon={<BiArrowBack />}
+          aria-label="Back to conversations"
+          onClick={clearSelectedConversation}
+          alignSelf="flex-start"
+        />
+      )}
+      <Avatar src={selectedConversation.userProfilePic} size="sm" />
+      <Text display="flex" alignItems="center">
+        {selectedConversation.username}{" "}
+        <Image src="/verified.png" w={4} h={4} ml={1} />
+      </Text>
     </Flex>
+
+    <Divider />
+
+    <Flex
+      flexDir="column"
+      gap={14}
+      my={4}
+      p={2}
+      height="calc(400px - 2rem)"
+      overflowY="auto"
+      overflowX="hidden"
+      borderRadius="md"
+      bg={useColorModeValue("gray.800", "black")}
+      boxShadow="md"
+      sx={{
+        "::-webkit-scrollbar": {
+          width: "8px",
+        },
+        "::-webkit-scrollbar-track": {
+          background: "#f1f1f1", 
+        },
+        "::-webkit-scrollbar-thumb": {
+          background: "#888", 
+          borderRadius: "50%", 
+        },
+        "::-webkit-scrollbar-thumb:hover": {
+          background: "#555", 
+        },
+      }}
+    >
+      {loadingMessages
+        ? [...Array(5)].map((_, i) => (
+          <MotionFlex
+            key={i}
+            gap={2}
+            alignItems="center"
+            p={1}
+            borderRadius="md"
+            alignSelf={i % 2 === 0 ? "flex-start" : "flex-end"}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            {i % 2 === 0 && <SkeletonCircle size={7} />}
+            <Flex flexDir={"column"} gap={2}>
+              <Skeleton h="8px" w="250px" />
+              <Skeleton h="8px" w="250px" />
+              <Skeleton h="8px" w="250px" />
+              <Skeleton h="8px" w="250px" />
+            </Flex>
+            {i % 2 === 0 && <SkeletonCircle size={7} />}
+          </MotionFlex>
+        ))
+        : messages.map((message) => {
+          const isOwnMessage =
+            currentUser._id === message.sender._id ||
+            currentUser._id === message.sender.id ||
+            currentUser._id === message.sender;
+          const isHighlighted = highlightedMessageId === message._id;
+          return (
+            <Box
+              key={message._id}
+              //alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
+              bg={isHighlighted ? "green.900" : "transparent"}
+              
+            >
+              <Message
+                message={message}
+                isOwnMessage={isOwnMessage}
+                handelselectedMsg={handelselectedMsg}
+                handleDelete={handleDelete}
+                updateMessageReactions={updateMessageReactions}
+                handleHighlightMessage={handleHighlightMessage}
+              />
+            </Box>
+          );
+        })}
+      <div ref={messageEndRef} />
+      <IconButton
+        onClick={scrollToBottom}
+        aria-label="Scroll to bottom"
+        position="absolute"
+        alignSelf={"flex-end"}
+        top={"430px"}
+        rounded={"full"}
+        bg={useColorModeValue("gray.800", "gray.700")}
+      >
+        <FaAnglesDown size={24} />
+      </IconButton>
+    </Flex>
+
+    <MessageInput setMessages={setMessages} />
+  </Flex>
   );
 };
 

@@ -19,7 +19,6 @@ import Reaction from "./Reaction";
 import formatMessageTime from "../Utils/Timeformate";
 import userAtom from "../atom/userAtom";
 import { useRecoilValue } from "recoil";
-import AudioPlayer from "./AudioPlayer";
 
 const MotionFlex = motion(Flex);
 const Message = ({
@@ -35,24 +34,25 @@ const Message = ({
   const currentUser = useRecoilValue(userAtom);
 
   return (
-    <MotionFlex
-      direction="column"
-      alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
-      width={message.audio && "93%"}
-      height={message.audio && "90px"}
-      rounded={message.audio && "full"}
-      maxWidth={"60%"}
-      p={1}
-      mt={2}
-      borderRadius="15px"
-      color="white"
-      boxShadow="md"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
-      position="relative"
-      bg={isOwnMessage ? "gray.900" : "gray.400"}
-    >
+
+      <MotionFlex
+        direction="column"
+        justifySelf={isOwnMessage ? "flex-end" : "flex-start"}
+        width={message.audio ? "73%" :"70%"}
+        height={message.audio && "90px"}
+        rounded={message.audio && "full"}
+        maxWidth={"50%"}
+        p={1}
+        mt={2}
+        borderRadius="15px"
+        color="white"
+        boxShadow="md"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        position="relative"
+        bg={isOwnMessage ? "gray.900" : "gray.400"}
+      >
       {message.replyTo && (
         <Box
           p={2}
@@ -90,7 +90,7 @@ const Message = ({
 
             {(message.replyTo.img || message.replyTo.video) && (
               <Box
-                w="50px"
+                w="90px"
                 h="50px"
                 ml={2}
                 borderRadius="md"
@@ -174,9 +174,76 @@ const Message = ({
         </video>
       )}
       {message.audio && (
+        <Flex
+          direction="row"
+          alignItems="center"
+          gap={4}
+          w="100%"
+          justify="flex-start"
+          p={2}
+        >
+          <Flex
+            direction="column"
+            w="100%"
+            bg="gray.900"
+            borderRadius="md"
+            p={4}
+            boxShadow="lg"
+            alignItems="center"
+            justify="center"
+            rounded={"full"}
+            height={"70px"}
+            mb={2}
+          >
+            <Flex
+              direction="row"
+              alignItems="center"
+              justify="center"
+              w="100%"
+              gap={4}
+            >
+              <motion.div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "10px",
+                  borderRadius: "50%",
+                  backgroundColor: "green",
+                  cursor: "pointer",
+                  boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.2)",
+                }}
+                onClick={() => {
+                  if (isPlaying) {
+                    document
+                      .getElementById("audioPlayer")
+                      .pause();
+                  } else {
+                    document.getElementById("audioPlayer").play();
+                  }
+                  setIsPlaying(!isPlaying);
+                }}
+              >
+                {isPlaying ? (
+                  <FaPause size={20} color="white" />
+                ) : (
+                  <FaPlay size={20} color="white" />
+                )}
+              </motion.div>
 
-        <AudioPlayer audioUrl={message.audio} />
-
+              <motion.audio
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+                id="audioPlayer"
+                ref={audioRef}
+                style={{ display: "none" }}
+              >
+                <source src={message.audio} type="audio/mp3" />
+              </motion.audio>
+            </Flex>
+          </Flex>
+        </Flex>
       )}
       {message.seen && (
         <Box
