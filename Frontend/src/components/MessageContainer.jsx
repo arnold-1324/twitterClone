@@ -45,6 +45,11 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     setSelectedConversation({});
   };
 
+  // Always set the id, do not toggle
+  const handleSetPlayingAudioId = (id) => {
+    setPlayingAudioId(id);
+  };
+
   const handelselectedMsg = (message) => {
     setSelectedMsg({
       id: message.id,

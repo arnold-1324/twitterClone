@@ -8,7 +8,7 @@ const Lyrics = ({ lyrics, currentTime, isPlaying }) => {
   const lyricsRef = useRef(null);
   const currentLineRef = useRef(null);
 
- 
+  // Update the current line periodically
   useEffect(() => {
     if (isPlaying) {
       const interval = setInterval(() => {
@@ -18,20 +18,20 @@ const Lyrics = ({ lyrics, currentTime, isPlaying }) => {
     }
   }, [isPlaying, lyrics.length]);
 
- 
+  // Reset the current line when playback stops
   useEffect(() => {
     if (!isPlaying) {
       setCurrentLine(0);
     }
   }, [isPlaying]);
 
-  
+  // Scroll the container to show the current line
   useEffect(() => {
     if (currentLineRef.current && lyricsRef.current) {
       const container = lyricsRef.current;
       const currentLineElement = currentLineRef.current;
 
-      
+      // Calculate the scroll position to keep the current line at the top
       const scrollPosition =
         currentLineElement.offsetTop - container.offsetTop;
 
@@ -52,7 +52,7 @@ const Lyrics = ({ lyrics, currentTime, isPlaying }) => {
       textAlign="center"
       className="lyrics-container"
       maxH="50vh"
-      ref={lyricsRef} 
+      ref={lyricsRef} // Reference for scrolling
     >
       {lyrics.map((line, index) => (
         <motion.div
@@ -64,7 +64,7 @@ const Lyrics = ({ lyrics, currentTime, isPlaying }) => {
             y: index === currentLine ? 0 : 20,
           }}
           transition={{ duration: 0.5 }}
-          ref={index === currentLine ? currentLineRef : null} 
+          ref={index === currentLine ? currentLineRef : null} // Reference for the current line
         >
           <Text
             fontSize="2xl"
