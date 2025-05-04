@@ -26,7 +26,7 @@ import {
 	const hoverBgColor = useColorModeValue("gray.100", "gray.700");
 	const selectedBgColor = useColorModeValue("gray.200", "gray.600");
 	
-	// Find the participant who is not the current user
+	
 	const otherParticipant = conversation.participants.find(
 		(p) => p._id !== currentUser._id
 	);
@@ -89,7 +89,7 @@ import {
 			)}
 		  </Text>
   
-		  {/* Last message */}
+		 
 		  <Text fontSize={"xs"} color={useColorModeValue("gray.600", "gray.400")}>
 			{lastMessage.sender && (
 			  <Box color={lastMessage.seen ? "blue.400" : "gray.500"} mr={1}>
@@ -103,7 +103,7 @@ import {
 			  : <BsFillImageFill size={16} />}
 		  </Text>
   
-		  {/* Timestamp */}
+		 
 		  <Text fontSize="xs" color={useColorModeValue("gray.500", "gray.400")}>
 			{ formatMessageTime(conversation.updatedAt)}
 		  </Text>

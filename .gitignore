@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 
+redis-data/dump.rdb
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
