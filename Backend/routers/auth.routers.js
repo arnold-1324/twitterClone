@@ -1,7 +1,7 @@
 import express from "express";
 import { signUp, Login, Logout ,verifyEmail,forgotPassword,ResetPassword } from "../controller/auth.controller.js";
 import rateLimit from "express-rate-limit";
-import { forgotpassLimitter } from "../RateLimitter/RateLimitter.js";
+import {  } from "../RateLimitter/RateLimitter.js";
 
 const router=express.Router();
 
@@ -20,13 +20,13 @@ const LogInLimiter=rateLimit({
 
 router.post("/signup",signUp);
 
-router.post("/login",LogInLimiter,Login);
+router.post("/login",Login);
 
 router.post("/logout",Logout);
 
 router.post("/verify-email",verifyEmail);
 
-router.post("/forgot-password",forgotpassLimitter,forgotPassword);
+router.post("/forgot-password",forgotPassword);
 
 router.post("/reset-password/:resetToken",ResetPassword)
 

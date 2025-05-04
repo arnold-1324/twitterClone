@@ -281,7 +281,26 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         <FaAnglesDown size={24} />
       </IconButton>
     </Flex>
-
+    {typingUsers.length > 0 && ( 
+        <Box w="100%" px={2} pb={1} position="relative">
+          <TypingIndicator
+             usernames={
+               (selectedConversation.participants && selectedConversation.participants.length > 2)
+                 ? (typingUsers.length === 1
+                     ? [selectedConversation.username]
+                     : typingUsers.map((id) => {
+                         const participant = (selectedConversation.participants || []).find(
+                           (p) => p._id === id
+                         );
+                         return participant ? participant.username : "Someone";
+                       })
+                   )
+                 : [] 
+             }
+           
+          />
+        </Box>
+       )} 
     <MessageInput setMessages={setMessages} />
   </Flex>
   );
