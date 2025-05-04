@@ -32,10 +32,10 @@ const Message = ({
   playingAudioId,
   setPlayingAudioId,
 }) => {
- // const [isPlaying, setIsPlaying] = React.useState(false);
+  const [isPlaying, setIsPlaying] = React.useState(false);
   const audioRef = React.useRef(null);
   const currentUser = useRecoilValue(userAtom);
-  const [playingAudioId, setPlayingAudioId] = useState(null)
+ // const [playingAudioId, setPlayingAudioId] = useState(null)
   return (
 
       <MotionFlex
