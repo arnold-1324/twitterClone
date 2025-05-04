@@ -74,16 +74,14 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   };
 
   const handleDelete = async (messageId) => {
+    debugger;
     const response = await fetch("api/messages/deleteforme", {
-      method: "DELETE",
+      method: "PUT",
       body: JSON.stringify({ messageId }),
     });
 
     if (!response.ok) {
-      showToast({
-        type: "error",
-        title: "Error deleting message",
-      });
+      showToast("Error",  "Unexpected error", "error");
       return;
     }
 
