@@ -26,8 +26,8 @@ router.post('/reply', protectRoute, upload.single('media'), replyToMessage);   /
 
 router.put('/reaction', protectRoute,reactTomsg); 
 
-//router.put('/deleteforme',protectRoute, deleteFormeMessage); 
+router.put('/deleteforme',protectRoute, deleteMessage); 
 
-router.delete('/deleteforme', protectRoute, deleteMessage);     //working
+//router.put('/deleteMsg/deleteforme', protectRoute, deleteMessage); // working
 
 export default router;

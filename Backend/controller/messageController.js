@@ -489,22 +489,50 @@ export const replyToMessage = async (req, res) => {
 
 
 export const deleteMessage = async (req, res) => {
-  const { messageId } = req.body;
+  // Fix: get messageId from req.body or req.query or req.params
+  let messageId = req.body.messageId || req.query.messageId || req.params.messageId;
+  if (!messageId) {
+    // Try to get messageId from nested body (for some clients)
+    if (req.body && typeof req.body === 'object') {
+      messageId = req.body["messageId"];
+    }
+  }
   const userId = req.user._id;
 
-  try {
-    
-      const message = await Message.findById(messageId);
+  console.log('typeof messageId:', typeof messageId);
+  console.log('messageId:', messageId);
 
-      if ( !message || message.sender!=userId) {
-          return res.status(404).json({ error: "Message not found or not authorized" });
+  try {
+      if (!messageId) {
+          return res.status(400).json({ error: "Message ID is required" });
+      }
+      const message = await Message.findById(messageId);
+      console.log('message:', message);
+      if (!message) {
+          return res.status(404).json({ error: "Message not found" });
       }
 
-      await Message.findByIdAndDelete(messageId);
+      // Fix: get recipient from conversation
+      const conversation = await Conversation.findById(message.conversationId).lean();
+      let recipientId = null;
+      if (conversation && conversation.participants) {
+          recipientId = conversation.participants.find(
+              (id) => id.toString() !== userId.toString()
+          );
+      }
+
+      if (message.sender.toString() !== userId.toString()) {
+          return res.status(403).json({ error: "Not authorized to delete this message" });
+      }
+      message.deletedFor.push(userId);
+      await message.save();
+
       const io = getIO();
-      const recipientSocketId = getRecipientSocketId(message.recipient);
-      if (recipientSocketId) {
-          io.to(recipientSocketId).emit("messageDeleted", { messageId });
+      if (recipientId) {
+          const recipientSocketId = getRecipientSocketId(recipientId);
+          if (recipientSocketId) {
+              io.to(recipientSocketId).emit("messageDeleted", { messageId });
+          }
       }
 
       res.status(200).json({ success: true, message });

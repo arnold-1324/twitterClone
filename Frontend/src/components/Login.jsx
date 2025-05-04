@@ -41,6 +41,12 @@ export default function SimpleCard() {
         body: JSON.stringify(inputs)
       });
       const data = await res.json();
+
+       if(!res.ok){
+        showToast("Error", data.message || "Login failed", "error");
+        return;
+       }
+
       if (data.error) {
         showToast("Error", data.error, "error");
         return;
@@ -48,6 +54,7 @@ export default function SimpleCard() {
       console.log(data.user);
       localStorage.setItem("user-threads", JSON.stringify(data.user));
       setUser(data.user);
+     
     } catch (error) {
       console.log(error);
       showToast("Error", "An error occurred during login", "error");
@@ -64,12 +71,19 @@ export default function SimpleCard() {
         body: JSON.stringify({ Femail })
       });
       const data = await res.json();
+      if (!res.ok) {
+        showToast("Error", data.message || "Request failed", "error");
+        return;
+      }
+
       if (data.error) {
         showToast("Error", data.error, "error");
         return;
       }
+
+
       showToast("Success", "A reset link has been sent to your email", "success");
-      setForgot(false); // Go back to login after successful request
+      setForgot(false); 
     } catch (error) {
       console.log(error);
       showToast("Error", "An error occurred during Reset-password", "error");
