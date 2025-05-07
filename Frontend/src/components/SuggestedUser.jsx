@@ -1,12 +1,12 @@
-import { Avatar, Box, Button, Flex, Text, Tooltip, Badge ,useColorModeValue} from "@chakra-ui/react";
+import { Avatar, Box, Button, Flex, Text, Tooltip, Badge, useColorModeValue } from "@chakra-ui/react";
 import { Link } from "react-router-dom";
 import { FiCheckCircle } from "react-icons/fi";
 import useFollowUnfollow from "../hooks/useFollowUnfollow";
 
 const SuggestedUser = ({ user }) => {
 	const { handleFollowUnfollow, following, updating } = useFollowUnfollow(user);
+	const mutualText = user.MutualFriends?.map((mf) => mf.username).join(', ');
 
-	console.log(user);
 	return (
 		<Flex
 			p={4}
@@ -47,6 +47,11 @@ const SuggestedUser = ({ user }) => {
 					{user.bio && (
 						<Text fontSize="xs" color="gray.400" mt={1} noOfLines={1}>
 							{user.bio}
+						</Text>
+					)}
+					{mutualText && (
+						<Text fontSize="xs" color="gray.400" mt={1} noOfLines={1}>
+							Followed by {mutualText}
 						</Text>
 					)}
 				</Box>
