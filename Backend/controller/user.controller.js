@@ -106,33 +106,75 @@ export const getUserProfile = async (req, res) => {
 
 
 
-export const getSuggestedUser=async(req,res)=>{
+export const getSuggestedUser = async (req, res) => {
 
-    try{
-       const userId = req.user._id;
+  try {
+    const userId = req.user._id;
 
-       const userFollowedByme= await User.findById(userId).select("following");
-       
-       const users=await User.aggregate([
+    const { following } = await User.findById(userId).select("following");
+
+    const direct = new Set(following.map((f) => f.toString()));
+
+   //console.log("Direct following:", direct);
+
+    const layer2Map = new Map();
+
+    for (const friendid of direct) {
+      const { following: theirFollowing } = await User.findById(friendid).select("following");
+      theirFollowing.forEach((f) => {
+        const id =f.toString();
+        if(!direct.has(id) && id !==userId.toString())
         {
-            $match:{
-                _id: {$ne:userId}
-            }
-        },
-        {$sample:{size:10}}
-    
-       ])
-       const filtedUser = users.filter(user=>!userFollowedByme.following.includes(user._id))
-
-       const suggeatedUser = filtedUser.slice(0,4);
-
-       suggeatedUser.forEach(user=>user.password=null)
-
-       res.status(200).json(suggeatedUser)
-    }catch(error){
-        res.status(500).json({error:error.message});
-        console.log("Error in suggestedUser:",error.message);  
+         if(!layer2Map.has(id))
+         {
+          layer2Map.set(id,new Set());
+         }
+         layer2Map.get(id).add(friendid);
+        }
+      });
     }
+    
+    //console.log("Layer 2 following:", layer2Map);
+    const suggestedUser = Array.from(layer2Map.keys()).slice(0, 4);
+    const users = await User.find({ _id: { $in: suggestedUser } }).select("-password -updatedAt -verificationToken -verificationTokenExpiresAt");
+    
+
+    const mutualFriendIds = new Set();
+    for (const ids of layer2Map.values()) {
+      ids.forEach((id) => mutualFriendIds.add(id.toString()));
+    }
+
+    const mutualFriends = await User.find({ _id: { $in: Array.from(mutualFriendIds) } }).select("username _id");
+    const mutualMap = new Map(mutualFriends.map((u) => [u._id.toString(), u.username]));
+
+    const result = users.map((user) => {
+      const mutualIds = Array.from(layer2Map.get(user._id.toString()) || []);
+      const mutualUsernames = mutualIds.map((id) => ({
+        _id: id,
+        username: mutualMap.get(id),
+      }));
+      return {
+        ...user.toObject(),
+        MutualFriends: mutualUsernames,
+      };
+    });
+
+
+    // console.log("Suggested users with mutuals:", JSON.stringify(
+    //   result.map((u) => ({
+    //     _id: u._id,
+    //     username: u.username,
+    //     MutualFriends: u.MutualFriends,
+    //   })),
+    //   null,
+    //   2
+    // ));
+
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+    console.log("Error in suggestedUser:", error.message);
+  }
 }
 
 export const UpdateUserProfile = async (req, res) => {
