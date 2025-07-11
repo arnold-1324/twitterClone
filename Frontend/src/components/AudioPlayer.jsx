@@ -1,97 +1,87 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react";
+import WaveSurfer from "wavesurfer.js";
 
 const PlayIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
     <path d="M5 3.5v13l11-6.5-11-6.5z" />
   </svg>
-)
+);
 
 const PauseIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-    <path d="M5 3.5h3v13h-3zm7 0h3v13h-3z" />
+    <path d="M5 3.5h3v13H5zm7 0h3v13h-3z" />
   </svg>
-)
+);
 
-const AudioPlayer = ({ audioUrl, isPlaying, onPlay }) => {
-  const audioRef = useRef(null);
+const AudioPlayer = ({ audioUrl }) => {
+  const waveRef = useRef(null);
+  const wavesurfer = useRef(null);
+
+  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [duration, setDuration] = useState(0);
 
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.playbackRate = playbackRate;
-      if (isPlaying) {
-        audioRef.current.play();
-      } else {
-        audioRef.current.pause();
-      }
-    }
-  }, [isPlaying, playbackRate, audioUrl]);
-
-  const togglePlay = () => {
-    if (!isPlaying) {
-      onPlay && onPlay();
-    } else {
-      audioRef.current && audioRef.current.pause();
-      onPlay && onPlay(null);
-    }
-  };
-
-  const handlePause = () => {
-    if (isPlaying && onPlay) {
-      setTimeout(() => onPlay(null), 0);
-    }
-  };
-
-  const handlePlaybackSpeedChange = () => {
-    let newRate;
-    if (playbackRate === 1) newRate = 1.5;
-    else if (playbackRate === 1.5) newRate = 2;
-    else newRate = 1;
-    setPlaybackRate(newRate);
-  };
-
-  const handleTimeUpdate = () => {
-    setCurrentTime(audioRef.current.currentTime);
-  };
-
-  const handleEnded = () => {
-    if (isPlaying && onPlay) {
-      setTimeout(() => onPlay(null), 0);
-    }
-  };
-
+  // Helper to format seconds into m:ss format.
   const formatTime = (time) => {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
+  useEffect(() => {
+    if (waveRef.current) {
+      wavesurfer.current = WaveSurfer.create({
+        container: waveRef.current,
+        waveColor: "#d1d1d1", // Light gray background wave
+        progressColor: "#9b59b6", // Purple progress wave
+        cursorColor: "transparent",
+        barWidth: 3,
+        barGap: 3,
+        height: 50, // Increased height for a taller waveform
+      });
+
+      wavesurfer.current.load(audioUrl);
+
+      wavesurfer.current.on("ready", () => {
+        setDuration(wavesurfer.current.getDuration() || 0);
+      });
+
+      wavesurfer.current.on("audioprocess", (time) => {
+        setCurrentTime(time);
+      });
+
+      wavesurfer.current.on("finish", () => {
+        setIsPlaying(false);
+        setCurrentTime(0);
+      });
+    }
+
+    return () => {
+      if (wavesurfer.current) wavesurfer.current.destroy();
+    };
+  }, [audioUrl]);
+
+  const togglePlay = () => {
+    if (wavesurfer.current) {
+      wavesurfer.current.playPause();
+      setIsPlaying(!isPlaying);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-3 p-3 rounded-full shadow-md w-full max-w-md bg-white">
+    <div className="flex items-center gap-3 px-4 py-2 rounded-full shadow-md w-full max-w-md bg-white">
       <button
         onClick={togglePlay}
-        className="flex items-center justify-center bg-black text-white w-10 h-10 rounded-full"
+        className="flex items-center justify-center bg-purple-500 text-white w-10 h-10 rounded-full"
       >
         {isPlaying ? <PauseIcon /> : <PlayIcon />}
       </button>
-      <audio
-        ref={audioRef}
-        src={audioUrl}
-        onTimeUpdate={handleTimeUpdate}
-        onPause={handlePause}
-        onEnded={handleEnded}
-        style={{ width: '100%' }}
-      />
-      <button
-        onClick={handlePlaybackSpeedChange}
-        className="ml-3 px-2 py-1 text-sm bg-gray-200 rounded-full"
-      >
-        {playbackRate}x
-      </button>
-      <span className="text-gray-500 text-sm">{formatTime(currentTime)}</span>
+      <div ref={waveRef} className="w-full h-12" />
+      <span className="text-black text-sm">
+        {formatTime(currentTime) || "0:00"}
+      </span>
     </div>
   );
 };
 
-export default AudioPlayer
+export default AudioPlayer;

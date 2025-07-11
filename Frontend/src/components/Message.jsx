@@ -13,13 +13,13 @@ import {
   MenuItem,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
-import { FaPause, FaPlay } from "react-icons/fa";
 import { BsThreeDotsVertical, BsCheck2All } from "react-icons/bs";
 import Reaction from "./Reaction";
+import AudioPlayer from "./AudioPlayer";
 import formatMessageTime from "../Utils/Timeformate";
 import userAtom from "../atom/userAtom";
 import { useRecoilValue } from "recoil";
-import AudioPlayer from "./AudioPlayer";
+import audioFile from "../assets/sounds/spectacu.mp3"; // Import the audio file
 
 const MotionFlex = motion(Flex);
 const Message = ({
@@ -32,30 +32,28 @@ const Message = ({
   playingAudioId,
   setPlayingAudioId,
 }) => {
-  const [isPlaying, setIsPlaying] = React.useState(false);
-  const audioRef = React.useRef(null);
+
   const currentUser = useRecoilValue(userAtom);
  // const [playingAudioId, setPlayingAudioId] = useState(null)
   return (
-
-      <MotionFlex
-        direction="column"
-        justifySelf={isOwnMessage ? "flex-end" : "flex-start"}
-        width={message.audio ? "73%" :"70%"}
-        height={message.audio && "90px"}
-        rounded={message.audio && "full"}
-        maxWidth={"50%"}
-        p={1}
-        mt={2}
-        borderRadius="15px"
-        color="white"
-        boxShadow="md"
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.3 }}
-        position="relative"
-        bg={isOwnMessage ? "gray.900" : "gray.400"}
-      >
+    <MotionFlex
+      direction="column"
+      alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
+      width={message.audio && "73%"}
+      height={message.audio && "90px"}
+      rounded={message.audio && "full"}
+      maxWidth={"70%"}
+      p={1}
+      mt={2}
+      borderRadius="15px"
+      color="white"
+      boxShadow="md"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+      position="relative"
+      bg={isOwnMessage ? "gray.900" : "gray.400"}
+    >
       {message.replyTo && (
         <Box
           p={2}
@@ -177,17 +175,7 @@ const Message = ({
         </video>
       )}
       {message.audio && (
-        <AudioPlayer
-          audioUrl={message.audio}
-          isPlaying={playingAudioId === message._id}
-          onPlay={(id) => {
-            if (id === null) {
-              setPlayingAudioId(null)
-            } else {
-              setPlayingAudioId(message._id)
-            }
-          }}
-        />
+        <AudioPlayer audioUrl={audioFile} />
       )}
       {message.seen && (
         <Box

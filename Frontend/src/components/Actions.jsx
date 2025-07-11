@@ -198,6 +198,13 @@ const Actions = ({ post }) => {
 			});
 
 			await Promise.all(sharePostPromises);
+
+			setPosts((prevPosts) =>
+				prevPosts.map((p) =>
+					p._id === post._id ? { ...p, shareCount: p.shareCount + selectedUsers.length } : p
+				)
+			);
+
 			alert("Post shared successfully!");
 			setSelectedUsers([]);
 			setText("");
