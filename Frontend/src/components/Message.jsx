@@ -13,12 +13,13 @@ import {
   MenuItem,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
-import { FaPause, FaPlay } from "react-icons/fa";
 import { BsThreeDotsVertical, BsCheck2All } from "react-icons/bs";
 import Reaction from "./Reaction";
+import AudioPlayer from "./AudioPlayer";
 import formatMessageTime from "../Utils/Timeformate";
 import userAtom from "../atom/userAtom";
 import { useRecoilValue } from "recoil";
+import audioFile from "../assets/sounds/spectacu.mp3"; // Import the audio file
 
 const MotionFlex = motion(Flex);
 const Message = ({
@@ -29,8 +30,7 @@ const Message = ({
   updateMessageReactions,
   handleHighlightMessage,
 }) => {
-  const [isPlaying, setIsPlaying] = React.useState(false);
-  const audioRef = React.useRef(null);
+
   const currentUser = useRecoilValue(userAtom);
 
   return (
@@ -40,7 +40,7 @@ const Message = ({
       width={message.audio && "73%"}
       height={message.audio && "90px"}
       rounded={message.audio && "full"}
-      maxWidth={"45%"}
+      maxWidth={"70%"}
       p={1}
       mt={2}
       borderRadius="15px"
@@ -173,76 +173,7 @@ const Message = ({
         </video>
       )}
       {message.audio && (
-        <Flex
-          direction="row"
-          alignItems="center"
-          gap={4}
-          w="100%"
-          justify="flex-start"
-          p={2}
-        >
-          <Flex
-            direction="column"
-            w="100%"
-            bg="gray.900"
-            borderRadius="md"
-            p={4}
-            boxShadow="lg"
-            alignItems="center"
-            justify="center"
-            rounded={"full"}
-            height={"70px"}
-            mb={2}
-          >
-            <Flex
-              direction="row"
-              alignItems="center"
-              justify="center"
-              w="100%"
-              gap={4}
-            >
-              <motion.div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "10px",
-                  borderRadius: "50%",
-                  backgroundColor: "green",
-                  cursor: "pointer",
-                  boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.2)",
-                }}
-                onClick={() => {
-                  if (isPlaying) {
-                    document
-                      .getElementById("audioPlayer")
-                      .pause();
-                  } else {
-                    document.getElementById("audioPlayer").play();
-                  }
-                  setIsPlaying(!isPlaying);
-                }}
-              >
-                {isPlaying ? (
-                  <FaPause size={20} color="white" />
-                ) : (
-                  <FaPlay size={20} color="white" />
-                )}
-              </motion.div>
-
-              <motion.audio
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => setIsPlaying(false)}
-                id="audioPlayer"
-                ref={audioRef}
-                style={{ display: "none" }}
-              >
-                <source src={message.audio} type="audio/mp3" />
-              </motion.audio>
-            </Flex>
-          </Flex>
-        </Flex>
+        <AudioPlayer audioUrl={audioFile} />
       )}
       {message.seen && (
         <Box

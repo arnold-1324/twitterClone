@@ -50,6 +50,11 @@ const CreatePost = () => {
         }
     };
 
+    const handleCloseMedia = () => {
+        setMediaUrl("");
+        fileRef.current.value = null; // Reset the file input
+    };
+
     const handleTextChange = (e) => {
         const inputText = e.target.value;
         if (inputText.length > MAX_CHAR) {
@@ -171,7 +176,7 @@ const CreatePost = () => {
                                     animation="fadeIn 0.4s ease-out"
                                 />
                                 <CloseButton
-                                    onClick={() => setMediaUrl("")}
+                                    onClick={handleCloseMedia}
                                     bg="gray.800"
                                     position="absolute"
                                     top={2}
