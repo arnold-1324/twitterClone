@@ -8,11 +8,11 @@ export default defineConfig({
 		port: 3000,
 		proxy: {
 			"/api": {
-				target: "https://twitterclone-production-76a2.up.railway.app/",
+				target: "https://abundant-truth-production.up.railway.app/",
 				changeOrigin: true,
 				secure: false,
 			},
-			
 		},
 	},
+});
 });
