@@ -16,10 +16,11 @@ export const SocketContextProvider = ({ children }) => {
 	const user = useRecoilValue(userAtom);
 
 	useEffect(() => {
-		const socket = io("/", {
+		const socket = io("https://abundant-truth-production.up.railway.app", {
 			query: {
 				userId: user?._id,
 			},
+			transports: ["websocket"], // recommended for Railway
 		});
 
 		setSocket(socket);

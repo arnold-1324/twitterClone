@@ -50,11 +50,14 @@ app.use("/api/notification",Notification);
 app.use("/api/messages",MessageRoutes);
 app.use('/uploads', express.static('uploads'));
 
-// Serve frontend static files
+// Serve frontend build
 const __dirname = path.resolve();
-app.use(express.static(path.join(__dirname, "/frontend/dist")));
+app.use(express.static(path.join(__dirname, "Frontend", "dist")));
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
+  // Only serve index.html for non-API routes
+  if (!req.originalUrl.startsWith("/api") && !req.originalUrl.startsWith("/uploads")) {
+    res.sendFile(path.join(__dirname, "Frontend", "dist", "index.html"));
+  }
 });
 
 app.listen(PORT,()=>{
