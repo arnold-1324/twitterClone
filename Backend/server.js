@@ -8,7 +8,7 @@ import { setupSocket } from "./socket/socket.js";
 
 import compression from "compression";
 import rateLimit from "express-rate-limit";
-import helmet from "helmet";
+//import helmet from "helmet";
 import cors from "cors";
 import mongoSanitize from "express-mongo-sanitize";
 import hpp from "hpp";
@@ -38,7 +38,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-app.use(helmet()); 
+//app.use(helmet()); 
 app.use(cors()); 
 app.use(mongoSanitize()); 
 app.use(xss()); 
@@ -63,12 +63,9 @@ setupSocket(httpServer);
 
 // Serve frontend build
 const __dirname = path.resolve();
-app.use(express.static(path.join(__dirname, "Frontend", "dist")));
-app.get("*", (req, res) => {
-  // Only serve index.html for non-API routes
-  if (!req.originalUrl.startsWith("/api") && !req.originalUrl.startsWith("/uploads")) {
-    res.sendFile(path.join(__dirname, "Frontend", "dist", "index.html"));
-  }
+app.use(express.static(path.join(__dirname, 'Frontend', 'build')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'Frontend', 'build', 'index.html'));
 });
 
 httpServer.listen(PORT, () => {
