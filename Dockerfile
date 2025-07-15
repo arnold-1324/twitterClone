@@ -1,27 +1,28 @@
-# --- Stage 1: build Frontend ---
+# ── Stage 1: Build the Frontend ───────────────────────────
 FROM node:18-alpine AS frontend-builder
-WORKDIR /app
+WORKDIR /app/Frontend
 
-# Copy only what’s needed
-COPY package*.json ./
-COPY Frontend/package*.json Frontend/
+# Copy only the Frontend’s package files, install & build
+COPY Frontend/package*.json ./
 RUN npm ci
-RUN npm install --prefix Frontend
-RUN npm run build --prefix Frontend
+COPY Frontend/ ./
+RUN npm run build
 
-# --- Stage 2: build & bundle Backend + static Frontend ---
+# ── Stage 2: Install Backend & Assemble the final image ──
 FROM node:18-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Install prod deps
+# Copy & install only production deps, but ignore postinstall hooks
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
-# Copy server code and built frontend
+# Bring in your backend code
 COPY Backend/ ./Backend/
+
+# Pull in the static build from stage 1
 COPY --from=frontend-builder /app/Frontend/build ./Frontend/build
 
-# Expose port and run
+# Expose and run
 EXPOSE 5000
 CMD ["node", "Backend/server.js"]
