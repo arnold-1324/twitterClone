@@ -7,7 +7,8 @@
     "test": "jest",
     "dev": "nodemon Backend/server.js",
     "start": "node Backend/server.js",
-    "build": "npm install && npm install --prefix frontend && npm run build --prefix frontend"
+   "build": "npm install --prefix Frontend && npm run build --prefix Frontend",
+    "postinstall": "npm run build"
   },
   "keywords": [],
   "author": "",
