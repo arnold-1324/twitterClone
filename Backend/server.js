@@ -39,6 +39,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 //app.use(helmet()); 
+app.use(express.static(path.join(__dirname, '../Frontend/dist')));
 app.use(cors()); 
 app.use(mongoSanitize()); 
 app.use(xss()); 
@@ -55,13 +56,12 @@ app.use("/api/users",UserRoutes);
 app.use("/api/posts",PostRouters);
 app.use("/api/notification",Notification);
 app.use("/api/messages",MessageRoutes);
-app.use('/uploads', express.static('uploads'));
+//app.use('/uploads', express.static('uploads'));
 
 
 const httpServer = createServer(app);
 setupSocket(httpServer);
 
-// Serve frontend build
 const __dirname = path.resolve();
 app.use(express.static(path.join(__dirname, 'Frontend', 'build')));
 app.get('*', (req, res) => {
