@@ -47,7 +47,7 @@ const HomePage = () => {
             <Spinner size="xl" />
           </Flex>
         )}
-        <SongPage /> 
+       {/* <SongPage /> */} 
         {/* <StoryEditPage /> */}
         {posts.map((post) => (
           <Post key={post._id} post={post} postedBy={post.postedBy} />
