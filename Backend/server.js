@@ -28,7 +28,7 @@ app.use("/api/users",UserRoutes);
 app.use("/api/posts",PostRouters);
 app.use("/api/notification",Notification);
 app.use("/api/messages",MessageRoutes);
-app.use('/uploads', express.static('uploads'));
+//app.use('/uploads', express.static('uploads'));
 
 const httpServer = createServer(app);
 setupSocket(httpServer);
