@@ -11,6 +11,7 @@ import PostRouters from "./routers/post.routers.js";
 import connectmongoDB from "./DB/ConnectMongodb.js";
 import Notification from "./routers/notification.routers.js"; 
 import MessageRoutes from "./routers/message.routers.js";
+import GroupRoutes from "./routers/group.routers.js";
 
 dotenv.config();
 
@@ -28,6 +29,7 @@ app.use("/api/users",UserRoutes);
 app.use("/api/posts",PostRouters);
 app.use("/api/notification",Notification);
 app.use("/api/messages",MessageRoutes);
+app.use("/api/groups", GroupRoutes);
 //app.use('/uploads', express.static('uploads'));
 
 const httpServer = createServer(app);

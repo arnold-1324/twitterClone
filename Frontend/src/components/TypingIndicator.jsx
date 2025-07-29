@@ -3,9 +3,18 @@ import { Box, Flex, useColorModeValue, Image } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import kitten from "../../public/kitten.png";
 
+import  { useEffect } from "react";
+
+
 const TypingIndicator = ({ usernames = [] }) => {
   const dotColor     = useColorModeValue("blue.500", "white");
   const waveColor    = useColorModeValue("blue.400", "blue.200");
+
+  // Preload the kitten image
+  useEffect(() => {
+    const img = new window.Image();
+    img.src = kitten;
+  }, []);
 
   return (
     <Box
