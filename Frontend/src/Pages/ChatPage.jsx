@@ -20,6 +20,7 @@ import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAto
 import userAtom from "../atom/userAtom";
 import { useSocket } from "../context/SocketContext";
 import { motion } from "framer-motion";
+import { InviteModal, PermissionsDropdown, ConversationInput } from "../components/GroupUIComponents";
 
 const MotionFlex = motion(Flex);
 const MotionBox = motion(Box);
@@ -33,6 +34,8 @@ const ChatPage = () => {
   const currentUser = useRecoilValue(userAtom);
   const showToast = useShowToast();
   const { socket, onlineUsers } = useSocket();
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [groupPermissions, setGroupPermissions] = useState(null);
      
   const isMobileView = useBreakpointValue({ base: true, md: false }); // Mobile view condition
 
@@ -160,6 +163,10 @@ const ChatPage = () => {
     );
   });
 
+  // Helper: is current conversation a group?
+  const isGroupConversation = selectedConversation && selectedConversation.isGroup;
+  const groupId = isGroupConversation ? selectedConversation._id : null;
+
   return (
     <Box
       position="absolute"
@@ -178,6 +185,10 @@ const ChatPage = () => {
       >
         {(!isMobileView || !selectedConversation._id) && (
           <Flex flex={30} flexDirection="column" gap={4} maxH={"600px"}>
+            {/* Add group creation/invite button */}
+            <Button colorScheme="teal" mb={2} onClick={() => setInviteModalOpen(true)}>
+              Manage Groups
+            </Button>
             <form onSubmit={handleConversationSearch}>
               <Flex gap={2}>
                 <Input
@@ -240,7 +251,29 @@ const ChatPage = () => {
 
         {selectedConversation._id ? (
           <Flex flex={70} flexDirection="column" gap={2}>
+            {/* If group, show permissions dropdown and invite modal */}
+            {isGroupConversation && (
+              <Box mb={2}>
+                <PermissionsDropdown
+                  groupId={groupId}
+                  currentUserId={currentUser._id}
+                  value={groupPermissions || (selectedConversation.permissions?.canMessage || "all")}
+                  onChange={setGroupPermissions}
+                />
+                <Button size="sm" ml={2} onClick={() => setInviteModalOpen(true)}>
+                  Invite Members
+                </Button>
+              </Box>
+            )}
             <MessageContainer isMobileView={isMobileView} setSelectedConversation={setSelectedConversation} />
+            {/* Use group-aware input for group conversations */}
+            {isGroupConversation && (
+              <ConversationInput
+                group={selectedConversation}
+                currentUserId={currentUser._id}
+                onSend={msg => {/* send message logic here */}}
+              />
+            )}
           </Flex>
         ) : (
           !isMobileView && (
@@ -258,6 +291,15 @@ const ChatPage = () => {
           )
         )}
       </Flex>
+      {/* Invite modal for group management */}
+      {isGroupConversation && (
+        <InviteModal
+          isOpen={inviteModalOpen}
+          onClose={() => setInviteModalOpen(false)}
+          groupId={groupId}
+          currentUserId={currentUser._id}
+        />
+      )}
     </Box>
   );
 };
