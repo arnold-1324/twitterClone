@@ -125,7 +125,7 @@ const SongPage = () => {
   }, [isPlaying, lyrics.length]);
 
   return (
-    <Box p={6} bg="gray.900" minH="100vh">
+    <Box p={6} bg="gray.900" minH="100vh" maxW="100vw" >
       {showAnimation && (
         <Box
           position="fixed"
@@ -220,7 +220,7 @@ const SongPage = () => {
               size="lg"
               onClick={() => downloadSong(currentSong)}
               aria-label="Download Song"
-              className="download-btn"
+              className="download-btn unique-btn"
             />
           </Flex>
           <Seekbar

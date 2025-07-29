@@ -1,0 +1,14 @@
+.lazy-image-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.lazy-image {
+  width: 100%;
+  height: auto;
+  transition: filter 0.3s ease;
+}
+
+.lazy-image.blurred {
+  filter: blur(10px);
+}

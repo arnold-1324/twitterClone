@@ -9,6 +9,17 @@ import Conversation from "../models/conversation.model.js";
 const app = express();
 const server = http.createServer(app);
 
+const io = new Server(server, {
+    cors: {
+        origin: [
+            "http://localhost:3000",
+            "https://twitterclone-production-40ce.up.railway.app/"
+        ],
+        methods: ["GET", "POST"],
+    },
+});
+
+
 let ioInstance = null;
 
 export function setupSocket(server) {

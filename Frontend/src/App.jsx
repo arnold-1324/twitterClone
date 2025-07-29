@@ -17,6 +17,7 @@ const UpdateProfile = React.lazy(() => import("./Pages/UpdateProfile"));
 const ResetPasswordForm = React.lazy(() => import("./components/ForgotpassCard"));
 const CreatePost = React.lazy(() => import("./components/CreatePost"));
 const NotificationPage = React.lazy(() => import("./Pages/NotificationPage"));
+const SettingPage = React.lazy(() => import("./Pages/SettingPage"));
 
 function App() {
   const { pathname } = useLocation();
@@ -66,6 +67,7 @@ function App() {
             <Route path="/:username" element={user ? <Userpage /> : <Navigate to="/auth" />} />
             <Route path="/chat" element={user ? <ChatPage /> : <Navigate to="/auth" />} />
             <Route path="/notifications" element={user ? <NotificationPage /> : <Navigate to="/auth" />} />
+            <Route path="/settings" element={user ? <SettingPage /> : <Navigate to="/auth" />} />
             <Route path="/:username/post/:pid" element={<PostPage />} />
           </Routes>
         </Suspense>

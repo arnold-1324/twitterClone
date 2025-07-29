@@ -7,7 +7,8 @@ import postsAtom from "../atom/postsAtom";
 import SuggestedUsers from "../components/SuggestedUsers";
 import SongPage from "../components/SongPage";
 //import StoryEditPage from "../components/StoryEditPage";
-
+import AudioPlayer from "../components/AudioPlayer";
+import audioFile from "../assets/sounds/spectacu.mp3"; // Import the audio file
 
 
 const HomePage = () => {
