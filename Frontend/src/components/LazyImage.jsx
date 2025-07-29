@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import PropTypes from "prop-types";
+import "./LazyImage.css"; // Import the CSS file
 
 const LazyImage = ({ src, alt, className = "", ...props }) => {
   const [isBlurred, setIsBlurred] = useState(true);
@@ -12,13 +13,14 @@ const LazyImage = ({ src, alt, className = "", ...props }) => {
   }, []);
 
   return (
-    <div className={`lazy-image-wrapper ${className}`} style={{ position: "relative", overflow: "hidden" }}>
+    <div className={` ${className}`} style={{ position: "relative", overflow: "hidden" }}>
       <img
         src={src}
         alt={alt}
-        className={`lazy-image ${isBlurred ? "blurred" : ""}`}
+        className={` ${isBlurred ? "blurred" : ""}`}
         onLoad={handleLoad}
         style={{
+          borderRadius: "0.5rem",
           width: "100%",
           height: "auto",
           filter: isBlurred ? "blur(10px)" : "none",

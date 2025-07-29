@@ -29,6 +29,7 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",
     "merge-images": "^2.0.0",
+    "newchatapp": "file:..",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.4.0",

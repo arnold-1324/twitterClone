@@ -111,66 +111,31 @@ export const getSuggestedUser = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const { following } = await User.findById(userId).select("following");
+    const { following } = await User.findById(userId).select('following');
 
-    const direct = new Set(following.map((f) => f.toString()));
+    const directSet = new Set(following.map((f) => f.toString()));
 
-   //console.log("Direct following:", direct);
-
-    const layer2Map = new Map();
-
-    for (const friendid of direct) {
-      const { following: theirFollowing } = await User.findById(friendid).select("following");
-      theirFollowing.forEach((f) => {
-        const id =f.toString();
-        if(!direct.has(id) && id !==userId.toString())
-        {
-         if(!layer2Map.has(id))
-         {
-          layer2Map.set(id,new Set());
-         }
-         layer2Map.get(id).add(friendid);
-        }
-      });
-    }
-    
-    //console.log("Layer 2 following:", layer2Map);
-    const suggestedUser = Array.from(layer2Map.keys()).slice(0, 4);
-    const users = await User.find({ _id: { $in: suggestedUser } }).select("-password -updatedAt -verificationToken -verificationTokenExpiresAt");
-    
-
-    const mutualFriendIds = new Set();
-    for (const ids of layer2Map.values()) {
-      ids.forEach((id) => mutualFriendIds.add(id.toString()));
+    const layer2 = new Set();
+    for (const friendId of directSet) {
+      const { following: theirFollows } = await User
+        .findById(friendId)
+        .select('following');
+      theirFollows.forEach(f => layer2.add(f.toString()));
     }
 
-    const mutualFriends = await User.find({ _id: { $in: Array.from(mutualFriendIds) } }).select("username _id");
-    const mutualMap = new Map(mutualFriends.map((u) => [u._id.toString(), u.username]));
+    layer2.delete(userId);
+    for (const id of directSet) {
+      layer2.delete(id);
+    }
 
-    const result = users.map((user) => {
-      const mutualIds = Array.from(layer2Map.get(user._id.toString()) || []);
-      const mutualUsernames = mutualIds.map((id) => ({
-        _id: id,
-        username: mutualMap.get(id),
-      }));
-      return {
-        ...user.toObject(),
-        MutualFriends: mutualUsernames,
-      };
-    });
+    const suggestedUser = Array.from(layer2).slice(0, 5);
+    const users = await User.find({ _id: { $in: suggestedUser } }).select('-password -updatedAt -verificationToken -verificationTokenExpiresAt');
+
+    console.log("suggestedUser:", users);
 
 
-    // console.log("Suggested users with mutuals:", JSON.stringify(
-    //   result.map((u) => ({
-    //     _id: u._id,
-    //     username: u.username,
-    //     MutualFriends: u.MutualFriends,
-    //   })),
-    //   null,
-    //   2
-    // ));
 
-    res.status(200).json(result);
+    res.status(200).json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
     console.log("Error in suggestedUser:", error.message);
