@@ -48,8 +48,12 @@ const HomePage = () => {
             <Spinner size="xl" />
           </Flex>
         )}
+<<<<<<< HEAD
          {/* <AudioPlayer audioUrl={audioFile} /> {/* Use the imported audio file *
         <SongPage />  */}
+=======
+       {/* <SongPage /> */} 
+>>>>>>> 6a425a5 (d-home test)
         {/* <StoryEditPage /> */}
         {posts.map((post) => (
           <Post key={post._id} post={post} postedBy={post.postedBy} />
