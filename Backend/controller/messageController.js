@@ -130,42 +130,50 @@ export const sendMessage = async (req, res) => {
     }
 
     // Create a new message document including media
-    const newMessage = new Message({
+    let newMessage = new Message({
       conversationId: conversation._id,
       sender: senderId,
       text: encryptedMessage.encryptedData,
-      img: img,  // Save the image URL here
+      img: img,
       video: video,
-      audio:audio,  // Save the video URL here
+      audio: audio,
       iv: encryptedMessage.iv,
     });
 
-    // Log message data before saving
- 
-
     await newMessage.save();
 
-   // console.log(newMessage);
+    // Populate all fields as in getMessages
+    newMessage = await Message.findById(newMessage._id)
+      .populate({ path: 'sender', select: 'username profileImg' })
+      .populate({ path: 'replyTo', select: 'text iv sender video img audio', populate: { path: 'sender', select: 'username profileImg' } })
+      .populate({ path: 'postReference', select: 'postedBy images', populate: { path: 'postedBy', select: 'username profileImg' } })
+      .populate({ path: 'reactions', select: 'user type', populate: { path: 'user', select: 'username profileImg' } })
+      .lean();
 
-     const decryptedMessage = decrypt({
-      iv: newMessage.iv,
-      encryptedData: newMessage.text,
-    });
+    // Decrypt text and replyTo text
+    const decryptSafely = ({ iv, encryptedData }) => {
+      try {
+        return decrypt({ iv, encryptedData });
+      } catch {
+        return 'Bad message';
+      }
+    };
 
-   // console.log(newMessage);
-
-        const socketPayload = {
-      ...newMessage._doc,
-      text: decryptedMessage,
-      iv:    undefined,
+    const socketPayload = {
+      ...newMessage,
+      text: newMessage.iv ? decryptSafely({ iv: newMessage.iv, encryptedData: newMessage.text }) : newMessage.text,
+      iv: undefined,
+      replyTo: newMessage.replyTo ? {
+        ...newMessage.replyTo,
+        text: newMessage.replyTo.iv ? decryptSafely({ iv: newMessage.replyTo.iv, encryptedData: newMessage.replyTo.text }) : newMessage.replyTo.text,
+        iv: undefined,
+      } : null,
       isGroupMessage,
       groupId: groupId || null
-    }; 
-     // Save the message to the database   
+    };
 
     // Notify recipients via socket (if online)
     const io = getIO();
-    
     if (isGroupMessage) {
       // For group messages, emit to all group members except the sender
       const group = await Group.findById(groupId).lean();
@@ -192,16 +200,9 @@ export const sendMessage = async (req, res) => {
       }
     }
 
+  
 
-    const responseMessage = {
-      ...newMessage._doc,
-      text: decryptedMessage,  // Decrypted message text
-      iv: undefined,  // Remove the iv from the response
-      isGroupMessage: isGroupMessage,
-      groupId: groupId || null
-    };
-
-    res.status(201).json(responseMessage);  // Send the message back with media URL
+    res.status(201).json(socketPayload);  // Send the message back with media URL
 
   } catch (error) {
     console.error("Error in sendMessage:", error.message);

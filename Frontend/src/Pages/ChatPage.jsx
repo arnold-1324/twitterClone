@@ -34,8 +34,8 @@ const ChatPage = () => {
   const currentUser = useRecoilValue(userAtom);
   const showToast = useShowToast();
   const { socket, onlineUsers } = useSocket();
-  const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
-  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  //const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
+  //const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [groupPermissions, setGroupPermissions] = useState(null);
      
   const isMobileView = useBreakpointValue({ base: true, md: false }); // Mobile view condition
@@ -175,7 +175,7 @@ const ChatPage = () => {
               <Button 
                 colorScheme="teal" 
                 flex="1"
-                onClick={() => setCreateGroupModalOpen(true)}
+               // onClick={() => setCreateGroupModalOpen(true)}
                 leftIcon={<GiConversation />}
               >
                 Create Group
@@ -183,7 +183,7 @@ const ChatPage = () => {
               {isGroupConversation && (
                 <Button 
                   size="sm" 
-                  onClick={() => setInviteModalOpen(true)}
+                 // onClick={() => setInviteModalOpen(true)}
                   colorScheme="blue"
                 >
                   Invite
@@ -284,20 +284,20 @@ const ChatPage = () => {
       </Flex>
 
       {/* Create Group Modal */}
-      <CreateGroupModal
+      {/* <CreateGroupModal
         isOpen={createGroupModalOpen}
         onClose={() => setCreateGroupModalOpen(false)}
-      />
+      /> */}
 
       {/* Invite Modal for existing groups */}
-      {isGroupConversation && (
+      {/* {isGroupConversation && (
         <InviteModal
           isOpen={inviteModalOpen}
           onClose={() => setInviteModalOpen(false)}
           groupId={groupId}
           currentUserId={currentUser._id}
         />
-      )}
+      )} */}
     </Box>
   );
 };
