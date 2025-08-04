@@ -45,6 +45,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [typingUsers, setTypingUsers] = useState([]);
   const [isGroupManagementOpen, setIsGroupManagementOpen] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState(null);
 
   const clearSelectedConversation = () => {
     setSelectedConversation({});
@@ -319,37 +320,45 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
           </MotionFlex>
         ))
         : messages.map((message) => {
+          const sender = message.sender || {};
           const isOwnMessage =
-            currentUser._id === message.sender._id ||
-            currentUser._id === message.sender.id ||
+            currentUser._id === sender._id ||
+            currentUser._id === sender.id ||
             currentUser._id === message.sender;
           const isHighlighted = highlightedMessageId === message._id;
           return (
-            <Box
+            <Flex
               id="message-box"
               key={message._id}
-              alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
-              bg={isHighlighted ? "green.900" : "transparent"}
-              maxW={{ base: '90%', md: '75%' }}
-              minW="120px"
-              width="fit-content"
+              justifyContent={isOwnMessage ? "flex-end" : "flex-start"}
               mb={2}
-              px={2}
-              py={1}
-              borderRadius="lg"
-              wordBreak="break-word"
-              boxShadow="sm"
+              width="100%"
             >
-              <Message
-                message={message}
-                isOwnMessage={isOwnMessage}
-                handelselectedMsg={handelselectedMsg}
-                handleDelete={handleDelete}
-                updateMessageReactions={updateMessageReactions}
-                handleHighlightMessage={handleHighlightMessage}
-                isGroupMessage={isGroupConversation}
-              />
-            </Box>
+              <Box
+                bg={isHighlighted ? "green.900" : "transparent"}
+                minW="120px"
+                maxW={message.audio ? '100%' : { base: '90%', md: '75%' }}
+                width={message.audio ? '100%' : undefined}
+                borderRadius="lg"
+                wordBreak="break-word"
+                boxShadow="sm"
+                px={1}
+                py={1}
+                display="inline-block"
+              >
+                <Message
+                  message={message}
+                  isOwnMessage={isOwnMessage}
+                  handelselectedMsg={handelselectedMsg}
+                  handleDelete={handleDelete}
+                  updateMessageReactions={updateMessageReactions}
+                  handleHighlightMessage={handleHighlightMessage}
+                  isGroupMessage={isGroupConversation}
+                  playingAudioId={playingAudioId}
+                  setPlayingAudioId={handleSetPlayingAudioId}
+                />
+              </Box>
+            </Flex>
           );
         })}
       <div ref={messageEndRef} />
