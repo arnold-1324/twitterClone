@@ -208,15 +208,17 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
   return (
     <Flex
-    flex="70"
-    bg={useColorModeValue("gray.900", "black")}
-    borderRadius="md"
-    p={4}
-    flexDirection="column"
-    maxW="496.22px"
-    maxH="537.05px"
-    overflow="hidden"
-  >
+      flex="70"
+      bg={useColorModeValue("gray.900", "black")}
+      borderRadius="md"
+      p={4}
+      flexDirection="column"
+      maxW="496.22px"
+      maxH="537.05px"
+      overflow="hidden"
+      minWidth="340px"
+      width="100%"
+    >
     <Flex w="full" h={12} alignItems="center" gap={2} mb={2}>
       {isMobileView && (
         <IconButton
@@ -275,6 +277,8 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       borderRadius="md"
       bg={useColorModeValue("gray.800", "black")}
       boxShadow="md"
+      width="100%"
+      minWidth="0"
       sx={{
         "::-webkit-scrollbar": {
           width: "8px",
@@ -322,10 +326,19 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
           const isHighlighted = highlightedMessageId === message._id;
           return (
             <Box
+              id="message-box"
               key={message._id}
               alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
               bg={isHighlighted ? "green.900" : "transparent"}
-              width={'75%'}
+              maxW={{ base: '90%', md: '75%' }}
+              minW="120px"
+              width="fit-content"
+              mb={2}
+              px={2}
+              py={1}
+              borderRadius="lg"
+              wordBreak="break-word"
+              boxShadow="sm"
             >
               <Message
                 message={message}

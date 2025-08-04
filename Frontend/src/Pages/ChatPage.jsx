@@ -20,7 +20,7 @@ import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAto
 import userAtom from "../atom/userAtom";
 import { useSocket } from "../context/SocketContext";
 import { motion } from "framer-motion";
-import { CreateGroupModal, InviteModal, PermissionsDropdown } from "../components/GroupUIComponents";
+//import { CreateGroupModal, InviteModal, PermissionsDropdown } from "../components/GroupUIComponents";
 
 const MotionFlex = motion(Flex);
 const MotionBox = motion(Box);
@@ -115,6 +115,7 @@ const ChatPage = () => {
       );
 
       if (existingConversation) {
+        debugger;
         setSelectedConversation({
           _id: existingConversation._id,
           userId: searchedUser._id,
@@ -129,7 +130,10 @@ const ChatPage = () => {
           participants: [searchedUser],
         };
 
-        setConversations((prev) => [...prev, newConversation]);
+        setConversations((prev) => {
+          const filtered = prev.filter(c => c._id !== newConversation._id);
+          return [...filtered, newConversation];
+        });
         setSelectedConversation({
           _id: newConversation._id,
           userId: searchedUser._id,
@@ -250,7 +254,7 @@ const ChatPage = () => {
         {selectedConversation._id ? (
           <Flex flex={70} flexDirection="column" gap={2}>
             {/* If group, show permissions dropdown */}
-            {isGroupConversation && (
+            {/* {isGroupConversation && (
               <Box mb={2}>
                 <PermissionsDropdown
                   groupId={groupId}
@@ -259,7 +263,7 @@ const ChatPage = () => {
                   onChange={setGroupPermissions}
                 />
               </Box>
-            )}
+            )} */}
             <MessageContainer isMobileView={isMobileView} setSelectedConversation={setSelectedConversation} />
           </Flex>
         ) : (

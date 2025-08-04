@@ -145,32 +145,53 @@ export const sendMessage = async (req, res) => {
 
     await newMessage.save();
 
-    console.log(newMessage);
+   // console.log(newMessage);
+
+     const decryptedMessage = decrypt({
+      iv: newMessage.iv,
+      encryptedData: newMessage.text,
+    });
+
+   // console.log(newMessage);
+
+        const socketPayload = {
+      ...newMessage._doc,
+      text: decryptedMessage,
+      iv:    undefined,
+      isGroupMessage,
+      groupId: groupId || null
+    }; 
+     // Save the message to the database   
 
     // Notify recipients via socket (if online)
     const io = getIO();
     
     if (isGroupMessage) {
-      // For group messages, emit to conversation room
-      io.to(conversation._id.toString()).emit("newGroupMessage", {
-        message: newMessage,
-        groupId: groupId,
-        conversationId: conversation._id
-      });
+      // For group messages, emit to all group members except the sender
+      const group = await Group.findById(groupId).lean();
+      if (group) {
+        group.members
+          .filter(memberId => memberId.toString() !== senderId.toString())
+          .forEach(memberId => {
+            const memberSocketId = getRecipientSocketId(memberId.toString());
+            if (memberSocketId) {
+              io.to(memberSocketId).emit("newGroupMessage", {
+                message: socketPayload,
+                groupId: groupId,
+                conversationId: conversation._id
+              });
+            }
+          });
+      }
     } else {
       // For one-on-one messages
       const recipientSocketId = getRecipientSocketId(recipientId);
       if (recipientSocketId) {
-        io.to(recipientSocketId).emit("newMessage", newMessage);
+        io.to(recipientSocketId).emit("newMessage", socketPayload);
         io.to(recipientSocketId).emit("stopTyping", { conversationId: conversation._id });
       }
     }
 
-    // Decrypt the message to send back in response
-    const decryptedMessage = decrypt({
-      iv: newMessage.iv,
-      encryptedData: newMessage.text,
-    });
 
     const responseMessage = {
       ...newMessage._doc,
@@ -736,7 +757,7 @@ export const sendGroupMessage = async (req, res) => {
     }
 
     // Create the message
-    const newMessage = new Message({
+    let newMessage = new Message({
       conversationId: conversation._id,
       sender: senderId,
       text: encryptedMessage.encryptedData,
@@ -748,13 +769,8 @@ export const sendGroupMessage = async (req, res) => {
 
     await newMessage.save();
 
-    // Notify all group members via conversation room
-    const io = getIO();
-    io.to(conversation._id.toString()).emit("newGroupMessage", {
-      message: newMessage,
-      groupId: groupId,
-      conversationId: conversation._id
-    });
+    // Populate sender for the new message
+    newMessage = await newMessage.populate('sender', 'username profileImg');
 
     // Decrypt message for response
     const decryptedMessage = decrypt({
@@ -769,6 +785,14 @@ export const sendGroupMessage = async (req, res) => {
       isGroupMessage: true,
       groupId: groupId
     };
+
+    // Notify all group members via conversation room with the fully populated and decrypted message
+    const io = getIO();
+    io.to(conversation._id.toString()).emit("newGroupMessage", {
+      message: responseMessage,
+      groupId: groupId,
+      conversationId: conversation._id
+    });
 
     res.status(201).json(responseMessage);
   } catch (error) {
