@@ -16,7 +16,7 @@ export const SocketContextProvider = ({ children }) => {
 	const user = useRecoilValue(userAtom);
 
 	useEffect(() => {
-		const socket = io("https://twitterclone-production-40ce.up.railway.app/", {
+		const socket = io("http://localhost:5000/", {
 			query: {
 				userId: user?._id,
 			},

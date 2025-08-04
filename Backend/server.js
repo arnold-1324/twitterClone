@@ -32,6 +32,7 @@ const app=express();
 const PORT=process.env.PORT || 5000;
 app.use(compression());
 
+const __dirname = path.resolve();
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
     max: 100, 
@@ -63,7 +64,6 @@ app.use("/api/groups", GroupRoutes);
 const httpServer = createServer(app);
 setupSocket(httpServer);
 
-const __dirname = path.resolve();
 app.use(express.static(path.join(__dirname, 'Frontend', 'build')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'Frontend', 'build', 'index.html'));

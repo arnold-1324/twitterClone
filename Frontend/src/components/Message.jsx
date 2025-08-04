@@ -11,6 +11,7 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  Badge,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import { BsThreeDotsVertical, BsCheck2All } from "react-icons/bs";
@@ -31,6 +32,7 @@ const Message = ({
   handleHighlightMessage,
   playingAudioId,
   setPlayingAudioId,
+  isGroupMessage,
 }) => {
 
   const currentUser = useRecoilValue(userAtom);
@@ -39,10 +41,10 @@ const Message = ({
     <MotionFlex
       direction="column"
       alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
-      width={message.audio && "73%"}
+      width={"73%"}
       height={message.audio && "90px"}
       rounded={message.audio && "full"}
-      maxWidth={"70%"}
+    //  maxWidth={"80%"}
       p={1}
       mt={2}
       borderRadius="15px"
@@ -52,8 +54,29 @@ const Message = ({
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.3 }}
       position="relative"
-      bg={isOwnMessage ? "gray.900" : "gray.400"}
+      bg={isOwnMessage ? "blue.500" : "gray.600"}
+      borderBottomRightRadius={isOwnMessage ? "5px" : "15px"}
+      borderBottomLeftRadius={isOwnMessage ? "15px" : "5px"}
     >
+      {/* Show sender info for group messages */}
+      {isGroupMessage && !isOwnMessage && (
+        <Flex alignItems="center" mb={1}>
+          <Avatar
+            size="xs"
+            src={message.sender?.profileImg}
+            name={message.sender?.username}
+            mr={2}
+          />
+          <Text
+            fontSize="xs"
+            fontWeight="bold"
+            color={useColorModeValue("gray.200", "gray.300")}
+          >
+            {message.sender?.username}
+          </Text>
+        </Flex>
+      )}
+
       {message.replyTo && (
         <Box
           p={2}
@@ -161,7 +184,7 @@ const Message = ({
       )}
 
       {message.text && (
-        <Text color={isOwnMessage ? "gray.200" : "gray.900"}>
+        <Text color="white" fontSize="sm">
           {message.text}
         </Text>
       )}
@@ -179,7 +202,7 @@ const Message = ({
       )}
       {message.seen && (
         <Box
-          color={isOwnMessage ? "blue.400" : "gray.900"}
+          color={isOwnMessage ? "blue.200" : "gray.300"}
           mr={1}
           alignSelf={"flex-end"}
         >
@@ -251,7 +274,7 @@ const Message = ({
         fontSize="xs"
         align="right"
         mt={1}
-        color={isOwnMessage ? "gray.200" : "gray.900"}
+        color={isOwnMessage ? "blue.100" : "gray.300"}
       >
         {formatMessageTime(message.createdAt)}
       </Text>
