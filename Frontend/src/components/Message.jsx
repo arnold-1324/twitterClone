@@ -41,11 +41,13 @@ const Message = ({
     <MotionFlex
       direction="column"
       alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
-      width={"73%"}
+      maxW="65%"
+      minW="120px"
+      width="fit-content"
       height={message.audio && "90px"}
       rounded={message.audio && "full"}
     //  maxWidth={"80%"}
-      p={1}
+     // p={1}
       mt={2}
       borderRadius="15px"
       color="white"
