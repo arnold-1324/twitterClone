@@ -1,7 +1,11 @@
 import express from "express";
 import { protectRoute } from "../middleware/protectRoute.js";
+import { upload } from "../lib/utils/uploader.js";
 import {
   createGroup,
+  getUserGroups,
+  getGroupDetails,
+  updateGroup,
   inviteToGroup,
   acceptInvite,
   denyInvite,
@@ -17,11 +21,17 @@ import {
 
 const router = express.Router();
 
-
 router.use(protectRoute);
 
-// G
-router.post("/create", createGroup);
+// Group creation with file upload
+router.post("/create", upload.single("profileImage"), createGroup);
+
+// Get groups
+router.get("/user-groups", getUserGroups);
+router.get("/:groupId", getGroupDetails);
+
+// Update group
+router.put("/:groupId", upload.single("profileImage"), updateGroup);
 
 // Invite management
 router.post("/invite", inviteToGroup);
@@ -32,7 +42,7 @@ router.post("/deny-invite", denyInvite);
 router.post("/leave", leaveGroup);
 
 // Permissions
-router.post("/permissions", setGroupPermissions);
+router.put("/permissions", setGroupPermissions);
 
 // Blocking users
 router.post("/block", blockUserInGroup);
@@ -43,7 +53,7 @@ router.post("/generate-invite-link", generateInviteLink);
 router.post("/join-with-token", joinWithInvite);
 
 // Analytics
-router.get("/analytics", getGroupAnalytics);
+router.get("/:groupId/analytics", getGroupAnalytics);
 
 // Group deletion
 router.delete("/delete", deleteGroup);

@@ -41,6 +41,8 @@ const MessageInput = ({ setMessages }) => {
     const typingTimeout = useRef(null);
     const [uploadProgress, setUploadProgress] = useState(0);
 
+    // Check if this is a group conversation
+    const isGroupConversation = recipient.isGroup;
 
     useEffect(() => {
         if (!socket || !recipient._id) return;
@@ -74,9 +76,19 @@ const MessageInput = ({ setMessages }) => {
         try {
             const formData = new FormData();
             formData.append("message", messageText);
-            formData.append("recipientId", recipient.userId);
+            
+            // Add appropriate ID based on conversation type
+            if (isGroupConversation) {
+                formData.append("groupId", recipient.groupId);
+            } else {
+                formData.append("recipientId", recipient.userId);
+            }
+            
             if (replyMsg.id != "") {
                 formData.append("messageId", replyMsg.id);
+                if (isGroupConversation) {
+                    formData.append("groupId", recipient.groupId);
+                }
             }
             if (audioBlob) {
                 formData.append("media", audioBlob, "voice-message.webm");
@@ -84,10 +96,16 @@ const MessageInput = ({ setMessages }) => {
             if (mediaFile) {
                 formData.append("media", mediaFile);
             }
-            let url = "/api/messages/send";
+            
+            let url;
             if (replyMsg.id != "") {
                 url = "/api/messages/reply";
+            } else if (isGroupConversation) {
+                url = "/api/messages/send"; // The backend handles group messages via groupId
+            } else {
+                url = "/api/messages/send";
             }
+            
             await new Promise((resolve, reject) => {
                 upload(
                     url,
@@ -152,6 +170,7 @@ const MessageInput = ({ setMessages }) => {
             socket.emit("typing", {
                 conversationId: recipient._id,
                 isTyping: true,
+                isGroup: isGroupConversation,
             });
             lastTyping.current = now;
         }
@@ -160,6 +179,7 @@ const MessageInput = ({ setMessages }) => {
             socket.emit("typing", {
                 conversationId: recipient._id,
                 isTyping: false,
+                isGroup: isGroupConversation,
             });
         }, 1500);
     };
@@ -370,7 +390,7 @@ const MessageInput = ({ setMessages }) => {
 
                 {/* Message Input */}
                 <Input
-                    placeholder="Type a message"
+                    placeholder={isGroupConversation ? "Type a message to group..." : "Type a message"}
                     value={messageText}
                     onChange={handleTyping}
                     flex={1}

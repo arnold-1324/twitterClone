@@ -9,6 +9,8 @@ import {
   SkeletonCircle,
   IconButton,
   Box,
+  Badge,
+  Button,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import MessageInput from "./MessageInput";
@@ -21,9 +23,11 @@ import { useSocket } from "../context/SocketContext";
 import messageSound from "../assets/sounds/message.mp3";
 import { BiArrowBack } from "react-icons/bi";
 import { FaAnglesDown } from "react-icons/fa6";
+import { FaUsers, FaInfoCircle } from "react-icons/fa";
 import Message from "./Message";
 import TypingIndicator from "./TypingIndicator";
 import AudioPlayer from "./AudioPlayer";
+import GroupManagement from "./GroupManagement";
 
 const MotionFlex = motion(Flex);
 
@@ -40,6 +44,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   const [Msg, setSelectedMsg] = useRecoilState(selectedMsg);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [typingUsers, setTypingUsers] = useState([]);
+  const [isGroupManagementOpen, setIsGroupManagementOpen] = useState(false);
 
   const clearSelectedConversation = () => {
     setSelectedConversation({});
@@ -117,9 +122,32 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       );
     };
 
-    socket.on("newMessage", handleNewMessage);
+    const handleNewGroupMessage = ({ message, groupId, conversationId }) => {
+      if (selectedConversation._id === conversationId) {
+        setMessages((prev) => [...prev, message]);
+      }
+      if (!document.hasFocus()) {
+        new Audio(messageSound).play();
+      }
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation._id === conversationId
+            ? {
+              ...conversation,
+              lastMessage: { text: message.text, sender: message.sender },
+            }
+            : conversation
+        )
+      );
+    };
 
-    return () => socket.off("newMessage", handleNewMessage);
+    socket.on("newMessage", handleNewMessage);
+    socket.on("newGroupMessage", handleNewGroupMessage);
+
+    return () => {
+      socket.off("newMessage", handleNewMessage);
+      socket.off("newGroupMessage", handleNewGroupMessage);
+    };
   }, [socket, selectedConversation._id, setConversations]);
 
   useEffect(() => {
@@ -136,9 +164,15 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       setMessages([]);
       try {
         if (selectedConversation.mock) return;
-        const res = await fetch(
-          `api/messages/${selectedConversation.userId}`
-        );
+        
+        let url;
+        if (selectedConversation.isGroup && selectedConversation.groupId) {
+          url = `api/messages/group/${selectedConversation.groupId}`;
+        } else {
+          url = `api/messages/${selectedConversation.userId}`;
+        }
+        
+        const res = await fetch(url);
         const data = await res.json();
         if (data.error) {
           showToast("Error", data.error, "error");
@@ -152,18 +186,25 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       }
     };
     getMessages();
-  }, [selectedConversation.userId, selectedConversation.mock]);
+  }, [selectedConversation.userId, selectedConversation.groupId, selectedConversation.isGroup, selectedConversation.mock]);
 
   useEffect(() => {
     if (!socket || !selectedConversation._id) return;
+    
     const handleTypingStatus = ({ conversationId, typingUsers }) => {
       if (conversationId === selectedConversation._id) {
-        setTypingUsers(typingUsers.filter((id) => id !== currentUser._id));
+        // Filter out current user and get usernames for group chats
+        const otherTypingUsers = typingUsers.filter((id) => id !== currentUser._id);
+        setTypingUsers(otherTypingUsers);
       }
     };
+    
     socket.on("typingStatus", handleTypingStatus);
     return () => socket.off("typingStatus", handleTypingStatus);
   }, [socket, selectedConversation._id, currentUser._id]);
+
+  // Check if current conversation is a group
+  const isGroupConversation = selectedConversation.isGroup;
 
   return (
     <Flex
@@ -185,11 +226,40 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
           alignSelf="flex-start"
         />
       )}
-      <Avatar src={selectedConversation.userProfilePic} size="sm" />
-      <Text display="flex" alignItems="center">
-        {selectedConversation.username}{" "}
-        <Image src="/verified.png" w={4} h={4} ml={1} />
-      </Text>
+      <Avatar 
+        src={selectedConversation.userProfilePic} 
+        size="sm" 
+        bg={isGroupConversation ? "teal.500" : undefined}
+      >
+        {isGroupConversation && <FaUsers />}
+      </Avatar>
+      <Flex direction="column" flex="1">
+        <Text display="flex" alignItems="center">
+          {selectedConversation.username}
+          {isGroupConversation && (
+            <Badge ml={2} colorScheme="teal" variant="subtle">
+              Group
+            </Badge>
+          )}
+          {!isGroupConversation && (
+            <Image src="/verified.png" w={4} h={4} ml={1} />
+          )}
+        </Text>
+        {isGroupConversation && selectedConversation.participants && (
+          <Text fontSize="xs" color="gray.400">
+            {selectedConversation.participants.length} members
+          </Text>
+        )}
+      </Flex>
+      {isGroupConversation && (
+        <IconButton
+          icon={<FaInfoCircle />}
+          aria-label="Group Info"
+          size="sm"
+          variant="ghost"
+          onClick={() => setIsGroupManagementOpen(true)}
+        />
+      )}
     </Flex>
 
     <Divider />
@@ -253,9 +323,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
           return (
             <Box
               key={message._id}
-              //alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
+              alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
               bg={isHighlighted ? "green.900" : "transparent"}
-              
+              width={'75%'}
             >
               <Message
                 message={message}
@@ -264,6 +334,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                 handleDelete={handleDelete}
                 updateMessageReactions={updateMessageReactions}
                 handleHighlightMessage={handleHighlightMessage}
+                isGroupMessage={isGroupConversation}
               />
             </Box>
           );
@@ -281,27 +352,31 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         <FaAnglesDown size={24} />
       </IconButton>
     </Flex>
-    {typingUsers.length > 0 && ( 
-        <Box w="100%" px={2} pb={1} position="relative">
-          <TypingIndicator
-             usernames={
-               (selectedConversation.participants && selectedConversation.participants.length > 2)
-                 ? (typingUsers.length === 1
-                     ? [selectedConversation.username]
-                     : typingUsers.map((id) => {
-                         const participant = (selectedConversation.participants || []).find(
-                           (p) => p._id === id
-                         );
-                         return participant ? participant.username : "Someone";
-                       })
-                   )
-                 : [] 
-             }
-           
-          />
-        </Box>
-       )} 
+    
+    {typingUsers.length > 0 && (
+      <Box w="100%" px={2} pb={1} position="relative">
+        <TypingIndicator
+          usernames={
+            isGroupConversation
+              ? typingUsers.map((id) => {
+                  const participant = (selectedConversation.participants || []).find(
+                    (p) => p._id === id
+                  );
+                  return participant ? participant.username : "Someone";
+                })
+              : [selectedConversation.username]
+          }
+        />
+      </Box>
+    )}
+    
     <MessageInput setMessages={setMessages} />
+    
+    {/* Group Management Modal */}
+    <GroupManagement 
+      isOpen={isGroupManagementOpen} 
+      onClose={() => setIsGroupManagementOpen(false)} 
+    />
   </Flex>
   );
 };

@@ -5,6 +5,8 @@ import User from "../models/user.model.js";
 import validator from "validator";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
+import { s3, generateFileName } from "../lib/utils/uploader.js";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 
 const { Types } = mongoose;
 const isValidId = id => Types.ObjectId.isValid(id);
@@ -31,21 +33,116 @@ function requireAdmin(group, userId) {
 // Create a new group
 export const createGroup = async (req, res) => {
   try {
-    let { name, description, ownerId, members = [], admins = [], permissions } = req.body;
+    let { name, description, members = [], admins = [], permissions } = req.body;
+    const ownerId = req.user._id; // Get owner from authenticated user
+    
     name = sanitize(name);
     description = sanitize(description);
-    if (!isValidId(ownerId) || !name) return res.status(400).json({ error: "Invalid owner or name." });
+    
+    if (!name) return res.status(400).json({ error: "Group name is required." });
+
+    // Handle profile image upload
+    let profileImage = "";
+    if (req.file) {
+      const fileUrl = generateFileName();
+      const params = {
+        Bucket: process.env.BUCKET_NAME,
+        Key: fileUrl,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
+
+      const command = new PutObjectCommand(params);
+      await s3.send(command);
+
+      profileImage = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
+    }
 
     // Ensure uniqueness and validity
     members = Array.from(new Set(members.filter(isValidId)));
     admins = Array.from(new Set(admins.filter(isValidId)));
+    
+    // Add owner to members and admins if not already included
     if (!members.includes(ownerId)) members.push(ownerId);
     if (!admins.includes(ownerId)) admins.push(ownerId);
 
     // Create conversation first
     const conversation = await Conversation.create({ participants: members });
-    const group = await Group.create({ name, description, owner: ownerId, members, admins, permissions: permissions || { canMessage: 'all' }, conversation: conversation._id });
-    return res.status(201).json(group);
+    
+    // Create the group
+    const group = await Group.create({ 
+      name, 
+      description, 
+      profileImage,
+      owner: ownerId, 
+      members, 
+      admins, 
+      permissions: permissions || { canMessage: 'all' }, 
+      conversation: conversation._id 
+    });
+
+    // Populate the group with user details
+    const populatedGroup = await Group.findById(group._id)
+      .populate('owner', 'username profileImg')
+      .populate('members', 'username profileImg')
+      .populate('admins', 'username profileImg');
+
+    return res.status(201).json(populatedGroup);
+  } catch (err) { handleError(res, err, err.code); }
+};
+
+// Get all groups for a user
+export const getUserGroups = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    const groups = await Group.find({
+      members: userId
+    })
+    .populate('owner', 'username profileImg')
+    .populate('members', 'username profileImg')
+    .populate('admins', 'username profileImg')
+    .populate({
+      path: 'conversation',
+      populate: {
+        path: 'participants',
+        select: 'username profileImg'
+      }
+    })
+    .sort({ createdAt: -1 });
+
+    res.json(groups);
+  } catch (err) { handleError(res, err, err.code); }
+};
+
+// Get group details
+export const getGroupDetails = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const userId = req.user._id;
+    
+    const group = await Group.findById(groupId)
+      .populate('owner', 'username profileImg')
+      .populate('members', 'username profileImg')
+      .populate('admins', 'username profileImg')
+      .populate({
+        path: 'conversation',
+        populate: {
+          path: 'participants',
+          select: 'username profileImg'
+        }
+      });
+
+    if (!group) {
+      return res.status(404).json({ error: "Group not found." });
+    }
+
+    // Check if user is a member
+    if (!group.members.some(member => member._id.toString() === userId.toString())) {
+      return res.status(403).json({ error: "You are not a member of this group." });
+    }
+
+    res.json(group);
   } catch (err) { handleError(res, err, err.code); }
 };
 
@@ -55,7 +152,7 @@ export const inviteToGroup = async (req, res) => {
     const { groupId, userId } = req.body;
     const group = await loadGroup(groupId);
     // Only admins can invite
-    requireAdmin(group, req.body.requesterId);
+    requireAdmin(group, req.user._id);
 
     if (group.invites.find(i => i.user.equals(userId) && i.status === 'pending') || group.members.includes(userId)) {
       return res.status(400).json({ error: "Already invited or a member." });
@@ -86,7 +183,8 @@ export const denyInvite   = (req, res) => changeInviteStatus(req, res, 'denied')
 // Leave group
 export const leaveGroup = async (req, res) => {
   try {
-    const { groupId, userId } = req.body;
+    const { groupId } = req.body;
+    const userId = req.user._id;
     const group = await loadGroup(groupId);
     if (group.owner.equals(userId)) return res.status(400).json({ error: "Owner cannot leave directly." });
 
@@ -100,9 +198,10 @@ export const leaveGroup = async (req, res) => {
 // Permissions: who can message
 export const setGroupPermissions = async (req, res) => {
   try {
-    const { groupId, canMessage, requesterId } = req.body;
+    const { groupId, canMessage } = req.body;
+    const userId = req.user._id;
     const group = await loadGroup(groupId);
-    requireAdmin(group, requesterId);
+    requireAdmin(group, userId);
 
     const options = ['all', 'admins', 'owner'];
     if (!options.includes(canMessage)) return res.status(400).json({ error: "Invalid permission." });
@@ -118,7 +217,7 @@ async function toggleBlock(req, res, block = true) {
   try {
     const { groupId, userId } = req.body;
     const group = await loadGroup(groupId);
-    requireAdmin(group, req.body.requesterId);
+    requireAdmin(group, req.user._id);
 
     if (block) {
       if (!group.blocked.includes(userId)) group.blocked.push(userId);
@@ -135,9 +234,10 @@ export const unblockUserInGroup = (req, res) => toggleBlock(req, res, false);
 // Delete group (owner only)
 export const deleteGroup = async (req, res) => {
   try {
-    const { groupId, requesterId } = req.body;
+    const { groupId } = req.body;
+    const userId = req.user._id;
     const group = await loadGroup(groupId);
-    if (!group.owner.equals(requesterId)) return res.status(403).json({ error: "Only owner can delete." });
+    if (!group.owner.equals(userId)) return res.status(403).json({ error: "Only owner can delete." });
 
     await Group.findByIdAndDelete(groupId);
     await Conversation.findByIdAndDelete(group.conversation);
@@ -174,9 +274,11 @@ export const getGroupAnalytics = async (req, res) => {
 
 // Invite-link generation + join
 export const generateInviteLink = (req, res) => {
-  const { groupId, expiresIn = '7d', requesterId } = req.body;
+  const { groupId, expiresIn = '7d' } = req.body;
+  const userId = req.user._id;
+  
   if (!isValidId(groupId)) return res.status(400).json({ error: "Invalid group ID." });
-  if (!Group.exists({ _id: groupId, $or: [{ owner: requesterId }, { admins: requesterId }] })) {
+  if (!Group.exists({ _id: groupId, $or: [{ owner: userId }, { admins: userId }] })) {
     return res.status(403).json({ error: "Not allowed." });
   }
   const token = jwt.sign({ groupId }, process.env.JWT_SECRET, { expiresIn });
@@ -185,7 +287,9 @@ export const generateInviteLink = (req, res) => {
 
 export const joinWithInvite = async (req, res) => {
   try {
-    const { token, userId } = req.body;
+    const { token } = req.body;
+    const userId = req.user._id;
+    
     if (!token || !isValidId(userId)) return res.status(400).json({ error: "Missing token or userId." });
     const { groupId } = jwt.verify(token, process.env.JWT_SECRET);
     const group = await loadGroup(groupId);
@@ -193,4 +297,49 @@ export const joinWithInvite = async (req, res) => {
     await group.save();
     res.json({ message: "Joined via invite link." });
   } catch (err) { handleError(res, err, 400); }
+};
+
+// Update group details
+export const updateGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { name, description } = req.body;
+    const userId = req.user._id;
+
+    const group = await loadGroup(groupId);
+    requireAdmin(group, userId);
+
+    // Handle profile image upload
+    let profileImage = group.profileImage; // Keep existing if no new image
+    if (req.file) {
+      const fileUrl = generateFileName();
+      const params = {
+        Bucket: process.env.BUCKET_NAME,
+        Key: fileUrl,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
+
+      const command = new PutObjectCommand(params);
+      await s3.send(command);
+
+      profileImage = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
+    }
+
+    // Update group
+    const updatedGroup = await Group.findByIdAndUpdate(
+      groupId,
+      {
+        name: sanitize(name),
+        description: sanitize(description),
+        profileImage,
+      },
+      { new: true }
+    )
+    .populate('owner', 'username profileImg')
+    .populate('members', 'username profileImg')
+    .populate('admins', 'username profileImg');
+
+    res.json(updatedGroup);
+  } catch (err) { handleError(res, err, err.code); }
 };
