@@ -22,8 +22,23 @@ import { useSocket } from "../context/SocketContext";
 
 const MotionFlex = motion(Flex);
 
-const MessageInput = ({ setMessages }) => {
+const MessageInput = ({
+  setMessages,
+  editingMessageId,
+  setEditingMessageId,
+  editingText,
+  setEditingText,
+  isGroupConversation,
+  groupId
+}) => {
     const [messageText, setMessageText] = useState("");
+    // Prefill input when editing
+    useEffect(() => {
+      if (editingMessageId) {
+        setMessageText(editingText || "");
+      }
+    }, [editingMessageId, editingText]);
+
     const [isSending, setIsSending] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState(null);
@@ -41,8 +56,6 @@ const MessageInput = ({ setMessages }) => {
     const typingTimeout = useRef(null);
     const [uploadProgress, setUploadProgress] = useState(0);
 
-    // Check if this is a group conversation
-    const isGroupConversation = recipient.isGroup;
 
     useEffect(() => {
         if (!socket || !recipient._id) return;
@@ -70,96 +83,120 @@ const MessageInput = ({ setMessages }) => {
     const borderColor = useColorModeValue("gray.300", "gray.600");
 
     const handleSendMessage = async (e) => {
-        e.preventDefault();
-        if (!messageText && !audioBlob && !mediaFile) return;
-        setIsSending(true);
-        try {
-            const formData = new FormData();
-            formData.append("message", messageText);
-            
-            // Add appropriate ID based on conversation type
-            if (isGroupConversation) {
-                formData.append("groupId", recipient.groupId);
-            } else {
-                formData.append("recipientId", recipient.userId);
-            }
-            
-            if (replyMsg.id != "") {
-                formData.append("messageId", replyMsg.id);
-                if (isGroupConversation) {
-                    formData.append("groupId", recipient.groupId);
-                }
-            }
-            if (audioBlob) {
-                formData.append("media", audioBlob, "voice-message.webm");
-            }
-            if (mediaFile) {
-                formData.append("media", mediaFile);
-            }
-            
-            let url;
-            if (replyMsg.id != "") {
-                url = "/api/messages/reply";
-            } else if (isGroupConversation) {
-                url = "/api/messages/send"; // The backend handles group messages via groupId
-            } else {
-                url = "/api/messages/send";
-            }
-            
-            await new Promise((resolve, reject) => {
-                upload(
-                    url,
-                    formData,
-                    (data) => {
-                        if (data.error) {
-                            toast({
-                                title: "Error",
-                                description: data.error,
-                                status: "error",
-                                duration: 5000,
-                                isClosable: true,
-                            });
-                            reject();
-                            return;
-                        }
-                        setMessages((messages) => [...messages, data]);
-                        setMessageText("");
-                        setAudioBlob(null);
-                        setAudioPreview(null);
-                        setMediaFile(null);
-                        setMediaPreview(null);
-                        setReply(prevState => ({
-                            ...prevState,
-                            id: "",
-                            text: '',
-                            media: null,
-                            mediaType: null,
-                        }));
-                        resolve();
-                    },
-                    (err) => {
-                        toast({
-                            title: "Error",
-                            description: err,
-                            status: "error",
-                            duration: 5000,
-                            isClosable: true,
-                        });
-                        reject();
-                    }
-                );
-            });
-        } catch (error) {
-            toast({
+      e.preventDefault();
+      if (!messageText && !audioBlob && !mediaFile) return;
+      setIsSending(true);
+      try {
+        // If editing, call edit API
+        if (editingMessageId) {
+          const res = await fetch("/api/messages/edit", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messageId: editingMessageId,
+              newText: messageText,
+              groupId: groupId
+            })
+          });
+          if (!res.ok) throw new Error("Failed to edit message");
+          setMessageText("");
+          setEditingMessageId(null);
+          setEditingText("");
+          setAudioBlob(null);
+          setAudioPreview(null);
+          setMediaFile(null);
+          setMediaPreview(null);
+          setReply(prevState => ({
+            ...prevState,
+            id: "",
+            text: '',
+            media: null,
+            mediaType: null,
+          }));
+          return;
+        }
+        // Otherwise, send as new message (existing logic)
+        const formData = new FormData();
+        formData.append("message", messageText);
+        if (isGroupConversation) {
+          formData.append("groupId", recipient.groupId);
+        } else {
+          formData.append("recipientId", recipient.userId);
+        }
+        if (replyMsg.id != "") {
+          formData.append("messageId", replyMsg.id);
+          if (isGroupConversation) {
+            formData.append("groupId", recipient.groupId);
+          }
+        }
+        if (audioBlob) {
+          formData.append("media", audioBlob, "voice-message.webm");
+        }
+        if (mediaFile) {
+          formData.append("media", mediaFile);
+        }
+        let url;
+        if (replyMsg.id != "") {
+          url = "/api/messages/reply";
+        } else if (isGroupConversation) {
+          url = "/api/messages/send";
+        } else {
+          url = "/api/messages/send";
+        }
+        await new Promise((resolve, reject) => {
+          upload(
+            url,
+            formData,
+            (data) => {
+              if (data.error) {
+                toast({
+                  title: "Error",
+                  description: data.error,
+                  status: "error",
+                  duration: 5000,
+                  isClosable: true,
+                });
+                reject();
+                return;
+              }
+              setMessages((messages) => [...messages, data]);
+              setMessageText("");
+              setAudioBlob(null);
+              setAudioPreview(null);
+              setMediaFile(null);
+              setMediaPreview(null);
+              setReply(prevState => ({
+                ...prevState,
+                id: "",
+                text: '',
+                media: null,
+                mediaType: null,
+              }));
+              resolve();
+            },
+            (err) => {
+              toast({
                 title: "Error",
-                description: error.message,
+                description: err,
                 status: "error",
                 duration: 5000,
                 isClosable: true,
-            });
-        } finally {
-            setIsSending(false);
-        }
+              });
+              reject();
+            }
+          );
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setIsSending(false);
+      }
     };
 
     const handleTyping = (e) => {
@@ -390,7 +427,7 @@ const MessageInput = ({ setMessages }) => {
 
                 {/* Message Input */}
                 <Input
-                    placeholder={isGroupConversation ? "Type a message to group..." : "Type a message"}
+                    placeholder={editingMessageId ? "Edit your message..." : (isGroupConversation ? "Type a message to group..." : "Type a message")}
                     value={messageText}
                     onChange={handleTyping}
                     flex={1}

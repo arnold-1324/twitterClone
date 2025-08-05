@@ -53,7 +53,7 @@ import {
 	const lastMessage = conversation.lastMessage || {};
 	
 	const handleSelectConversation = () => {
-		debugger;
+		
 	if (isGroup) {
 		console.log("[Conversation] Group Profile Image:", displayImage);
 	}

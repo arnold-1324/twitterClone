@@ -109,7 +109,7 @@ export const getUserProfile = async (req, res) => {
 export const getSuggestedUser = async (req, res) => {
 
   try {
-    const userId = req.user._id;
+     const userId = req.user._id.toString();
 
     const { following } = await User.findById(userId).select('following');
 
@@ -123,15 +123,22 @@ export const getSuggestedUser = async (req, res) => {
       theirFollows.forEach(f => layer2.add(f.toString()));
     }
 
-    layer2.delete(userId);
-    for (const id of directSet) {
-      layer2.delete(id);
-    }
+    // remove self
+   layer2.delete(userId);
+   // remove anyone we already follow
+   for (const id of directSet) layer2.delete(id);
 
-    const suggestedUser = Array.from(layer2).slice(0, 5);
-    const users = await User.find({ _id: { $in: suggestedUser } }).select('-password -updatedAt -verificationToken -verificationTokenExpiresAt');
+    const suggestedUserIds  = Array.from(layer2).slice(0, 5);
+    // also just in case, make sure we don’t fetch ourselves
+   const users = await User.find({
+     $and: [
+       { _id: { $in: suggestedUserIds } },
+       { _id: { $ne: userId } }
+     ]
+   })
+   .select('-password -updatedAt -verificationToken -verificationTokenExpiresAt');
 
-    console.log("suggestedUser:", users);
+   // console.log("suggestedUser:", users);
 
 
 
