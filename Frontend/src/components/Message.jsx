@@ -151,7 +151,7 @@ const Message = ({
             <Image
               src={message.postReference?.images}
               alt="Post Image"
-              width="100%"
+              width="800%"
               maxWidth="100%"
               h="300px"
               objectFit="cover"
@@ -206,7 +206,10 @@ const Message = ({
             mt="4px"
           >
             {isOwnMessage && (
-              <MenuItem onClick={() => handleEdit(message._id)}>
+              <MenuItem onClick={() => {
+                setEditingMessageId(message._id);
+                setEditingText(message.text);
+              }}>
                 Edit
               </MenuItem>
             )}

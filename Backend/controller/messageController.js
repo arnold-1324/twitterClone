@@ -348,50 +348,65 @@ export const getMessages = async (req, res) => {
 
 export const reactTomsg = async (req, res) => {
   try {
-      const { messageId, emoji } = req.body;
-      const userId = req.user._id;
+    const { messageId, emoji } = req.body;
+    const userId = req.user._id;
 
-      
-      if (!messageId || !emoji) {
-          return res.status(400).json({ error: "Message ID and emoji are required" });
+    if (!messageId || !emoji) {
+      return res.status(400).json({ error: "Message ID and emoji are required" });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found", params: req.body });
+    }
+
+    // Find if the user already reacted
+    const existingReactionIndex = message.reactions.findIndex(
+      (reaction) => reaction.user.toString() === userId.toString()
+    );
+
+    if (existingReactionIndex !== -1) {
+      // Update existing reaction
+      message.reactions[existingReactionIndex].type = emoji;
+    } else {
+      // Add new reaction
+      message.reactions.push({ user: userId, type: emoji });
+    }
+
+    // Save the message
+    await message.save();
+
+    // Populate reactions with user details
+    const populatedMessage = await Message.findById(messageId)
+      .populate({
+        path: 'reactions',
+        select: 'user type',
+        populate: { path: 'user', select: 'username profileImg' }
+      })
+      .populate('conversationId', 'participants');
+
+    // Emit updated reactions to all participants in the conversation
+    const io = getIO();
+    let participantIds = [];
+    if (populatedMessage.conversationId && populatedMessage.conversationId.participants) {
+      participantIds = populatedMessage.conversationId.participants.map(id => id.toString());
+    }
+
+    participantIds.forEach(pid => {
+      const socketId = getRecipientSocketId(pid);
+      if (socketId) {
+        io.to(socketId).emit("messageReactionUpdated", {
+          messageId,
+          reactions: populatedMessage.reactions
+        });
       }
+    });
 
-      
-      const message = await Message.findById(messageId);
-      if (!message) {
-          return res.status(404).json({ error: "Message not found", 
-          params:  req.body});
-      }
-
-      // Find if the user already reacted
-      const existingReactionIndex = message.reactions.findIndex(
-          (reaction) => reaction.user.toString() === userId.toString()
-      );
-
-      if (existingReactionIndex !== -1) {
-          // Update existing reaction
-          message.reactions[existingReactionIndex].type = emoji;
-      } else {
-          // Add new reaction
-          message.reactions.push({ user: userId, type: emoji });
-      }
-
-      // Save the message
-      await message.save();
-
-      // Populate reactions with user details
-      const populatedMessage = await Message.findById(messageId)
-          .populate({
-            path: 'reactions',
-            select: 'user type',
-            populate: { path: 'user', select: 'username profileImg' }
-          });
-
-      // Respond with updated message
-      res.status(200).json(populatedMessage);
+    // Respond with updated message
+    res.status(200).json(populatedMessage);
   } catch (error) {
-      console.error("Error in reactToMsg:", error.message);
-      res.status(500).json({ error: "Internal Server Error" });
+    console.error("Error in reactToMsg:", error.message);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
@@ -495,10 +510,25 @@ export const getConversation = async (req, res) => {
       };
     });
 
-    // merge & sort
-    const allConversations = [...convoData, ...groupConvoData].sort(
+    // merge, deduplicate by _id, prefer isGroup:true if duplicate
+    const merged = [...convoData, ...groupConvoData];
+    const uniqueMap = new Map();
+    for (const convo of merged) {
+      if (!uniqueMap.has(convo._id.toString())) {
+        uniqueMap.set(convo._id.toString(), convo);
+      } else {
+        // If duplicate, prefer isGroup:true
+        const existing = uniqueMap.get(convo._id.toString());
+        if (!existing.isGroup && convo.isGroup) {
+          uniqueMap.set(convo._id.toString(), convo);
+        }
+      }
+    }
+    const allConversations = Array.from(uniqueMap.values()).sort(
       (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
     );
+
+    console.log("All conversations:", allConversations);
 
     res.status(200).json(allConversations);
   } catch (error) {
@@ -608,39 +638,34 @@ export const editMessage = async (req, res) => {
             }
         }
 
-        // Get recipient socket IDs
+
+        // Emit to all participants (including the editor)
         const io = getIO();
-        let recipientSocketIds = [];
-        
+        let participantIds = [];
         if (isGroupMessage) {
-            // For group messages, notify all group members except sender
             const group = await Group.findById(groupId).populate('members');
             if (group) {
-                recipientSocketIds = group.members
-                    .filter(member => member._id.toString() !== userId.toString())
-                    .map(member => getRecipientSocketId(member._id.toString()))
-                    .filter(socketId => socketId); // Remove undefined socket IDs
+                participantIds = group.members.map(member => member._id.toString());
             }
-        } else {
-            // For one-on-one messages
-            const recipientId = conversation.participants.find(
-                participant => participant._id.toString() !== userId.toString()
-            );
-            if (recipientId) {
-                const recipientSocketId = getRecipientSocketId(recipientId._id.toString());
-                if (recipientSocketId) {
-                    recipientSocketIds = [recipientSocketId];
-                }
-            }
+        } else if (conversation && conversation.participants) {
+            participantIds = conversation.participants.map(p => p._id.toString ? p._id.toString() : p._id);
         }
 
-        // Emit to all recipients
-        recipientSocketIds.forEach(socketId => {
-            io.to(socketId).emit("messageEdited", {
-                ...message.toObject(),
-                isGroupMessage,
-                groupId: groupId || null
-            });
+        // Prepare decrypted message object
+        const decryptedMessage = {
+            ...message.toObject(),
+            text: (() => { try { return decrypt({ iv: message.iv, encryptedData: message.text }); } catch { return '[Decryption failed]'; } })(),
+            iv: undefined,
+            isGroupMessage,
+            groupId: groupId || null,
+            edited: true
+        };
+
+        participantIds.forEach(pid => {
+            const socketId = getRecipientSocketId(pid);
+            if (socketId) {
+                io.to(socketId).emit("messageEdited", decryptedMessage);
+            }
         });
 
         const decryptMessage = (() => {

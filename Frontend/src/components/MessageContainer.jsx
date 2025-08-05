@@ -1,3 +1,6 @@
+
+
+
 import {
   Avatar,
   Divider,
@@ -32,6 +35,9 @@ import GroupManagement from "./GroupManagement";
 const MotionFlex = motion(Flex);
 
 const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
+  // State for editing messages
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingText, setEditingText] = useState("");
   const showToast = useShowToast();
   const selectedConversation = useRecoilValue(selectedConversationAtom);
   const [loadingMessages, setLoadingMessages] = useState(true);
@@ -70,17 +76,19 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   };
 
   const updateMessageReactions = (messageId, updatedReactions) => {
+
     setMessages((prevMessages) =>
-      prevMessages.map((message) =>
-        message._id === messageId
+      prevMessages.map((message) => {
+        const msgId = message._id || message.id;
+        return msgId === messageId
           ? { ...message, reactions: updatedReactions }
-          : message
-      )
+          : message;
+      })
     );
   };
 
   const handleDelete = async (messageId) => {
-    debugger;
+    
     const response = await fetch("api/messages/deleteforme", {
       method: "PUT",
       body: JSON.stringify({ messageId }),
@@ -115,9 +123,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         prev.map((conversation) =>
           conversation._id === message.conversationId
             ? {
-              ...conversation,
-              lastMessage: { text: message.text, sender: message.sender },
-            }
+                ...conversation,
+                lastMessage: { text: message.text, sender: message.sender },
+              }
             : conversation
         )
       );
@@ -134,20 +142,43 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         prev.map((conversation) =>
           conversation._id === conversationId
             ? {
-              ...conversation,
-              lastMessage: { text: message.text, sender: message.sender },
-            }
+                ...conversation,
+                lastMessage: { text: message.text, sender: message.sender },
+              }
             : conversation
         )
       );
     };
 
+    const handleMessageReactionUpdated = ({ messageId, reactions }) => {
+      updateMessageReactions(messageId, reactions);
+    };
+
+    const handleMessageEdited = (editedMessage) => {
+      debugger;
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) => {
+          const msgId = msg._id || msg.id
+          const editedId = editedMessage._id || editedMessage.id
+          return msgId === editedId ? { ...msg, ...editedMessage } : msg
+        })
+      )
+
+
+      setEditingMessageId(null);
+      setEditingText(message.text || '')
+    };
+
     socket.on("newMessage", handleNewMessage);
     socket.on("newGroupMessage", handleNewGroupMessage);
+    socket.on("messageReactionUpdated", handleMessageReactionUpdated);
+    socket.on("messageEdited", handleMessageEdited);
 
     return () => {
       socket.off("newMessage", handleNewMessage);
       socket.off("newGroupMessage", handleNewGroupMessage);
+      socket.off("messageReactionUpdated", handleMessageReactionUpdated);
+      socket.off("messageEdited", handleMessageEdited);
     };
   }, [socket, selectedConversation._id, setConversations]);
 
@@ -356,6 +387,23 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                   isGroupMessage={isGroupConversation}
                   playingAudioId={playingAudioId}
                   setPlayingAudioId={handleSetPlayingAudioId}
+                  editingMessageId={editingMessageId}
+                  setEditingMessageId={setEditingMessageId}
+                  setEditingText={setEditingText}
+                  onEditSubmit={async (msgId, newText) => {
+                    // Call backend to edit message
+                    try {
+                      const res = await fetch("/api/messages/edit", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ messageId: msgId, newText, groupId: isGroupConversation ? selectedConversation.groupId : undefined }),
+                      });
+                      if (!res.ok) throw new Error("Failed to edit message");
+                      // The socket event will update the UI
+                    } catch (err) {
+                      showToast("Error", err.message, "error");
+                    }
+                  }}
                 />
               </Box>
             </Flex>
@@ -392,7 +440,15 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       </Box>
     )}
     
-    <MessageInput setMessages={setMessages} />
+    <MessageInput
+      setMessages={setMessages}
+      editingMessageId={editingMessageId}
+      setEditingMessageId={setEditingMessageId}
+      editingText={editingText}
+      setEditingText={setEditingText}
+      isGroupConversation={isGroupConversation}
+      groupId={isGroupConversation ? selectedConversation.groupId : undefined}
+    />
     
     {/* Group Management Modal */}
     <GroupManagement 

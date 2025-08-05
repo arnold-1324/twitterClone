@@ -1,10 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Box, useColorModeValue } from "@chakra-ui/react";
 import { FaSmile } from "react-icons/fa";
 import useShowToast from "../hooks/useShowToast";
 
 const Reaction = ({ messageId, initialReactions = [], onUpdateReactions }) => {
   const [reactions, setReactions] = useState(initialReactions);
+
+  // Update local state when initialReactions prop changes (for real-time updates)
+  useEffect(() => {
+    setReactions(initialReactions);
+  }, [initialReactions]);
   const [openEmojiPicker, setOpenEmojiPicker] = useState(null);
   const [loading, setLoading] = useState(false);
   const showToast = useShowToast();

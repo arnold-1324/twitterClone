@@ -62,7 +62,7 @@ const ChatPage = () => {
   }, [socket, setConversations]);
 
   useEffect(() => {
-    debugger;
+    
     const getConversations = async () => {
       try {
         const res = await fetch("api/messages/getConvo/user");
@@ -115,7 +115,7 @@ const ChatPage = () => {
       );
 
       if (existingConversation) {
-        debugger;
+        
         setSelectedConversation({
           _id: existingConversation._id,
           userId: searchedUser._id,
