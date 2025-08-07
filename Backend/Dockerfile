@@ -1,20 +1,24 @@
 # Backend/Dockerfile
 FROM node:18-alpine
 
-WORKDIR /app
+# Create app directory
+WORKDIR /usr/src/app
 
-# Copy package files first for better caching
+# Copy package files from Backend directory
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --production
+# Install production dependencies
+RUN npm install --omit=dev --ignore-scripts
 
-# Copy application code
+# Copy the rest of the backend application
 COPY . .
 
-# Set environment variables
+# Set production environment
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=5000
 
-EXPOSE 3000
+# Expose the port
+EXPOSE 5000
+
+# Start the application
 CMD ["node", "server.js"]
