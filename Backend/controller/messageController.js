@@ -528,7 +528,7 @@ export const getConversation = async (req, res) => {
       (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
     );
 
-    console.log("All conversations:", allConversations);
+    //console.log("All conversations:", allConversations);
 
     res.status(200).json(allConversations);
   } catch (error) {
