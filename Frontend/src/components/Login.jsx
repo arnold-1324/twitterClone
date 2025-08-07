@@ -33,7 +33,7 @@ export default function SimpleCard() {
 
   const handlesignIn = async () => {
     try {
-      const res = await fetch("api/auth/login", {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -51,19 +51,19 @@ export default function SimpleCard() {
         showToast("Error", data.error, "error");
         return;
       }
-      console.log(data.user);
+     // console.log(data.user);
       localStorage.setItem("user-threads", JSON.stringify(data.user));
       setUser(data.user);
      
     } catch (error) {
-      console.log(error);
+      //console.log(error);
       showToast("Error", "An error occurred during login", "error");
     }
   };
 
   const handleForgotPassword = async () => {
     try {
-      const res = await fetch("api/auth/forgot-password", {
+      const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -85,7 +85,7 @@ export default function SimpleCard() {
       showToast("Success", "A reset link has been sent to your email", "success");
       setForgot(false); 
     } catch (error) {
-      console.log(error);
+      //console.log(error);
       showToast("Error", "An error occurred during Reset-password", "error");
     }
   };

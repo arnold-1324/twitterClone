@@ -27,7 +27,7 @@ const Post = ({ post, postedBy }) => {
     const getUser = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(`api/users/profile/${postedBy}`);
+        const res = await fetch(`/api/users/profile/${postedBy}`);
         if (!res.ok) throw new Error("Failed to fetch user data");
 
         const data = await res.json();
@@ -47,7 +47,7 @@ const Post = ({ post, postedBy }) => {
     if (!window.confirm("Are you sure you want to delete this post?")) return;
 
     try {
-      const res = await fetch(`api/posts/${post._id}`, {
+      const res = await fetch(`/api/posts/${post._id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete post");

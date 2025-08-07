@@ -89,7 +89,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
   const handleDelete = async (messageId) => {
     
-    const response = await fetch("api/messages/deleteforme", {
+    const response = await fetch("/api/messages/deleteforme", {
       method: "PUT",
       body: JSON.stringify({ messageId }),
     });
@@ -199,9 +199,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         
         let url;
         if (selectedConversation.isGroup && selectedConversation.groupId) {
-          url = `api/messages/group/${selectedConversation.groupId}`;
+          url = `/api/messages/group/${selectedConversation.groupId}`;
         } else {
-          url = `api/messages/${selectedConversation.userId}`;
+          url = `/api/messages/${selectedConversation.userId}`;
         }
         
         const res = await fetch(url);

@@ -65,13 +65,13 @@ const ChatPage = () => {
     
     const getConversations = async () => {
       try {
-        const res = await fetch("api/messages/getConvo/user");
+        const res = await fetch("/api/messages/getConvo/user");
         const data = await res.json();
 
         if (data.error) {
           showToast("Error", data.error, "error");
         } else {
-          console.log("Conversations data:",data);
+         // console.log("Conversations data:",data);
           setConversations(data);
         }
       } catch {
