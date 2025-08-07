@@ -41,7 +41,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 //app.use(helmet()); 
-app.use(express.static(path.join(__dirname, '../Frontend/dist')));
+//app.use(express.static(path.join(__dirname, '../Frontend/dist')));
 app.use(cors()); 
 app.use(mongoSanitize()); 
 app.use(xss()); 
@@ -64,10 +64,10 @@ app.use("/api/groups", GroupRoutes);
 const httpServer = createServer(app);
 setupSocket(httpServer);
 
-app.use(express.static(path.join(__dirname, 'Frontend', 'build')));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'Frontend', 'build', 'index.html'));
-});
+//app.use(express.static(path.join(__dirname, 'Frontend', 'build')));
+//app.get('*', (req, res) => {
+ // res.sendFile(path.join(__dirname, 'Frontend', 'build', 'index.html'));
+//});
 
 httpServer.listen(PORT, () => {
     console.log(`server is running in the port ${PORT}`);
