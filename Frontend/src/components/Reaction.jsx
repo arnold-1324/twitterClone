@@ -26,7 +26,7 @@ const Reaction = ({ messageId, initialReactions = [], onUpdateReactions }) => {
     setLoading(true);
 
     try {
-      console.log(`Sending reaction "${emoji}" for message ID: ${messageId}`); 
+     // console.log(`Sending reaction "${emoji}" for message ID: ${messageId}`); 
 
       const response = await fetch("/api/messages/reaction", {
         method: "PUT",
@@ -38,7 +38,7 @@ const Reaction = ({ messageId, initialReactions = [], onUpdateReactions }) => {
 
       const updatedMessage = await response.json();
 
-      console.log("API Response:", updatedMessage); 
+     // console.log("API Response:", updatedMessage); 
       showToast("Success", "Reaction added", "success");
 
       if (!Array.isArray(updatedMessage.reactions)) {
@@ -53,7 +53,7 @@ const Reaction = ({ messageId, initialReactions = [], onUpdateReactions }) => {
         onUpdateReactions(messageId, updatedMessage.reactions);
       }
     } catch (error) {
-      console.error("Error handling reaction:", error);
+     // console.error("Error handling reaction:", error);
       showToast("Error", error.message, "error");
     } finally {
       setLoading(false);
