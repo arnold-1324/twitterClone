@@ -100,7 +100,7 @@ const Actions = ({ post }) => {
 		setLiked((prevLiked) => !prevLiked);
 	  
 		try {
-		  const res = await fetch("api/posts/like/" + post._id, {
+		  const res = await fetch("/api/posts/like/" + post._id, {
 			method: "PUT",
 			headers: {
 			  "Content-Type": "application/json",
@@ -182,7 +182,7 @@ const Actions = ({ post }) => {
 			}));
 
 			const sharePostPromises = postData.map(async ({ postId, senderId, conversationId, text }) => {
-				const res = await fetch("api/posts/sharepost", {
+				const res = await fetch("/api/posts/sharepost", {
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",

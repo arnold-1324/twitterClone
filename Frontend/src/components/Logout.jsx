@@ -11,7 +11,7 @@ const Logout = () => {
     const handleLogout = async()=>{
         //debugger
         try {
-            const res =await fetch("api/auth/logout",{
+            const res =await fetch("/api/auth/logout",{
                 method:"POST",
                 headers:{
                     "Content-Type":"application/json",

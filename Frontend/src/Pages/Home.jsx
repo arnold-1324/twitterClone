@@ -21,13 +21,13 @@ const HomePage = () => {
       setLoading(true);
       setPosts([]);
       try {
-        const res = await fetch("api/posts/feed");
+        const res = await fetch("/api/posts/feed");
         const data = await res.json();
         if (data.error) {
           showToast("Error", data.error, "error");
           return;
         }
-        console.log(data);
+        //console.log(data);
         setPosts(data);
       } catch (error) {
         showToast("Error", error.message, "error");

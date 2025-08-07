@@ -55,7 +55,7 @@ import {
 	const handleSelectConversation = () => {
 		
 	if (isGroup) {
-		console.log("[Conversation] Group Profile Image:", displayImage);
+		//console.log("[Conversation] Group Profile Image:", displayImage);
 	}
 		if (isGroup) {
 			setSelectedConversation({
