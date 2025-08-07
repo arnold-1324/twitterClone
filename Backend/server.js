@@ -42,7 +42,10 @@ app.use(limiter);
 
 //app.use(helmet()); 
 //app.use(express.static(path.join(__dirname, '../Frontend/dist')));
-app.use(cors()); 
+app.use(cors({
+  origin: "https://twitter-clone-2tqv.vercel.app",
+  credentials: true,
+}));
 app.use(mongoSanitize()); 
 app.use(xss()); 
 app.use(hpp()); 
