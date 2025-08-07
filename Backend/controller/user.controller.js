@@ -116,7 +116,7 @@ export const getSuggestedUser = async (req, res) => {
     if (following.length === 0) {
       const fallbackUsers = await User.find({ _id: { $ne: userId } })
         .select('-password -updatedAt -verificationToken -verificationTokenExpiresAt')
-        .limit(5);
+        .limit(7);
       return res.status(200).json(fallbackUsers);
     }
 
