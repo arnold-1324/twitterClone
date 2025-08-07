@@ -11,7 +11,7 @@ const io = new Server(server, {
     cors: {
         origin: [
             "http://localhost:3000",
-            "https://twitterclone-production-40ce.up.railway.app/"
+            "https://twitter-clone-2tqv.vercel.app/"
         ],
         methods: ["GET", "POST"],
     },
@@ -23,7 +23,7 @@ export function setupSocket(server) {
     
     const io = new Server(server, {
         cors: {
-            origin: "http://localhost:3000",
+            origin: "https://twitter-clone-2tqv.vercel.app/",
             methods: ["GET", "POST"],
         },
     });
