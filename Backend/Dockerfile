@@ -1,24 +1,36 @@
 # Backend/Dockerfile
 FROM node:18-alpine
 
-# Create app directory
+# Set working directory
 WORKDIR /usr/src/app
 
-# Copy package files from Backend directory
+# Set environment variables for build process
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Copy package files first for better layer caching
 COPY package*.json ./
 
 # Install production dependencies
 RUN npm install --omit=dev --ignore-scripts
 
-# Copy the rest of the backend application
+# Copy application code
 COPY . .
 
-# Set production environment
-ENV NODE_ENV=production
-ENV PORT=5000
+# Remove development-only files
+RUN rm -rf \
+    tests \
+    .gitignore \
+    .dockerignore \
+    Dockerfile \
+    jest.config.js
 
 # Expose the port
 EXPOSE 5000
 
+# Health check (requires a /health endpoint in your API)
+HEALTHCHECK --interval=30s --timeout=5s \
+  CMD curl -f http://localhost:5000/health || exit 1
+
 # Start the application
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
