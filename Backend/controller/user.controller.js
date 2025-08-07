@@ -104,50 +104,54 @@ export const getUserProfile = async (req, res) => {
   }
 };
 
-
-
 export const getSuggestedUser = async (req, res) => {
-
   try {
-     const userId = req.user._id.toString();
+    const userId = req.user._id.toString();
 
-    const { following } = await User.findById(userId).select('following');
+    // Fetch user's following list, defaulting to empty array if none
+    const userDoc = await User.findById(userId).select('following');
+    const following = Array.isArray(userDoc.following) ? userDoc.following : [];
 
-    const directSet = new Set(following.map((f) => f.toString()));
+    // Fallback for brand-new users: suggest any 5 random users (excluding self)
+    if (following.length === 0) {
+      const fallbackUsers = await User.find({ _id: { $ne: userId } })
+        .select('-password -updatedAt -verificationToken -verificationTokenExpiresAt')
+        .limit(5);
+      return res.status(200).json(fallbackUsers);
+    }
 
+    // Build a set of direct follows
+    const directSet = new Set(following.map(f => f.toString()));
+
+    // Gather second-layer follows
     const layer2 = new Set();
     for (const friendId of directSet) {
-      const { following: theirFollows } = await User
-        .findById(friendId)
-        .select('following');
+      const friendDoc = await User.findById(friendId).select('following');
+      const theirFollows = Array.isArray(friendDoc.following) ? friendDoc.following : [];
       theirFollows.forEach(f => layer2.add(f.toString()));
     }
 
-    // remove self
-   layer2.delete(userId);
-   // remove anyone we already follow
-   for (const id of directSet) layer2.delete(id);
+    // Remove self and anyone already followed
+    layer2.delete(userId);
+    for (const id of directSet) {
+      layer2.delete(id);
+    }
 
-    const suggestedUserIds  = Array.from(layer2).slice(0, 5);
-    // also just in case, make sure we don’t fetch ourselves
-   const users = await User.find({
-     $and: [
-       { _id: { $in: suggestedUserIds } },
-       { _id: { $ne: userId } }
-     ]
-   })
-   .select('-password -updatedAt -verificationToken -verificationTokenExpiresAt');
-
-   // console.log("suggestedUser:", users);
-
-
+    const suggestedUserIds = Array.from(layer2).slice(0, 5);
+    
+    // Fetch suggested users
+    const users = await User.find({
+      _id: { $in: suggestedUserIds }
+    })
+    .select('-password -updatedAt -verificationToken -verificationTokenExpiresAt');
 
     res.status(200).json(users);
   } catch (error) {
+    console.error('Error in suggestedUser:', error.message);
     res.status(500).json({ error: error.message });
-    console.log("Error in suggestedUser:", error.message);
   }
-}
+};
+
 
 export const UpdateUserProfile = async (req, res) => {
   try {
