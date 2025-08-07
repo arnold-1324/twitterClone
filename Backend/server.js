@@ -43,7 +43,7 @@ app.use(limiter);
 //app.use(helmet()); 
 //app.use(express.static(path.join(__dirname, '../Frontend/dist')));
 app.use(cors({
-  origin: "https://twitter-clone-2tqv.vercel.app",
+  origin: "https://twitter-clone-git-main-arnolds-projects-9ad435f9.vercel.app/",
   credentials: true,
 }));
 app.use(mongoSanitize()); 
