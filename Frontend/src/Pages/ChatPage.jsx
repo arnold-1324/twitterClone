@@ -20,6 +20,8 @@ import { conversationsAtom, selectedConversationAtom } from "../atom/messagesAto
 import userAtom from "../atom/userAtom";
 import { useSocket } from "../context/SocketContext";
 import { motion } from "framer-motion";
+import GroupUIComponents from "../components/GroupUIComponents";
+import CreateGroupButton from "../components/CreateGroupButton";
 //import { CreateGroupModal, InviteModal, PermissionsDropdown } from "../components/GroupUIComponents";
 
 const MotionFlex = motion(Flex);
@@ -35,9 +37,10 @@ const ChatPage = () => {
   const showToast = useShowToast();
   const { socket, onlineUsers } = useSocket();
   //const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
-  //const [inviteModalOpen, setInviteModalOpen] = useState(false);
-  const [groupPermissions, setGroupPermissions] = useState(null);
-     
+ // const [inviteModalOpen, setInviteModalOpen] = useState(false);
+//  const [groupPermissions, setGroupPermissions] = useState(null);
+  const [groupInfoModalOpen, setGroupInfoModalOpen] = useState(false);
+   
   const isMobileView = useBreakpointValue({ base: true, md: false }); // Mobile view condition
 
   useEffect(() => {
@@ -172,23 +175,7 @@ const ChatPage = () => {
           <Flex flex={30} flexDirection="column" gap={4} maxH={"600px"}>
             {/* Group creation and management buttons */}
             <Flex gap={2}>
-              <Button 
-                colorScheme="teal" 
-                flex="1"
-               // onClick={() => setCreateGroupModalOpen(true)}
-                leftIcon={<GiConversation />}
-              >
-                Create Group
-              </Button>
-              {isGroupConversation && (
-                <Button 
-                  size="sm" 
-                 // onClick={() => setInviteModalOpen(true)}
-                  colorScheme="blue"
-                >
-                  Invite
-                </Button>
-              )}
+              <CreateGroupButton onClick={() => setGroupInfoModalOpen(true)} />
             </Flex>
 
             <form onSubmit={handleConversationSearch}>
@@ -253,17 +240,16 @@ const ChatPage = () => {
 
         {selectedConversation._id ? (
           <Flex flex={70} flexDirection="column" gap={2}>
-            {/* If group, show permissions dropdown */}
-            {/* {isGroupConversation && (
+          {isGroupConversation && (
               <Box mb={2}>
-                <PermissionsDropdown
+                {/* <PermissionsDropdown
                   groupId={groupId}
                   currentUserId={currentUser._id}
                   value={groupPermissions || (selectedConversation.groupInfo?.permissions?.canMessage || "all")}
                   onChange={setGroupPermissions}
-                />
+                /> */}
               </Box>
-            )} */}
+            )} 
             <MessageContainer isMobileView={isMobileView} setSelectedConversation={setSelectedConversation} />
           </Flex>
         ) : (
@@ -283,21 +269,21 @@ const ChatPage = () => {
         )}
       </Flex>
 
-      {/* Create Group Modal */}
-      {/* <CreateGroupModal
-        isOpen={createGroupModalOpen}
-        onClose={() => setCreateGroupModalOpen(false)}
-      /> */}
+      <GroupUIComponents
+        isOpen={groupInfoModalOpen}
+        onClose={() => 
+          setGroupInfoModalOpen(false)}
+        mode="create" // or "edit"
+      />
 
-      {/* Invite Modal for existing groups */}
-      {/* {isGroupConversation && (
+       {/* {isGroupConversation && (
         <InviteModal
           isOpen={inviteModalOpen}
           onClose={() => setInviteModalOpen(false)}
           groupId={groupId}
           currentUserId={currentUser._id}
         />
-      )} */}
+      )}  */}
     </Box>
   );
 };
