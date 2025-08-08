@@ -43,7 +43,7 @@ const __dirname = path.resolve();
 //app.use(helmet()); 
 //app.use(express.static(path.join(__dirname, '../Frontend/dist')));
 app.use(cors({
-  origin: "https://twitter-clone-git-main-arnolds-projects-9ad435f9.vercel.app/",
+  origin: "https://frontend-gamma-opal-34.vercel.app/",
   credentials: true,
 }));
 app.use(mongoSanitize()); 
