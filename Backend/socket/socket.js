@@ -10,7 +10,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
         origin: [
-            "https://twitter-clone-git-main-arnolds-projects-9ad435f9.vercel.app/"
+            "https://frontend-gamma-opal-34.vercel.app/"
         ],
         methods: ["GET", "POST"],
     },
@@ -22,7 +22,7 @@ export function setupSocket(server) {
     
     const io = new Server(server, {
         cors: {
-            origin: "https://twitter-clone-git-main-arnolds-projects-9ad435f9.vercel.app/",
+            origin: "https://frontend-gamma-opal-34.vercel.app/",
             methods: ["GET", "POST"],
         },
     });

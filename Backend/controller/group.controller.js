@@ -31,16 +31,17 @@ function requireAdmin(group, userId) {
 }
 
 
-
-// Create a new group
-// Create a new group
 export const createGroup = async (req, res) => {
   try {
-    let { name, description, members = [], admins = [], permissions } = req.body;
-    const ownerId = req.user._id; // This is an ObjectID
-    
-    // Convert ownerId to string for consistent comparison
+    let { name, description, permissions } = req.body;
+    const ownerId = req.user._id;
     const ownerIdString = ownerId.toString();
+    
+    // Get members from request (handling both array and non-array formats)
+    let members = req.body['members[]'] || [];
+    if (!Array.isArray(members)) {
+      members = [members];
+    }
     
     name = sanitize(name);
     description = sanitize(description);
@@ -64,31 +65,23 @@ export const createGroup = async (req, res) => {
       profileImage = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
     }
 
-    // Ensure members and admins are arrays
+    // Ensure members is an array
     if (!Array.isArray(members)) members = [];
-    if (!Array.isArray(admins)) admins = [];
     
-    // Convert all IDs to strings and filter invalid ones
+    // Process member IDs
     members = [...new Set(members)]
-      .filter(m => isValidId(m) && typeof m === 'string')
-      .map(id => id.toString()); // Ensure all IDs are strings
+      .filter(m => isValidId(m))
+      .map(id => id.toString());
 
-    admins = [...new Set(admins)]
-      .filter(a => isValidId(a) && typeof a === 'string')
-      .map(id => id.toString()); // Ensure all IDs are strings
-
-    // Add owner to members and admins if not already included
-    if (!members.includes(ownerIdString)) members.push(ownerIdString);
-    if (!admins.includes(ownerIdString)) admins.push(ownerIdString);
-
-    // Ensure all admins are also members
-    admins.forEach(adminId => {
-      if (!members.includes(adminId)) {
-        members.push(adminId);
-      }
-    });
+    // Add owner to members if not already included
+    if (!members.includes(ownerIdString)) {
+      members.push(ownerIdString);
+    }
     
-    // Deduplicate members after possible additions
+    // For now, admins are just the owner - can be expanded later
+    const admins = [ownerIdString];
+
+    // Deduplicate members
     members = [...new Set(members)];
 
     // Validate we have at least 1 member
@@ -122,7 +115,7 @@ export const createGroup = async (req, res) => {
     return res.status(201).json(populatedGroup);
   } catch (err) { 
     console.error("Group creation error:", err);
-    handleError(res, err, err.code); 
+    handleError(res, err, err.code || 500); 
   }
 };
 

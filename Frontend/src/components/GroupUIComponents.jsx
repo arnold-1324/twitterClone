@@ -203,8 +203,11 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
       formData.append("description", editForm.description || "");
       formData.append("permissions", JSON.stringify(permissions));
       if (selectedImage) formData.append("profileImage", selectedImage);
-      const memberIds = selectedMembers.map(m => m._id);
-      formData.append("members", JSON.stringify(memberIds));
+
+      selectedMembers.forEach(member => {
+        formData.append("members[]", member._id);
+      });
+
       // admins default to owner - backend will ensure owner is admin
 
       const res = await fetch(`/api/groups/create`, {
