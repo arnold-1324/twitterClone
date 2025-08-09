@@ -33,17 +33,17 @@ const PORT=process.env.PORT || 5000;
 app.use(compression());
 
 const __dirname = path.resolve();
-const limiter = rateLimit({
-    windowMs: 3 * 60 * 1000, 
-    max: 100, 
-    message: "Too many requests from this IP, please try again later."
-});
-app.use(limiter);
+//const limiter = rateLimit({
+//    windowMs: 3 * 60 * 1000, 
+//    max: 100, 
+ //   message: "Too many requests from this IP, please try again later."
+//});
+//app.use(limiter);
 
 //app.use(helmet()); 
 //app.use(express.static(path.join(__dirname, '../Frontend/dist')));
 app.use(cors({
-  origin: "https://twitter-clone-git-main-arnolds-projects-9ad435f9.vercel.app/",
+  origin: "https://frontend-gamma-opal-34.vercel.app/",
   credentials: true,
 }));
 app.use(mongoSanitize()); 

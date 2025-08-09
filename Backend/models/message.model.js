@@ -10,13 +10,15 @@ const messageSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["text", "image", "video","post"], 
+            enum: ["text", "image", "video","post","audio"], 
             default: "text",
         },
-        iv: { 
-            type: String,
-            required: true,
-        },
+        iv: {
+      type: String,
+      required: function () {
+        return this.text && typeof this.text === "string" && this.text.trim().length > 0;
+      },
+    },
         seen: {
             type: Boolean,
             default: false,

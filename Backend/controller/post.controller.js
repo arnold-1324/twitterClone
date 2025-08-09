@@ -182,6 +182,7 @@ export const deletePostsUsersCollection = async (req, res) => {
   }
 };
 
+// controller/post.controller.js
 export const sharepost = async (req, res) => {
   const { postId, conversationId, text } = req.body;
   const senderId = req.user._id;
@@ -196,42 +197,37 @@ export const sharepost = async (req, res) => {
       return res.status(404).json({ error: "Post not found" });
     }
 
-    // Ensure sharedBy is initialized as an array if not already
-    if (!Array.isArray(post.sharedBy)) {
-      post.sharedBy = [];
-    }
+    // Ensure sharedBy is array
+    if (!Array.isArray(post.sharedBy)) post.sharedBy = [];
 
-    // Increment shareCount and add the sender to sharedBy array
-    post.shareCount += 1;
+    // Update shareCount & sharedBy
+    post.shareCount = (post.shareCount || 0) + 1;
     post.sharedBy.push({ userId: senderId, sharedAt: new Date() });
 
-    // Mark the fields as modified to ensure they get saved correctly
-    post.markModified('shareCount');
-    post.markModified('sharedBy');
-
-    // Save the post after updates
     await post.save();
 
-    // Handle text encryption only if text is provided
-    let encryptedMessage = { encryptedData: "", iv: "" };
-    if (text) {
+    // Only encrypt if text is non-empty
+    let encryptedMessage = null;
+    if (text && typeof text === "string" && text.trim() !== "") {
+      // encrypt should return { encryptedData, iv }
       encryptedMessage = encrypt(text);
     }
 
-    // Create the new message, text is optional
-    const newMessage = new Message({
+    // Build message payload – include iv only when encryptedMessage exists
+    const messagePayload = {
       conversationId,
       sender: senderId,
-      text: text ? encryptedMessage.encryptedData : "",  // If no text, leave it empty
+      text: encryptedMessage ? encryptedMessage.encryptedData : "", // store empty string when no text
       type: "post",
-      iv: text ? encryptedMessage.iv : "",  // Only add iv if text exists
+      ...(encryptedMessage && { iv: encryptedMessage.iv }),
       postReference: postId,
       seen: false,
-    });
+    };
 
+    const newMessage = new Message(messagePayload);
     await newMessage.save();
 
-    // Fetch the updated post to send back in the response
+    // Fetch updated post for response
     const updatedPost = await Post.findById(postId);
 
     return res.status(200).json({
@@ -239,7 +235,7 @@ export const sharepost = async (req, res) => {
       post: updatedPost,
       postsharedBy: updatedPost.sharedBy,
       count: updatedPost.shareCount,
-      postId: postId,
+      postId,
       messageId: newMessage._id,
     });
   } catch (error) {

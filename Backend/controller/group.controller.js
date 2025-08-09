@@ -30,12 +30,27 @@ function requireAdmin(group, userId) {
   }
 }
 
-// Create a new group
+
 export const createGroup = async (req, res) => {
   try {
-    let { name, description, members = [], admins = [], permissions } = req.body;
-    const ownerId = req.user._id; // Get owner from authenticated user
+    let { name, description, permissions } = req.body;
+    const ownerId = req.user._id;
+    const ownerIdString = ownerId.toString();
     
+    // Get members from request (handling both array and non-array formats)
+    let members = [];
+    if (req.body.members) {
+      try {
+        members = JSON.parse(req.body.members);
+      } catch (e) {
+        console.error("Invalid members JSON:", e);
+      }
+    }
+
+
+    console.log("Members from request:", members);
+   
+
     name = sanitize(name);
     description = sanitize(description);
     
@@ -58,25 +73,48 @@ export const createGroup = async (req, res) => {
       profileImage = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
     }
 
-    // Ensure uniqueness and validity
-    members = Array.from(new Set(members.filter(isValidId)));
-    admins = Array.from(new Set(admins.filter(isValidId)));
+    // Ensure members is an array
+    if (!Array.isArray(members)) members = [];
     
-    // Add owner to members and admins if not already included
-    if (!members.includes(ownerId)) members.push(ownerId);
-    if (!admins.includes(ownerId)) admins.push(ownerId);
+    // Process member IDs
+    members = [...new Set(members)]
+      .filter(m => isValidId(m))
+      .map(id => id.toString());
 
-    // Create conversation first
-    const conversation = await Conversation.create({ participants: members });
+      console.log("Members after processing:", members);
+
+    // Add owner to members if not already included
+    if (!members.includes(ownerIdString)) {
+      members.push(ownerIdString);
+    }
     
-    // Create the group
+    // For now, admins are just the owner - can be expanded later
+    const admins = [ownerIdString];
+
+    // Deduplicate members
+    members = [...new Set(members)];
+
+    console.log("deduplicate member:", members);
+
+
+    // Validate we have at least 1 member
+    if (members.length === 0) {
+      return res.status(400).json({ error: "Group must have at least 1 member" });
+    }
+
+    // Create conversation - convert string IDs to ObjectIDs
+    const conversation = await Conversation.create({ 
+      participants: members.map(id => new Types.ObjectId(id))
+    });
+    
+    // Create the group - convert string IDs to ObjectIDs
     const group = await Group.create({ 
       name, 
       description, 
       profileImage,
       owner: ownerId, 
-      members, 
-      admins, 
+      members: members.map(id => new Types.ObjectId(id)), 
+      admins: admins.map(id => new Types.ObjectId(id)), 
       permissions: permissions || { canMessage: 'all' }, 
       conversation: conversation._id 
     });
@@ -88,8 +126,12 @@ export const createGroup = async (req, res) => {
       .populate('admins', 'username profileImg');
 
     return res.status(201).json(populatedGroup);
-  } catch (err) { handleError(res, err, err.code); }
+  } catch (err) { 
+    console.error("Group creation error:", err);
+    handleError(res, err, err.code || 500); 
+  }
 };
+
 
 // Get all groups for a user
 export const getUserGroups = async (req, res) => {
