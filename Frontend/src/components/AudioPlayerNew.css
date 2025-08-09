@@ -1,0 +1,60 @@
+.audio-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #fff;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  width: 100%;
+  max-width: 560px;
+}
+
+.audio-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #833AB4, #E1306C);
+  border: none;
+  cursor: pointer;
+}
+
+.audio-play-btn-inner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audio-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.audio-waveform {
+  width: 100%;
+  height: 36px;
+}
+
+.audio-time {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.audio-speed-btn {
+  font-size: 12px;
+  color: #0095f6;
+  border: none;
+  background: transparent;
+  padding: 4px 8px;
+  cursor: pointer;
+}

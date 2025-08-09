@@ -6,7 +6,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from '../lib/utils/uploader.js'
 import { generateTokenAndCookies } from "../lib/utils/generateToken.js";
 import { sendResetPasswordEmail, sendVerificationEmail,sendWelcomeEmail,sendPasswordResetSuccessEmail } from "../lib/utils/Mailtrap/email.js"
-import { profile } from "console";
+//import { profile } from "console";
 
 
 export const signUp=async(req,res)=>{
@@ -47,7 +47,7 @@ export const signUp=async(req,res)=>{
     if(newUser){
       generateTokenAndCookies(newUser._id,res);
       await newUser.save();  
-      //await sendVerificationEmail(newUser.email,verificationToken);  
+      await sendVerificationEmail(newUser.email,verificationToken);  
 
       res.status(201).json({
         sucess:true,
@@ -132,7 +132,7 @@ user.verificationToken=undefined;
 user.verificationTokenExpiresAt=undefined;
 await user.save();
 
-//await sendWelcomeEmail(user.email,user.fullName);
+await sendWelcomeEmail(user.email,user.fullName);
 res.status(200).json({
   success:true,
   message:"Email verified successfully",
