@@ -47,8 +47,8 @@ function App() {
     <Box position={"relative"} w="full" minHeight="100vh">
       <Container
         maxW={pathname === "/" ? { base: "620px", md: "900px" } : "620px"}
-       // minHeight="100vh"
-       height="100vh"
+        minHeight="100vh"
+       
         display="flex"
         flexDirection="column"
       >

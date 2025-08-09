@@ -1,4 +1,4 @@
-import moment from "moment";  
+import moment from "moment";
 import { s3, generateFileName } from "../lib/utils/uploader.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
@@ -14,8 +14,8 @@ export const sendMessage = async (req, res) => {
 
   let img = "";
   let video = "";
-  let audio="";
-  let  messageType;
+  let audio = "";
+  let messageType;
   try {
     if (req.file) {
       const fileUrl = generateFileName();
@@ -32,27 +32,27 @@ export const sendMessage = async (req, res) => {
       const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
 
       if (req.file.mimetype.startsWith("image/")) {
-       
+
         img = publicUrl;
       } else if (req.file.mimetype.startsWith("video/")) {
-        
-        video = publicUrl;
-      }else if (req.file.mimetype.startsWith("audio/")) {
-        audio = publicUrl;
-    }
-  }
 
-    if (message!== undefined && message !== null && message.trim() !== "") {
-     messageType = "text";   
-    }else if(img){
+        video = publicUrl;
+      } else if (req.file.mimetype.startsWith("audio/")) {
+        audio = publicUrl;
+      }
+    }
+
+    if (message !== undefined && message !== null && message.trim() !== "") {
+      messageType = "text";
+    } else if (img) {
       messageType = "image";
-    }else if(video){
-    messageType = "video";
-    }else if(audio){
-    
+    } else if (video) {
+      messageType = "video";
+    } else if (audio) {
+
       messageType = "audio";
-    }else{
-      messageType="";
+    } else {
+      messageType = "";
     }
     // Encrypt the message text
     const encryptedMessage = encrypt(message);
@@ -63,13 +63,13 @@ export const sendMessage = async (req, res) => {
     // Check if this is a group message
     if (groupId) {
       isGroupMessage = true;
-      
+
       // Verify user is member of the group
       const group = await Group.findById(groupId);
       if (!group) {
         return res.status(404).json({ error: "Group not found" });
       }
-      
+
       if (!group.members.includes(senderId)) {
         return res.status(403).json({ error: "You are not a member of this group" });
       }
@@ -85,7 +85,7 @@ export const sendMessage = async (req, res) => {
           },
         });
         await conversation.save();
-        
+
         // Update group with conversation reference
         group.conversation = conversation._id;
         await group.save();
@@ -213,7 +213,7 @@ export const sendMessage = async (req, res) => {
       }
     }
 
-  
+
 
     res.status(201).json(socketPayload);  // Send the message back with media URL
 
@@ -238,13 +238,13 @@ export const getMessages = async (req, res) => {
     if (groupId) {
       // Group conversation
       isGroupConversation = true;
-      
+
       // Verify user is member of the group
       const group = await Group.findById(groupId);
       if (!group) {
         return res.status(404).json({ error: "Group not found" });
       }
-      
+
       if (!group.members.includes(userId)) {
         return res.status(403).json({ error: "You are not a member of this group" });
       }
@@ -256,8 +256,8 @@ export const getMessages = async (req, res) => {
       conversation = await Conversation.findById(group.conversation).lean();
     } else {
       // One-on-one conversation
-      conversation = await Conversation.findOne({ 
-        participants: { $all: [userId, otherUserId] } 
+      conversation = await Conversation.findOne({
+        participants: { $all: [userId, otherUserId] }
       }).lean();
     }
 
@@ -267,14 +267,14 @@ export const getMessages = async (req, res) => {
 
     const messages = await Message.find({ conversationId: conversation._id })
       .sort({ createdAt: 1 })
-      .populate({ 
-        path: 'sender', 
-        select: 'username profileImg' 
+      .populate({
+        path: 'sender',
+        select: 'username profileImg'
       })
-      .populate({ 
-        path: 'replyTo', 
-        select: 'text iv sender video img audio', 
-        populate: { path: 'sender', select: 'username profileImg' } 
+      .populate({
+        path: 'replyTo',
+        select: 'text iv sender video img audio',
+        populate: { path: 'sender', select: 'username profileImg' }
       })
       .populate({
         path: 'postReference',
@@ -310,7 +310,7 @@ export const getMessages = async (req, res) => {
         return 'Bad message';  // Return default message on failure
       }
     };
-    
+
     const decryptedMessages = messages.map(msg => ({
       ...msg,
       text: msg.iv ? decryptSafely({ iv: msg.iv, encryptedData: msg.text }) : msg.text,
@@ -323,22 +323,22 @@ export const getMessages = async (req, res) => {
       isGroupMessage: isGroupConversation,
       groupId: groupId || null
     }));
-    
+
     const io = getIO();
-    
+
     if (isGroupConversation) {
       // For group conversations, notify all group members
       const group = await Group.findById(groupId).populate('members');
       const memberIds = group.members
         .filter(member => member._id.toString() !== userId.toString())
         .map(member => member._id.toString());
-      
+
       memberIds.forEach(memberId => {
         const memberSocketId = getRecipientSocketId(memberId);
         if (memberSocketId) {
-          io.to(memberSocketId).emit("messagesSeen", { 
+          io.to(memberSocketId).emit("messagesSeen", {
             conversationId: conversation._id,
-            groupId: groupId 
+            groupId: groupId
           });
         }
       });
@@ -554,7 +554,7 @@ export const getConversation = async (req, res) => {
 export const getGroupConversationInfo = async (req, res) => {
   const { groupId } = req.params;
   const userId = req.user._id;
-  
+
 
   try {
     const group = await Group.findById(groupId)
@@ -615,96 +615,98 @@ export const getGroupConversationInfo = async (req, res) => {
   }
 };
 
+
+
 export const editMessage = async (req, res) => {
-    const { messageId, newText, groupId } = req.body;
-    const userId = req.user._id;
+  const { messageId, newText, groupId } = req.body;
+  const userId = req.user._id;
 
-    try {
-        const encryptedMessage = encrypt(newText);
+  try {
+    const encryptedMessage = encrypt(newText);
 
-        const message = await Message.findOneAndUpdate(
-            { _id: messageId, sender: userId },
-            { text: encryptedMessage.encryptedData, edited: true, iv: encryptedMessage.iv }, 
-            { new: true }
-        )
-        .populate('sender', 'username profileImg')  
-        .populate('replyTo', 'text')  
-        .populate('reactions.user', 'username');  
+    const message = await Message.findOneAndUpdate(
+      { _id: messageId, sender: userId },
+      { text: encryptedMessage.encryptedData, edited: true, iv: encryptedMessage.iv },
+      { new: true }
+    )
+      .populate('sender', 'username profileImg')
+      .populate('replyTo', 'text')
+      .populate('reactions.user', 'username');
 
-        if (!message) {
-            return res.status(404).json({ error: "Message not found or not authorized" });
-        }
-
-        const conversation = await Conversation.findById(message.conversationId)
-            .populate('participants', 'username');  
-
-        // Determine if this is a group message
-        let isGroupMessage = false;
-        if (groupId || (conversation && conversation.participants.length > 2)) {
-            isGroupMessage = true;
-            
-            // If groupId not provided, find it
-            if (!groupId) {
-                const group = await Group.findOne({ conversation: conversation._id });
-                if (group) {
-                    groupId = group._id;
-                }
-            }
-        }
-
-
-        // Emit to all participants (including the editor)
-        const io = getIO();
-        let participantIds = [];
-        if (isGroupMessage) {
-            const group = await Group.findById(groupId).populate('members');
-            if (group) {
-                participantIds = group.members.map(member => member._id.toString());
-            }
-        } else if (conversation && conversation.participants) {
-            participantIds = conversation.participants.map(p => p._id.toString ? p._id.toString() : p._id);
-        }
-
-        // Prepare decrypted message object
-        const decryptedMessage = {
-            ...message.toObject(),
-            text: (() => { try { return decrypt({ iv: message.iv, encryptedData: message.text }); } catch { return '[Decryption failed]'; } })(),
-            iv: undefined,
-            isGroupMessage,
-            groupId: groupId || null,
-            edited: true
-        };
-
-        participantIds.forEach(pid => {
-            const socketId = getRecipientSocketId(pid);
-            if (socketId) {
-                io.to(socketId).emit("messageEdited", decryptedMessage);
-            }
-        });
-
-        const decryptMessage = (() => {
-          try {
-            return decrypt({
-              iv: message.iv, encryptedData: message.text
-            });
-          } catch {
-            return "[Decryption failed]";
-          }
-        })();
-    
-        const responsMessage = {
-          ...message._doc,
-          text: decryptMessage,
-          iv: undefined,
-          isGroupMessage,
-          groupId: groupId || null
-        };
-
-        res.status(200).json(responsMessage);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-        console.log("Error in editMessage:", error.message);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found or not authorized" });
     }
+
+    const conversation = await Conversation.findById(message.conversationId)
+      .populate('participants', 'username');
+
+    // Determine if this is a group message
+    let isGroupMessage = false;
+    if (groupId || (conversation && conversation.participants.length > 2)) {
+      isGroupMessage = true;
+
+      // If groupId not provided, find it
+      if (!groupId) {
+        const group = await Group.findOne({ conversation: conversation._id });
+        if (group) {
+          groupId = group._id;
+        }
+      }
+    }
+
+
+    // Emit to all participants (including the editor)
+    const io = getIO();
+    let participantIds = [];
+    if (isGroupMessage) {
+      const group = await Group.findById(groupId).populate('members');
+      if (group) {
+        participantIds = group.members.map(member => member._id.toString());
+      }
+    } else if (conversation && conversation.participants) {
+      participantIds = conversation.participants.map(p => p._id.toString ? p._id.toString() : p._id);
+    }
+
+    // Prepare decrypted message object
+    const decryptedMessage = {
+      ...message.toObject(),
+      text: (() => { try { return decrypt({ iv: message.iv, encryptedData: message.text }); } catch { return '[Decryption failed]'; } })(),
+      iv: undefined,
+      isGroupMessage,
+      groupId: groupId || null,
+      edited: true
+    };
+
+    participantIds.forEach(pid => {
+      const socketId = getRecipientSocketId(pid);
+      if (socketId) {
+        io.to(socketId).emit("messageEdited", decryptedMessage);
+      }
+    });
+
+    const decryptMessage = (() => {
+      try {
+        return decrypt({
+          iv: message.iv, encryptedData: message.text
+        });
+      } catch {
+        return "[Decryption failed]";
+      }
+    })();
+
+    const responsMessage = {
+      ...message._doc,
+      text: decryptMessage,
+      iv: undefined,
+      isGroupMessage,
+      groupId: groupId || null
+    };
+
+    res.status(200).json(responsMessage);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+    console.log("Error in editMessage:", error.message);
+  }
 };
 
 
@@ -886,13 +888,13 @@ export const replyToMessage = async (req, res) => {
     if (groupId) {
       // Group reply
       isGroupReply = true;
-      
+
       // Verify user is member of the group
       const group = await Group.findById(groupId);
       if (!group) {
         return res.status(404).json({ error: "Group not found" });
       }
-      
+
       if (!group.members.includes(senderId)) {
         return res.status(403).json({ error: "You are not a member of this group" });
       }
@@ -930,33 +932,9 @@ export const replyToMessage = async (req, res) => {
 
     // Notify recipients
     const io = getIO();
-    
-    if (isGroupReply) {
-      // For group replies, notify all group members except sender
-      const group = await Group.findById(groupId).populate('members');
-      const recipientIds = group.members
-        .filter(member => member._id.toString() !== senderId.toString())
-        .map(member => member._id.toString());
-      
-      recipientIds.forEach(recipientId => {
-        const recipientSocketId = getRecipientSocketId(recipientId);
-        if (recipientSocketId) {
-          io.to(recipientSocketId).emit("newGroupMessage", {
-            message: populatedReplyMessage,
-            groupId: groupId,
-            conversationId: conversation._id
-          });
-        }
-      });
-    } else {
-      // For one-on-one replies
-      const recipientSocketId = getRecipientSocketId(recipientId);
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit("newMessage", populatedReplyMessage);
-      }
-    }
+   
 
-    res.status(201).json({
+    const responsePayload = {
       messageId: populatedReplyMessage._id,
       conversationId: populatedReplyMessage.conversationId,
       sender: {
@@ -990,7 +968,33 @@ export const replyToMessage = async (req, res) => {
       updatedAt: populatedReplyMessage.updatedAt,
       isGroupMessage: isGroupReply,
       groupId: groupId || null
-    });
+    };
+
+    // Socket emit
+    if (isGroupReply) {
+      const group = await Group.findById(groupId).populate('members');
+      const recipientIds = group.members
+        .filter(member => member._id.toString() !== senderId.toString())
+        .map(member => member._id.toString());
+
+      recipientIds.forEach(rId => {
+        const recipientSocketId = getRecipientSocketId(rId);
+        if (recipientSocketId) {
+          io.to(recipientSocketId).emit("newGroupMessage", responsePayload);
+        }
+      });
+    } else {
+      const recipientSocketId = getRecipientSocketId(recipientId);
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit("newMessage", responsePayload);
+      }
+    }
+
+    // HTTP response
+    res.status(201).json(responsePayload);
+
+
+
   } catch (error) {
     res.status(500).json({ error: error.message });
     console.log("Error in replyToMessage:", error.message);
@@ -1072,8 +1076,8 @@ export const getGroupMessages = async (req, res) => {
     // Update conversation.lastMessage.seen only if lastMessage exists and its sender is not the current user
     const lastMsgSenderId = conversation.lastMessage
       ? (conversation.lastMessage.sender?._id
-          ? String(conversation.lastMessage.sender._id)
-          : String(conversation.lastMessage.sender || ""))
+        ? String(conversation.lastMessage.sender._id)
+        : String(conversation.lastMessage.sender || ""))
       : null;
 
     if (lastMsgSenderId && String(lastMsgSenderId) !== String(userId)) {
@@ -1154,7 +1158,7 @@ export const deleteMessage = async (req, res) => {
     if (!messageId) {
       return res.status(400).json({ error: "Message ID is required" });
     }
-    
+
     const message = await Message.findById(messageId);
     console.log('message:', message);
     if (!message) {
@@ -1170,7 +1174,7 @@ export const deleteMessage = async (req, res) => {
     if (conversation && conversation.participants.length > 2) {
       // This is likely a group conversation
       isGroupMessage = true;
-      
+
       // Find the group that has this conversation
       const group = await Group.findOne({ conversation: conversation._id });
       if (group) {
@@ -1195,18 +1199,18 @@ export const deleteMessage = async (req, res) => {
     if (message.sender.toString() !== userId.toString()) {
       return res.status(403).json({ error: "Not authorized to delete this message" });
     }
-    
+
     message.deletedFor.push(userId);
     await message.save();
 
     const io = getIO();
-    
+
     if (isGroupMessage) {
       // For group messages, notify all group members
       recipientIds.forEach(recipientId => {
         const recipientSocketId = getRecipientSocketId(recipientId);
         if (recipientSocketId) {
-          io.to(recipientSocketId).emit("messageDeleted", { 
+          io.to(recipientSocketId).emit("messageDeleted", {
             messageId,
             groupId: groupId
           });
@@ -1222,8 +1226,8 @@ export const deleteMessage = async (req, res) => {
       }
     }
 
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       message,
       isGroupMessage,
       groupId
