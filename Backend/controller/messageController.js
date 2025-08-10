@@ -32,10 +32,8 @@ export const sendMessage = async (req, res) => {
       const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
 
       if (req.file.mimetype.startsWith("image/")) {
-
         img = publicUrl;
       } else if (req.file.mimetype.startsWith("video/")) {
-
         video = publicUrl;
       } else if (req.file.mimetype.startsWith("audio/")) {
         audio = publicUrl;
@@ -49,11 +47,11 @@ export const sendMessage = async (req, res) => {
     } else if (video) {
       messageType = "video";
     } else if (audio) {
-
       messageType = "audio";
     } else {
       messageType = "";
     }
+
     // Encrypt the message text
     const encryptedMessage = encrypt(message);
 
@@ -188,21 +186,52 @@ export const sendMessage = async (req, res) => {
     // Notify recipients via socket (if online)
     const io = getIO();
     if (isGroupMessage) {
-      // For group messages, emit to all group members except the sender
+     
+      // Robust emission: collect unique socket ids for members (excluding sender)
       const group = await Group.findById(groupId).lean();
       if (group) {
-        group.members
-          .filter(memberId => memberId.toString() !== senderId.toString())
-          .forEach(memberId => {
-            const memberSocketId = getRecipientSocketId(memberId.toString());
-            if (memberSocketId) {
-              io.to(memberSocketId).emit("newGroupMessage", {
-                message: socketPayload,
-                groupId: groupId,
-                conversationId: conversation._id
-              });
-            }
-          });
+        const memberIds = (group.members || []).map(m => (m && m.toString) ? m.toString() : String(m));
+        const uniqueSocketIds = new Set();
+
+        for (const memberId of memberIds) {
+          if (memberId === String(senderId)) continue; // skip sender
+
+          // Try to get socket id for this member
+          const memberSocketId = getRecipientSocketId(memberId);
+         
+
+          if (memberSocketId) {
+            uniqueSocketIds.add(memberSocketId);
+          }
+        }
+
+        if (uniqueSocketIds.size > 0) {
+          // emit to each unique socket id
+          for (const sid of uniqueSocketIds) {
+            io.to(sid).emit("newGroupMessage", {
+              message: socketPayload,
+              groupId: groupId,
+              conversationId: conversation._id
+            });
+          }
+         
+        } else {
+          // fallback: emit to a conversation room (if you maintain rooms on server)
+          // This prevents silently dropping the message when no individual socket found.
+          // If you don't use rooms, you can remove this fallback.
+          try {
+            io.to(String(conversation._id)).emit("newGroupMessage", {
+              message: socketPayload,
+              groupId: groupId,
+              conversationId: conversation._id
+            });
+           
+          } catch (e) {
+           
+          }
+        }
+      } else {
+       
       }
     } else {
       // For one-on-one messages
@@ -210,15 +239,17 @@ export const sendMessage = async (req, res) => {
       if (recipientSocketId) {
         io.to(recipientSocketId).emit("newMessage", socketPayload);
         io.to(recipientSocketId).emit("stopTyping", { conversationId: conversation._id });
+      } else {
+        // fallback to conversation room
+        io.to(String(conversation._id)).emit("newMessage", socketPayload);
       }
     }
 
-
-
+    // Respond with the same payload
     res.status(201).json(socketPayload);  // Send the message back with media URL
 
   } catch (error) {
-    console.error("Error in sendMessage:", error.message);
+   
     res.status(500).json({ error: error.message });
   }
 };
@@ -976,11 +1007,14 @@ export const replyToMessage = async (req, res) => {
       const recipientIds = group.members
         .filter(member => member._id.toString() !== senderId.toString())
         .map(member => member._id.toString());
-
       recipientIds.forEach(rId => {
         const recipientSocketId = getRecipientSocketId(rId);
         if (recipientSocketId) {
-          io.to(recipientSocketId).emit("newGroupMessage", responsePayload);
+          io.to(recipientSocketId).emit("newGroupMessage", {
+            message: responsePayload,
+            groupId: groupId,
+            conversationId: responsePayload.conversationId
+          });
         }
       });
     } else {
