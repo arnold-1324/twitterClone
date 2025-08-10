@@ -119,9 +119,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         prev.map((conversation) =>
           conversation._id === message.conversationId
             ? {
-                ...conversation,
-                lastMessage: { text: message.text, sender: message.sender },
-              }
+              ...conversation,
+              lastMessage: { text: message.text, sender: message.sender },
+            }
             : conversation
         )
       );
@@ -138,9 +138,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         prev.map((conversation) =>
           conversation._id === conversationId
             ? {
-                ...conversation,
-                lastMessage: { text: message.text, sender: message.sender },
-              }
+              ...conversation,
+              lastMessage: { text: message.text, sender: message.sender },
+            }
             : conversation
         )
       );
@@ -151,7 +151,6 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     };
 
     const handleMessageEdited = (editedMessage) => {
-      debugger;
       // Use editedMessage (not `message`) and safely update local messages
       setMessages((prevMessages) =>
         prevMessages.map((msg) => {
@@ -329,103 +328,123 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       >
         {loadingMessages
           ? [...Array(5)].map((_, i) => (
-              <MotionFlex
-                key={i}
-                gap={2}
-                alignItems="center"
-                p={1}
-                borderRadius="md"
-                alignSelf={i % 2 === 0 ? "flex-start" : "flex-end"}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3 }}
+            <MotionFlex
+              key={i}
+              gap={2}
+              alignItems="center"
+              p={1}
+              borderRadius="md"
+              alignSelf={i % 2 === 0 ? "flex-start" : "flex-end"}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              {i % 2 === 0 && <SkeletonCircle size={7} />}
+              <Flex flexDir={"column"} gap={2}>
+                <Skeleton h="8px" w="250px" />
+                <Skeleton h="8px" w="250px" />
+                <Skeleton h="8px" w="250px" />
+                <Skeleton h="8px" w="250px" />
+              </Flex>
+              {i % 2 === 0 && <SkeletonCircle size={7} />}
+            </MotionFlex>
+          ))
+          : messages.map((message = {}) => {
+            const sender = message?.sender || {};
+            const senderId =
+              sender?._id || sender?.id || message?.sender || message?.senderId || "";
+            const isOwnMessage =
+              String(currentUser?._id || "") === String(senderId || "");
+            const isHighlighted =
+              String(highlightedMessageId || "") === String(message?._id || "");
+
+            return (
+              <Flex
+                id="message-box"
+                key={message?._id || message?.messageId || Math.random()}
+                justifyContent={isOwnMessage ? "flex-end" : "flex-start"}
+                mb={2}
+                width="100%"
               >
-                {i % 2 === 0 && <SkeletonCircle size={7} />}
-                <Flex flexDir={"column"} gap={2}>
-                  <Skeleton h="8px" w="250px" />
-                  <Skeleton h="8px" w="250px" />
-                  <Skeleton h="8px" w="250px" />
-                  <Skeleton h="8px" w="250px" />
-                </Flex>
-                {i % 2 === 0 && <SkeletonCircle size={7} />}
-              </MotionFlex>
-            ))
-          : messages.map((message) => {
-              const sender = message.sender || {};
-              const senderId = sender._id || sender.id || message.sender;
-              const isOwnMessage = String(currentUser._id) === String(senderId);
-              const isHighlighted = highlightedMessageId === message._id;
-              return (
-                <Flex
-                  id="message-box"
-                  key={message._id}
-                  justifyContent={isOwnMessage ? "flex-end" : "flex-start"}
-                  mb={2}
-                  width="100%"
+                <Box
+                  bg={isHighlighted ? "green.900" : "transparent"}
+                  minW="120px"
+                  maxW={message?.audio ? "100%" : { base: "90%", md: "75%" }}
+                  width={message?.audio ? "100%" : undefined}
+                  borderRadius="lg"
+                  wordBreak="break-word"
+                  boxShadow="sm"
+                  px={1}
+                  py={1}
+                  display="inline-block"
                 >
-                  <Box
-                    bg={isHighlighted ? "green.900" : "transparent"}
-                    minW="120px"
-                    maxW={message.audio ? "100%" : { base: "90%", md: "75%" }}
-                    width={message.audio ? "100%" : undefined}
-                    borderRadius="lg"
-                    wordBreak="break-word"
-                    boxShadow="sm"
-                    px={1}
-                    py={1}
-                    display="inline-block"
-                  >
-                    <Message
-                      message={message}
-                      isOwnMessage={isOwnMessage}
-                      handelselectedMsg={handelselectedMsg}
-                      handleDelete={handleDelete}
-                      updateMessageReactions={updateMessageReactions}
-                      handleHighlightMessage={handleHighlightMessage}
-                      isGroupMessage={isGroupConversation}
-                      playingAudioId={playingAudioId}
-                      setPlayingAudioId={handleSetPlayingAudioId}
-                      editingMessageId={editingMessageId}
-                      setEditingMessageId={setEditingMessageId}
-                      setEditingText={setEditingText}
-                      onEditSubmit={async (msgId, newText) => {
-                        try {
-                          const res = await fetch("/api/messages/edit", {
-                            method: "PUT",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              messageId: msgId,
-                              newText,
-                              groupId: isGroupConversation ? selectedConversation.groupId : undefined,
-                            }),
-                          });
-                          if (!res.ok) throw new Error("Failed to edit message");
+                  <Message
+                    message={message}
+                    isOwnMessage={isOwnMessage}
+                    handelselectedMsg={handelselectedMsg}
+                    handleDelete={handleDelete}
+                    updateMessageReactions={updateMessageReactions}
+                    handleHighlightMessage={handleHighlightMessage}
+                    isGroupMessage={isGroupConversation}
+                    playingAudioId={playingAudioId}
+                    setPlayingAudioId={handleSetPlayingAudioId}
+                    editingMessageId={editingMessageId}
+                    setEditingMessageId={setEditingMessageId}
+                    setEditingText={setEditingText}
+                    onEditSubmit={async (msgId, newText) => {
+                      try {
+                        const res = await fetch("/api/messages/edit", {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            messageId: msgId,
+                            newText,
+                            groupId: isGroupConversation
+                              ? selectedConversation?.groupId
+                              : undefined,
+                          }),
+                        });
+                        if (!res.ok) throw new Error("Failed to edit message");
 
-                          const updated = await res.json(); 
-                          setMessages(prev =>
-                            prev.map(m => (String(m._id) === String(updated._id) ? { ...m, ...updated } : m))
-                          );
-                          setConversations(prev =>
-                            prev.map(c =>
-                              String(c._id) === String(updated.conversationId)
-                                ? { ...c, lastMessage: { text: updated.text, sender: updated.sender } }
-                                : c
-                            )
-                          );
-                          setEditingMessageId(null);
-                          setEditingText("");
-                          return updated;
-                        } catch (err) {
-                          showToast("Error", err.message || "Edit failed", "error");
-                          throw err; 
-                        }
-                      }}
+                        const updated = await res.json();
+                        setMessages((prev) =>
+                          prev.map((m) =>
+                            String(m?._id) === String(updated?._id)
+                              ? { ...m, ...updated }
+                              : m
+                          )
+                        );
+                        setConversations((prev) =>
+                          prev.map((c) =>
+                            String(c?._id) === String(updated?.conversationId)
+                              ? {
+                                ...c,
+                                lastMessage: {
+                                  text: updated?.text,
+                                  sender: updated?.sender,
+                                },
+                              }
+                              : c
+                          )
+                        );
+                        setEditingMessageId(null);
+                        setEditingText("");
+                        return updated;
+                      } catch (err) {
+                        showToast(
+                          "Error",
+                          err?.message || "Edit failed",
+                          "error"
+                        );
+                        throw err;
+                      }
+                    }}
+                  />
+                </Box>
+              </Flex>
+            );
+          })}
 
-                    />
-                  </Box>
-                </Flex>
-              );
-            })}
         <div ref={messageEndRef} />
         <IconButton
           onClick={scrollToBottom}
@@ -446,11 +465,11 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
             usernames={
               isGroupConversation
                 ? typingUsers.map((id) => {
-                    const participant = (selectedConversation.participants || []).find(
-                      (p) => String(p._id) === String(id)
-                    );
-                    return participant ? participant.username : "Someone";
-                  })
+                  const participant = (selectedConversation.participants || []).find(
+                    (p) => String(p._id) === String(id)
+                  );
+                  return participant ? participant.username : "Someone";
+                })
                 : [selectedConversation.username]
             }
           />
