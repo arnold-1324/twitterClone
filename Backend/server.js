@@ -43,7 +43,7 @@ const __dirname = path.resolve();
 //app.use(helmet()); 
 //app.use(express.static(path.join(__dirname, '../Frontend/dist')));
 app.use(cors({
-  origin: "https://frontend-gamma-opal-34.vercel.app/",
+  origin: "https://frontend-gamma-opal-34.vercel.app", // no trailing slash
   credentials: true,
 }));
 app.use(mongoSanitize()); 
