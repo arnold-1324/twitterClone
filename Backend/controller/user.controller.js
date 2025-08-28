@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { PutObjectCommand,DeleteObjectCommand } from "@aws-sdk/client-s3"
 import { s3,generateFileName } from "../lib/utils/uploader.js";
 import mongoose from "mongoose";
-
+import { redisClient } from "../Redis.js";
 
 export const followUnfollowUser = async (req, res) => {
   
@@ -84,29 +84,51 @@ export const followUnfollowUser = async (req, res) => {
 // };
 
 export const getUserProfile = async (req, res) => {
-  const { query } = req.params;  
   try {
-      let user;
+    const { query } = req.params;   
+    const cacheKey = `user:profile:${query}`;
 
-      if (mongoose.Types.ObjectId.isValid(query)) {
-          user = await User.findOne({ _id: query }).select("-password -updatedAt -verificationToken -verificationTokenExpiresAt");
-      } else {
-          user = await User.findOne({ username: query }).select("-password -updatedAt -verificationToken -verificationTokenExpiresAt");
-      }
+  
+    const cachedUser = await redisClient.get(cacheKey);
+    if (cachedUser) {
+      return res.status(200).json(JSON.parse(cachedUser));
+    }
 
-      if (!user) return res.status(404).json({ error: "User not found" });
 
-      return res.status(200).json(user);
+    let user;
+    if (mongoose.Types.ObjectId.isValid(query)) {
+      user = await User.findById(query).select(
+        "-password -updatedAt -verificationToken -verificationTokenExpiresAt"
+      );
+    } else {
+      user = await User.findOne({ username: query }).select(
+        "-password -updatedAt -verificationToken -verificationTokenExpiresAt"
+      );
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+ 
+    await redisClient.setEx(cacheKey, 600, JSON.stringify(user));
+
+    return res.status(200).json(user);
 
   } catch (error) {
-      console.error("Error in getUserProfile:", error.message);
-      res.status(500).json({ error: "Internal Server Error" });
+    console.error("Error in getUserProfile:", error.message);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
 export const getSuggestedUser = async (req, res) => {
   try {
     const userId = req.user._id.toString();
+    const cacheKey = `user:suggested:${userId}`;
+    const cachedSuggestions = await redisClient.get(cacheKey);
+    if (cachedSuggestions) {
+      return res.status(200).json(JSON.parse(cachedSuggestions));
+    }
 
     // Fetch user's following list, defaulting to empty array if none
     const userDoc = await User.findById(userId).select('following');
@@ -144,7 +166,7 @@ export const getSuggestedUser = async (req, res) => {
       _id: { $in: suggestedUserIds }
     })
     .select('-password -updatedAt -verificationToken -verificationTokenExpiresAt');
-
+    await redisClient.setEx(cacheKey, 300, JSON.stringify(users));
     res.status(200).json(users);
   } catch (error) {
     console.error('Error in suggestedUser:', error.message);

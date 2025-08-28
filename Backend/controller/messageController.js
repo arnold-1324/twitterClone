@@ -261,8 +261,13 @@ export const sendMessage = async (req, res) => {
 export const getMessages = async (req, res) => {
   const { otherUserId, groupId } = req.params;
   const userId = req.user._id;
-
+   
   try {
+    const cacheKey = `messages:convo:${userId}:${otherUserId  || groupId}`;
+    const cachedMessages = await redisClient.get(cacheKey);
+    if (cachedMessages) {
+      return res.status(200).json(JSON.parse(cachedMessages));
+    }
     let conversation;
     let isGroupConversation = false;
 
@@ -380,7 +385,7 @@ export const getMessages = async (req, res) => {
         io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
       }
     }
-
+  await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
     res.status(200).json(decryptedMessages);
   } catch (error) {
     console.error("Error in getMessages:", error.message);
@@ -458,7 +463,11 @@ export const reactTomsg = async (req, res) => {
 export const getConversation = async (req, res) => {
   try {
     const currentUserId = req.user._id.toString();
-
+    const cacheKey = `messages:convo:${currentUserId}`;
+    const cachedConversations = await redisClient.get(cacheKey);
+    if (cachedConversations) {
+      return res.status(200).json(JSON.parse(cachedConversations));
+    }
     // 1:1 conversations
     const conversations = await Conversation.find({
       participants: currentUserId,
@@ -573,7 +582,7 @@ export const getConversation = async (req, res) => {
     );
 
     //console.log("All conversations:", allConversations);
-
+    await redisClient.setEx(cacheKey, 60, JSON.stringify(allConversations));
     res.status(200).json(allConversations);
   } catch (error) {
     console.error("Error in getConversation:", error);
@@ -588,6 +597,11 @@ export const getGroupConversationInfo = async (req, res) => {
 
 
   try {
+    const cacheKey = `group:info:${groupId}:${userId}`;
+    const cachedGroupInfo = await redisClient.get(cacheKey);
+    if (cachedGroupInfo) {
+      return res.status(200).json(JSON.parse(cachedGroupInfo));
+    }
     const group = await Group.findById(groupId)
       .populate('members', 'username profileImg')
       .populate('admins', 'username profileImg')
@@ -638,7 +652,7 @@ export const getGroupConversationInfo = async (req, res) => {
       updatedAt: group.conversation?.updatedAt || group.updatedAt,
       createdAt: group.createdAt
     };
-
+    await redisClient.setEx(cacheKey, 300, JSON.stringify(groupInfo));
     res.status(200).json(groupInfo);
   } catch (error) {
     console.error("Error in getGroupConversationInfo:", error.message);
@@ -1038,9 +1052,14 @@ export const replyToMessage = async (req, res) => {
 export const getGroupMessages = async (req, res) => {
   const { groupId } = req.params;
   const userId = req.user._id;
-
+  
   try {
     // Verify user is member of the group
+    const cacheKey = `group:messages:${groupId}:${userId}`; 
+    const cachedMessages = await redisClient.get(cacheKey);
+    if (cachedMessages) {
+      return res.status(200).json(JSON.parse(cachedMessages));
+    }
     const group = await Group.findById(groupId).lean();
     if (!group) return res.status(404).json({ error: "Group not found" });
 
@@ -1165,7 +1184,7 @@ export const getGroupMessages = async (req, res) => {
         });
       }
     });
-
+    await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
     res.status(200).json(decryptedMessages);
   } catch (error) {
     console.error("Error in getGroupMessages:", error);
