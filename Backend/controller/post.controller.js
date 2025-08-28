@@ -142,7 +142,7 @@ export const DeletePost = async (req, res) => {
 
     const deleteCommand = new DeleteObjectCommand(deleteParams);
     await s3.send(deleteCommand);
-    console.log('Deleting file from S3 with Key:', deleteParams.Key);
+   // console.log('Deleting file from S3 with Key:', deleteParams.Key);
 
 
     await Post.findByIdAndDelete(postId);
