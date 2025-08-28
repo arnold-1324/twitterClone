@@ -28,8 +28,25 @@ import Message from "./Message";
 import TypingIndicator from "./TypingIndicator";
 import AudioPlayer from "./AudioPlayer";
 import GroupManagement from "./GroupManagement";
+import groupMessagesByDate from "../Utils/GroupMsg";
 
 const MotionFlex = motion(Flex);
+
+const DateSeparator = ({ date }) => (
+  <Flex justify="center" align="center" my={4}>
+    <Box
+      px={4}
+      py={1}
+      bg={useColorModeValue("gray.700", "gray.600")}
+      borderRadius="full"
+      shadow="sm"
+    >
+      <Text fontSize="xs" color="white">
+        {date}
+      </Text>
+    </Box>
+  </Flex>
+);
 
 const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   // State for editing messages
