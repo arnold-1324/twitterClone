@@ -5,13 +5,15 @@ FROM node:18-alpine
 WORKDIR /usr/src/app
 
 # Set environment variables for build process
-ENV NODE_ENV=production
+ENV NODE_ENV=development
 ENV PORT=5000
+
 
 # Copy package files first for better layer caching
 COPY package*.json ./
 
 # Install production dependencies
+RUN mkdir -p /data
 RUN npm install --omit=dev --ignore-scripts
 
 # Copy application code
