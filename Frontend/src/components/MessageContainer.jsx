@@ -16,7 +16,12 @@ import { motion } from "framer-motion";
 import MessageInput from "./MessageInput";
 import { useEffect, useRef, useState } from "react";
 import useShowToast from "../hooks/useShowToast";
-import { conversationsAtom, selectedConversationAtom, selectedMsg, messagesAtom } from "../atom/messagesAtom";
+import {
+  selectedConversationAtom,
+  selectedMsg,
+  messagesAtom,
+  conversationsAtom,
+} from "../atom/messagesAtom";
 import { useRecoilValue, useSetRecoilState, useRecoilState } from "recoil";
 import userAtom from "../atom/userAtom";
 import { useSocket } from "../context/SocketContext";
@@ -49,10 +54,10 @@ const DateSeparator = ({ date }) => (
 );
 
 const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
-  // State for editing messages
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingText, setEditingText] = useState("");
   const showToast = useShowToast();
+
   const selectedConversation = useRecoilValue(selectedConversationAtom);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const setMessages = useSetRecoilState(messagesAtom);
@@ -71,7 +76,6 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     setSelectedConversation({});
   };
 
-  // Always set the id, do not toggle
   const handleSetPlayingAudioId = (id) => {
     setPlayingAudioId(id);
   };
@@ -81,7 +85,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       id: message.id,
       text: message.text,
       media: message.media,
-      mediaType: message.mediaType
+      mediaType: message.mediaType,
     });
   };
 
@@ -121,7 +125,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
   const handleHighlightMessage = (messageId) => {
     setHighlightedMessageId(messageId);
-    setTimeout(() => setHighlightedMessageId(null), 2000); // Remove highlight after 2 seconds
+    setTimeout(() => setHighlightedMessageId(null), 2000);
   };
 
   useEffect(() => {
@@ -136,9 +140,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         prev.map((conversation) =>
           conversation._id === message.conversationId
             ? {
-              ...conversation,
-              lastMessage: { text: message.text, sender: message.sender },
-            }
+                ...conversation,
+                lastMessage: { text: message.text, sender: message.sender },
+              }
             : conversation
         )
       );
@@ -155,9 +159,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         prev.map((conversation) =>
           conversation._id === conversationId
             ? {
-              ...conversation,
-              lastMessage: { text: message.text, sender: message.sender },
-            }
+                ...conversation,
+                lastMessage: { text: message.text, sender: message.sender },
+              }
             : conversation
         )
       );
@@ -168,7 +172,6 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     };
 
     const handleMessageEdited = (editedMessage) => {
-      // Use editedMessage (not `message`) and safely update local messages
       setMessages((prevMessages) =>
         prevMessages.map((msg) => {
           const msgId = msg._id || msg.id;
@@ -176,8 +179,6 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
           return msgId === editedId ? { ...msg, ...editedMessage } : msg;
         })
       );
-
-      // Clear editing UI state
       setEditingMessageId(null);
       setEditingText("");
     };
@@ -193,7 +194,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       socket.off("messageReactionUpdated", handleMessageReactionUpdated);
       socket.off("messageEdited", handleMessageEdited);
     };
-  }, [socket, selectedConversation?._id, setConversations, setMessages, setEditingMessageId, setEditingText]);
+  }, [socket, selectedConversation?._id]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -243,8 +244,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
     const handleTypingStatus = ({ conversationId, typingUsers }) => {
       if (conversationId === selectedConversation._id) {
-        // Filter out current user and keep ids as strings
-        const otherTypingUsers = (typingUsers || []).filter((id) => String(id) !== String(currentUser._id));
+        const otherTypingUsers = (typingUsers || []).filter(
+          (id) => String(id) !== String(currentUser._id)
+        );
         setTypingUsers(otherTypingUsers);
       }
     };
@@ -253,7 +255,6 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     return () => socket.off("typingStatus", handleTypingStatus);
   }, [socket, selectedConversation?._id, currentUser?._id]);
 
-  // Check if current conversation is a group
   const isGroupConversation = Boolean(selectedConversation?.isGroup);
 
   return (
@@ -269,6 +270,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       minWidth="340px"
       width="100%"
     >
+      {/* Header */}
       <Flex w="full" h={12} alignItems="center" gap={2} mb={2}>
         {isMobileView && (
           <IconButton
@@ -293,13 +295,16 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                 Group
               </Badge>
             )}
-            {!isGroupConversation && <Image src="/verified.png" w={4} h={4} ml={1} />}
+            {!isGroupConversation && (
+              <Image src="/verified.png" w={4} h={4} ml={1} />
+            )}
           </Text>
-          {isGroupConversation && Array.isArray(selectedConversation?.participants) && (
-            <Text fontSize="xs" color="gray.400">
-              {selectedConversation.participants.length} members
-            </Text>
-          )}
+          {isGroupConversation &&
+            Array.isArray(selectedConversation?.participants) && (
+              <Text fontSize="xs" color="gray.400">
+                {selectedConversation.participants.length} members
+              </Text>
+            )}
         </Flex>
         {isGroupConversation && (
           <IconButton
@@ -314,6 +319,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
       <Divider />
 
+      {/* Messages List */}
       <Flex
         flexDir="column"
         gap={14}
@@ -328,139 +334,158 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         width="100%"
         minWidth="0"
         sx={{
-          "::-webkit-scrollbar": {
-            width: "8px",
-          },
-          "::-webkit-scrollbar-track": {
-            background: "#f1f1f1",
-          },
+          "::-webkit-scrollbar": { width: "8px" },
+          "::-webkit-scrollbar-track": { background: "#f1f1f1" },
           "::-webkit-scrollbar-thumb": {
             background: "#888",
             borderRadius: "50%",
           },
-          "::-webkit-scrollbar-thumb:hover": {
-            background: "#555",
-          },
+          "::-webkit-scrollbar-thumb:hover": { background: "#555" },
         }}
       >
         {loadingMessages
           ? [...Array(5)].map((_, i) => (
-            <MotionFlex
-              key={i}
-              gap={2}
-              alignItems="center"
-              p={1}
-              borderRadius="md"
-              alignSelf={i % 2 === 0 ? "flex-start" : "flex-end"}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              {i % 2 === 0 && <SkeletonCircle size={7} />}
-              <Flex flexDir={"column"} gap={2}>
-                <Skeleton h="8px" w="250px" />
-                <Skeleton h="8px" w="250px" />
-                <Skeleton h="8px" w="250px" />
-                <Skeleton h="8px" w="250px" />
-              </Flex>
-              {i % 2 === 0 && <SkeletonCircle size={7} />}
-            </MotionFlex>
-          ))
-          : messages.map((message = {}) => {
-            const sender = message?.sender || {};
-            const senderId =
-              sender?._id || sender?.id || message?.sender || message?.senderId || "";
-            const isOwnMessage =
-              String(currentUser?._id || "") === String(senderId || "");
-            const isHighlighted =
-              String(highlightedMessageId || "") === String(message?._id || "");
-
-            return (
-              <Flex
-                id="message-box"
-                key={message?._id || message?.messageId || Math.random()}
-                justifyContent={isOwnMessage ? "flex-end" : "flex-start"}
-                mb={2}
-                width="100%"
+              <MotionFlex
+                key={i}
+                gap={2}
+                alignItems="center"
+                p={1}
+                borderRadius="md"
+                alignSelf={i % 2 === 0 ? "flex-start" : "flex-end"}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
               >
-                <Box
-                  bg={isHighlighted ? "green.900" : "transparent"}
-                  minW="120px"
-                  maxW={message?.audio ? "100%" : { base: "90%", md: "75%" }}
-                  width={message?.audio ? "100%" : undefined}
-                  borderRadius="lg"
-                  wordBreak="break-word"
-                  boxShadow="sm"
-                  px={1}
-                  py={1}
-                  display="inline-block"
-                >
-                  <Message
-                    message={message}
-                    isOwnMessage={isOwnMessage}
-                    handelselectedMsg={handelselectedMsg}
-                    handleDelete={handleDelete}
-                    updateMessageReactions={updateMessageReactions}
-                    handleHighlightMessage={handleHighlightMessage}
-                    isGroupMessage={isGroupConversation}
-                    playingAudioId={playingAudioId}
-                    setPlayingAudioId={handleSetPlayingAudioId}
-                    editingMessageId={editingMessageId}
-                    setEditingMessageId={setEditingMessageId}
-                    setEditingText={setEditingText}
-                    onEditSubmit={async (msgId, newText) => {
-                      try {
-                        const res = await fetch("/api/messages/edit", {
-                          method: "PUT",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            messageId: msgId,
-                            newText,
-                            groupId: isGroupConversation
-                              ? selectedConversation?.groupId
-                              : undefined,
-                          }),
-                        });
-                        if (!res.ok) throw new Error("Failed to edit message");
+                {i % 2 === 0 && <SkeletonCircle size={7} />}
+                <Flex flexDir={"column"} gap={2}>
+                  <Skeleton h="8px" w="250px" />
+                  <Skeleton h="8px" w="250px" />
+                  <Skeleton h="8px" w="250px" />
+                  <Skeleton h="8px" w="250px" />
+                </Flex>
+                {i % 2 === 0 && <SkeletonCircle size={7} />}
+              </MotionFlex>
+            ))
+          : Object.entries(groupMessagesByDate(messages)).map(
+              ([date, dateMessages]) => (
+                <Box key={date} width="100%">
+                  <DateSeparator date={date} />
+                  {dateMessages.map((message = {}) => {
+                    const sender = message?.sender || {};
+                    const senderId =
+                      sender?._id ||
+                      sender?.id ||
+                      message?.sender ||
+                      message?.senderId ||
+                      "";
+                    const isOwnMessage =
+                      String(currentUser?._id || "") ===
+                      String(senderId || "");
+                    const isHighlighted =
+                      String(highlightedMessageId || "") ===
+                      String(message?._id || "");
 
-                        const updated = await res.json();
-                        setMessages((prev) =>
-                          prev.map((m) =>
-                            String(m?._id) === String(updated?._id)
-                              ? { ...m, ...updated }
-                              : m
-                          )
-                        );
-                        setConversations((prev) =>
-                          prev.map((c) =>
-                            String(c?._id) === String(updated?.conversationId)
-                              ? {
-                                ...c,
-                                lastMessage: {
-                                  text: updated?.text,
-                                  sender: updated?.sender,
-                                },
+                    return (
+                      <Flex
+                        id="message-box"
+                        key={
+                          message?._id ||
+                          message?.messageId ||
+                          Math.random()
+                        }
+                        justifyContent={
+                          isOwnMessage ? "flex-end" : "flex-start"
+                        }
+                        mb={2}
+                        width="100%"
+                      >
+                        <Box
+                          bg={isHighlighted ? "green.900" : "transparent"}
+                          minW="120px"
+                          maxW={
+                            message?.audio ? "100%" : { base: "90%", md: "75%" }
+                          }
+                          width={message?.audio ? "100%" : undefined}
+                          borderRadius="lg"
+                          wordBreak="break-word"
+                          boxShadow="sm"
+                          px={1}
+                          py={1}
+                          display="inline-block"
+                        >
+                          <Message
+                            message={message}
+                            isOwnMessage={isOwnMessage}
+                            handelselectedMsg={handelselectedMsg}
+                            handleDelete={handleDelete}
+                            updateMessageReactions={updateMessageReactions}
+                            handleHighlightMessage={handleHighlightMessage}
+                            isGroupMessage={isGroupConversation}
+                            playingAudioId={playingAudioId}
+                            setPlayingAudioId={handleSetPlayingAudioId}
+                            editingMessageId={editingMessageId}
+                            setEditingMessageId={setEditingMessageId}
+                            setEditingText={setEditingText}
+                            onEditSubmit={async (msgId, newText) => {
+                              try {
+                                const res = await fetch("/api/messages/edit", {
+                                  method: "PUT",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    messageId: msgId,
+                                    newText,
+                                    groupId: isGroupConversation
+                                      ? selectedConversation?.groupId
+                                      : undefined,
+                                  }),
+                                });
+                                if (!res.ok)
+                                  throw new Error("Failed to edit message");
+
+                                const updated = await res.json();
+                                setMessages((prev) =>
+                                  prev.map((m) =>
+                                    String(m?._id) === String(updated?._id)
+                                      ? { ...m, ...updated }
+                                      : m
+                                  )
+                                );
+                                setConversations((prev) =>
+                                  prev.map((c) =>
+                                    String(c?._id) ===
+                                    String(updated?.conversationId)
+                                      ? {
+                                          ...c,
+                                          lastMessage: {
+                                            text: updated?.text,
+                                            sender: updated?.sender,
+                                          },
+                                        }
+                                      : c
+                                  )
+                                );
+                                setEditingMessageId(null);
+                                setEditingText("");
+                                return updated;
+                              } catch (err) {
+                                showToast(
+                                  "Error",
+                                  err?.message || "Edit failed",
+                                  "error"
+                                );
+                                throw err;
                               }
-                              : c
-                          )
-                        );
-                        setEditingMessageId(null);
-                        setEditingText("");
-                        return updated;
-                      } catch (err) {
-                        showToast(
-                          "Error",
-                          err?.message || "Edit failed",
-                          "error"
-                        );
-                        throw err;
-                      }
-                    }}
-                  />
+                            }}
+                          />
+                        </Box>
+                      </Flex>
+                    );
+                  })}
                 </Box>
-              </Flex>
-            );
-          })}
+              )
+            )}
 
         <div ref={messageEndRef} />
         <IconButton
@@ -476,23 +501,26 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         </IconButton>
       </Flex>
 
+      {/* Typing Indicator */}
       {typingUsers.length > 0 && (
         <Box w="100%" px={2} pb={1} position="relative">
           <TypingIndicator
             usernames={
               isGroupConversation
                 ? typingUsers.map((id) => {
-                  const participant = (selectedConversation.participants || []).find(
-                    (p) => String(p._id) === String(id)
-                  );
-                  return participant ? participant.username : "Someone";
-                })
+                    const participant =
+                      (selectedConversation.participants || []).find(
+                        (p) => String(p._id) === String(id)
+                      );
+                    return participant ? participant.username : "Someone";
+                  })
                 : [selectedConversation.username]
             }
           />
         </Box>
       )}
 
+      {/* Input */}
       <MessageInput
         setMessages={setMessages}
         editingMessageId={editingMessageId}
@@ -503,8 +531,11 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         groupId={isGroupConversation ? selectedConversation.groupId : undefined}
       />
 
-      {/* Group Management Modal */}
-      <GroupManagement isOpen={isGroupManagementOpen} onClose={() => setIsGroupManagementOpen(false)} />
+      {/* Group Management */}
+      <GroupManagement
+        isOpen={isGroupManagementOpen}
+        onClose={() => setIsGroupManagementOpen(false)}
+      />
     </Flex>
   );
 };

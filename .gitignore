@@ -26,3 +26,4 @@ redis-data/dump.rdb
 
 
 .env
+.vercel

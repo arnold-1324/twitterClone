@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
 import {encrypt} from "../lib/utils/Msg_encryption/encrypt.js";
+import { redisClient } from "../Redis.js";
 
 
 export const NewPost = async(req,res)=>{
@@ -66,7 +67,8 @@ export const likePost = async (req, res) => {
         postId: post._id,
       });
       await newNotification.save();
-
+      await redisClient.del(`post:${postId}`);
+      await redisClient.del(`feed:${userId}`);
       res.status(200).json({ message: 'Post liked successfully' });
     }
   } catch (error) {
@@ -74,6 +76,8 @@ export const likePost = async (req, res) => {
     console.error('Error in likePost:', error.message);
   }
 };
+
+
 
 export const addReply = async (req, res) => {
   try {
@@ -146,7 +150,8 @@ export const DeletePost = async (req, res) => {
 
 
     await Post.findByIdAndDelete(postId);
-
+    await redisClient.del(`post:${postId}`);
+    await redisClient.del(`feed:${userId}`);
     return res.status(200).json({ message: 'Post deleted successfully' });
   } catch (error) {
     console.error('Error deleting post:', error);
@@ -229,7 +234,8 @@ export const sharepost = async (req, res) => {
 
     // Fetch updated post for response
     const updatedPost = await Post.findById(postId);
-
+      await redisClient.del(`post:${postId}`);
+      await redisClient.del(`feed:${senderId}`);
     return res.status(200).json({
       message: "Post shared successfully!",
       post: updatedPost,
@@ -248,6 +254,11 @@ export const sharepost = async (req, res) => {
 
 export const getPost = async (req, res) => {
   try {
+    const cacheKey = `post:${req.params.id}`;
+    const cachedPost = await redisClient.get(cacheKey);
+    if (cachedPost) {
+      return res.status(200).json(JSON.parse(cachedPost));
+    }
 		const post = await Post.findById(req.params.id)
     .populate({
       path: "likes", 
@@ -257,7 +268,7 @@ export const getPost = async (req, res) => {
 		if (!post) {
 			return res.status(404).json({ error: "Post not found" });
 		}
-
+  await redisClient.setEx(cacheKey, 300, JSON.stringify(post));
 		res.status(200).json(post);
 	} catch (err) {
 		res.status(500).json({ error: err.message });
@@ -268,6 +279,11 @@ export const getFeedPosts = async (req, res) => {
   try {
     const userId = req.user._id;
     const user = await User.findById(userId);
+    const cacheKey = `feed:${userId}`;
+    const cachedFeed = await redisClient.get(cacheKey);
+    if (cachedFeed) {
+      return res.status(200).json(JSON.parse(cachedFeed));
+    }
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -281,6 +297,8 @@ export const getFeedPosts = async (req, res) => {
     path: "likes", 
     select: "username profileImg", 
   });
+
+    await redisClient.setEx(cacheKey, 60, JSON.stringify(feedPosts));
     res.status(200).json(feedPosts);
   } catch (err) {
     console.error('Error in getFeedPosts controller:', err);
@@ -291,6 +309,11 @@ export const getFeedPosts = async (req, res) => {
 export const getUserPosts = async (req, res) => {
   const { username } = req.params;
 	try {
+    const cacheKey = `posts:user:${username}`;
+    const cachedPosts = await redisClient.get(cacheKey);
+    if (cachedPosts) {
+      return res.status(200).json(JSON.parse(cachedPosts));
+    }
 		const user = await User.findOne({ username });
 		if (!user) {
 			return res.status(404).json({ error: "User not found" });
@@ -301,7 +324,7 @@ export const getUserPosts = async (req, res) => {
         path: "likes",
         select: "username profileImg",
       });;
-
+    await redisClient.setEx(cacheKey, 300, JSON.stringify(posts));
 		res.status(200).json(posts);
 	} catch (error) {
 		res.status(500).json({ error: error.message });

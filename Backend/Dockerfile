@@ -25,6 +25,12 @@ RUN rm -rf \
     Dockerfile \
     jest.config.js
 
+# Install Redis
+RUN apk add --no-cache redis
+
+# Copy Redis configuration
+COPY redis.conf /etc/redis/redis.conf
+
 # Expose the port
 EXPOSE 5000
 
@@ -32,5 +38,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s \
   CMD curl -f http://localhost:5000/health || exit 1
 
-# Start the application
-CMD ["npm", "start"]
+# Start Redis alongside the backend
+CMD redis-server /etc/redis/redis.conf --daemonize yes && npm start
