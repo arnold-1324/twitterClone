@@ -76,9 +76,9 @@ services:
   # Redis KeyValue (private, Redis-compatible service)
   - type: keyvalue
     name: redis-cache
-    plan: starter              # <-- change to standard if you need higher throughput/persistence
-    region: singapore          # <-- e.g. ap-south-1 (MUST match backend region)
-    ipAllowList: []           # empty = private-only (recommended)
+    plan: free            # <--- use free plan to avoid payment
+    region: ap-south-1    # <-- match backend region
+    ipAllowList: []          # empty = private-only (recommended)
 
 # Optional global envVarGroups (left empty)
 envVarGroups: []
