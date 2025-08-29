@@ -1,13 +1,14 @@
 import { createClient } from 'redis';
 
-export const redisClient = createClient();
+const host = process.env.REDIS_HOST;
+const port = process.env.REDIS_PORT;
+const url = process.env.REDIS_URL || (host && port ? `redis://${host}:${port}` : 'redis://127.0.0.1:6379');
+
+const redisClient = createClient({ url });
 
 redisClient.on('error', (err) => console.error('Redis Client Error', err));
 
-await redisClient.connect(); 
-console.log("Redis connected");
+await redisClient.connect();
+console.log('✅ Redis connected to', url);
 
-//await redisClient.set('key', 'value');
-//const value = await redisClient.get('key');
-//await redisClient.setEx('someKey', 60, 'temp value');
-//console.log(value); 
+export { redisClient };

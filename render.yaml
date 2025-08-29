@@ -1,0 +1,84 @@
+# render.yaml - Render Blueprint for Backend (Docker) + Redis (KeyValue)
+# -------------------------------------------------------------------
+# Edit the placeholders: <YOUR-USERNAME>, <YOUR-REPO>, <BRANCH>, <REGION>, <FRONTEND_URL>
+# Save at the repository root (or adapt rootDir).
+
+services:
+  # Backend web service (builds Dockerfile under Backend/)
+  - type: web
+    name: my-backend
+    runtime: docker
+    repo: https://github.com/arnold-1324/twitterClone.git   # <-- REPLACE (or remove if blueprint is in same repo)
+    rootDir: Backend                                      # <-- keep if Dockerfile & app are in Backend/
+    dockerfilePath: ./Dockerfile
+    branch: <BRANCH>                                      # <-- e.g. main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5000"
+
+      # Mongo (SECRET) — provide value in Render UI when prompted
+      - key: MONGODB_URI
+        sync: false
+      # If your app still reads MONGODB_URL, provide it too (same secret)
+      - key: MONGODB_URL
+        sync: false
+
+      # Auth / Security (SECRETS)
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_SECRET
+        sync: false
+      - key: ENCRYPTION_ALGO
+        value: AES-256-CBC
+
+      # AWS / S3 (SECRETS)
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: REGION
+        value: ap-south-1
+      - key: BUCKET_NAME
+        value: twitestorage001
+
+      # Redis connection details — wired from the KeyValue service below
+      - key: REDIS_HOST
+        fromService:
+          type: keyvalue
+          name: redis-cache
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: keyvalue
+          name: redis-cache
+          property: port
+      # Optional: build REDIS_URL in-app like: `redis://${REDIS_HOST}:${REDIS_PORT}`
+
+      # Mail / API (SECRETS)
+      - key: MAIL_API_TOKEN
+        sync: false
+      - key: MAIL_API_ENDPOINT
+        value: "https://send.api.mailtrap.io/"
+
+      # App / client
+      - key: CLIENT_URL
+        value: "https://<FRONTEND_URL>"   # <-- REPLACE with your frontend production URL
+
+      # Optional / Debugging
+      - key: LOG_LEVEL
+        value: info
+
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # Redis KeyValue (private, Redis-compatible service)
+  - type: keyvalue
+    name: redis-cache
+    plan: starter              # <-- change to standard if you need higher throughput/persistence
+    region: singapore          # <-- e.g. ap-south-1 (MUST match backend region)
+    ipAllowList: []           # empty = private-only (recommended)
+
+# Optional global envVarGroups (left empty)
+envVarGroups: []

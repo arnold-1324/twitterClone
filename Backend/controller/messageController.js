@@ -6,7 +6,7 @@ import Group from "../models/group.model.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getIO, getRecipientSocketId } from "../socket/socket.js";
 import { encrypt, decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
-
+import { redisClient } from "../Redis.js";
 
 export const sendMessage = async (req, res) => {
   const { recipientId, message, groupId } = req.body;
