@@ -261,7 +261,6 @@ export const sendMessage = async (req, res) => {
 
 export const getMessages = async (req, res) => {
   const { otherUserId, groupId } = req.params;
-  const { page = 1, limit = 15 } = req.query;
   const userId = req.user._id;
    
   try {
@@ -307,9 +306,7 @@ export const getMessages = async (req, res) => {
 
 
     const messages = await Message.find({ conversationId: conversation._id })
-      .sort({ createdAt: -1 }) 
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
+      .sort({ createdAt: -1 })
       .populate({
         path: 'sender',
         select: 'username profileImg'
@@ -331,7 +328,7 @@ export const getMessages = async (req, res) => {
       })
       .lean();
 
-      messages.reverse();
+     
 
 
     const unseenMessages = messages.filter(msg => !msg.seen && msg.sender._id.toString() !== userId);
