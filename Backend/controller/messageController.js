@@ -258,8 +258,10 @@ export const sendMessage = async (req, res) => {
 
 
 
+
 export const getMessages = async (req, res) => {
   const { otherUserId, groupId } = req.params;
+  const { page = 1, limit = 15 } = req.query;
   const userId = req.user._id;
    
   try {
@@ -301,8 +303,13 @@ export const getMessages = async (req, res) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
+  
+
+
     const messages = await Message.find({ conversationId: conversation._id })
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 }) 
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
       .populate({
         path: 'sender',
         select: 'username profileImg'
@@ -323,6 +330,9 @@ export const getMessages = async (req, res) => {
         populate: { path: 'user', select: 'username profileImg' }
       })
       .lean();
+
+      messages.reverse();
+
 
     const unseenMessages = messages.filter(msg => !msg.seen && msg.sender._id.toString() !== userId);
     if (unseenMessages.length > 0) {
@@ -392,6 +402,9 @@ export const getMessages = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+
+
 
 
 
