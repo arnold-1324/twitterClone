@@ -15,6 +15,7 @@ export const sendMessage = async (req, res) => {
   let img = "";
   let video = "";
   let audio = "";
+   let file="";
   let messageType;
   try {
     if (req.file) {
@@ -37,6 +38,8 @@ export const sendMessage = async (req, res) => {
         video = publicUrl;
       } else if (req.file.mimetype.startsWith("audio/")) {
         audio = publicUrl;
+      }else{
+        file=publicUrl;
       }
     }
 
@@ -48,7 +51,10 @@ export const sendMessage = async (req, res) => {
       messageType = "video";
     } else if (audio) {
       messageType = "audio";
-    } else {
+    } else if(file) {
+       messageType="file";
+     } 
+     else {
       messageType = "";
     }
 
