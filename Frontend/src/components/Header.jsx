@@ -7,6 +7,7 @@ import {
 	useColorMode,
 	Tooltip,
 	Badge,
+	useBreakpointValue,
 } from "@chakra-ui/react";
 import { useRecoilValue, useSetRecoilState } from "recoil";
 import userAtom from "../atom/userAtom";
@@ -27,63 +28,60 @@ const Header = () => {
 	const logout = useLogout();
 	const setAuthScreen = useSetRecoilState(authScreenAtom);
 	const { unreadCount } = useRecoilValue(NotifyAtom);
+	const isMobile = useBreakpointValue({ base: true, md: false });
 	// Mockup for unread notifications count
 	const unreadNotifications = 3;
 
 	return (
-		<Flex justifyContent="space-between" align="center" alignItems={"center"} mt={6} mb={6} px={4}>
-			{/* Home Icon */}
+		<Flex justifyContent="space-between" alignItems="center" my={6}>
 			{user && (
-				<Tooltip label="Home" placement="bottom">
-					<Link as={RouterLink} to="/">
-						<AiFillHome size={24} />
-					</Link>
-				</Tooltip>
+				<Link as={RouterLink} to="/">
+					<AiFillHome size={24} />
+				</Link>
+			)}
+			{!user && (
+				<Link
+					as={RouterLink}
+					to={authScreen === "login" ? "/auth" : "/auth"}
+					onClick={() => setAuthScreen("login")}
+				>
+					Login
+				</Link>
 			)}
 
-			{/* Authentication Links */}
-			
-
-			{/* Logo with Color Mode Toggle */}
-			<IconButton
-				icon={<Image alt="logo" src={colorMode === "dark" ? "/light-logo.svg" : "/dark-logo.svg"} />}
+			<Image
+				cursor={"pointer"}
+				alt="logo"
+				w={6}
+				src={colorMode === "dark" ? "/light-logo.svg" : "/dark-logo.svg"}
 				onClick={toggleColorMode}
-				aria-label="Toggle Color Mode"
-				variant="ghost"
-				alignItems={"center"}
-				mx={"auto"}
 			/>
 
-			{/* User Icons Section */}
 			{user && (
-				<Flex alignItems="center" gap={4}>
-					<Tooltip label="Profile" placement="bottom">
-						<Link as={RouterLink} to={`/${user.username}`}>
-							<RxAvatar size={24} />
-						</Link>
-					</Tooltip>
-
-					<Tooltip label="Messages" placement="bottom">
-						<Link as={RouterLink} to="/chat">
-							<BsFillChatQuoteFill size={20} />
-						</Link>
-					</Tooltip>
-
+				<Flex alignItems={"center"} gap={4}>
+					<Link as={RouterLink} to={`/${user.username}`}>
+						<RxAvatar size={24} />
+					</Link>
+					<Link as={RouterLink} to={`/chat`}>
+						<BsFillChatQuoteFill size={20} />
+					</Link>
 					<NotificationIcon unreadCount={unreadCount > 0 ? unreadCount : ""} />
-
-					<Tooltip label="Settings" placement="bottom">
-						<Link as={RouterLink} to="/settings">
-							<MdOutlineSettings size={20} />
-						</Link>
-					</Tooltip>
-
-					{/* Logout Button */}
-					<Tooltip label="Logout" placement="bottom">
-						<Button size="xs" onClick={logout} variant="ghost">
-							<FiLogOut size={20} />
-						</Button>
-					</Tooltip>
+					<Link as={RouterLink} to={`/settings`}>
+						<MdOutlineSettings size={20} />
+					</Link>
+					<Button size={"xs"} onClick={logout}>
+						<FiLogOut size={20} />
+					</Button>
 				</Flex>
+			)}
+			{!user && (
+				<Link
+					as={RouterLink}
+					to={authScreen === "signup" ? "/auth" : "/auth"}
+					onClick={() => setAuthScreen("signup")}
+				>
+					Sign up
+				</Link>
 			)}
 		</Flex>
 	);

@@ -85,7 +85,7 @@ define(['./workbox-53a48222'], (function (workbox) { 'use strict';
     "revision": "3ca0b8505b4bec776b69afdba2768812"
   }, {
     "url": "index.html",
-    "revision": "0.ntjph2nh0p8"
+    "revision": "0.2fiq2h0vtbg"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
@@ -105,7 +105,7 @@ define(['./workbox-53a48222'], (function (workbox) { 'use strict';
   }), 'GET');
   workbox.registerRoute(({
     url
-  }) => url.pathname.startsWith("/socket.io"), new workbox.NetworkOnly(), 'GET');
+  }) => url.pathname.startsWith("/socket.io") || url.pathname.includes("socket.io"), new workbox.NetworkOnly(), 'GET');
   workbox.registerRoute(/\.(png|jpg|jpeg|svg|gif)$/, new workbox.CacheFirst({
     "cacheName": "images",
     plugins: [new workbox.ExpirationPlugin({

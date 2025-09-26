@@ -48,6 +48,7 @@ const MessageInput = ({
   const { socket } = useSocket();
   const lastTyping = useRef(0);
   const typingTimeout = useRef(null);
+   const fileInputRef = useRef(null);
 
   // Prefill input when editing
   useEffect(() => {
@@ -223,28 +224,56 @@ const MessageInput = ({
       });
   };
 
-  const handleMediaUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    setMediaFile(file);
-    const url = URL.createObjectURL(file);
+const handleMediaUpload = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-    if (file.type.startsWith("image/")) {
-      setMediaPreview(<Image src={url} alt="Preview" maxH="150px" borderRadius="md" />);
-    } else if (file.type.startsWith("video/")) {
-      setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
-    } else if (file.type.startsWith("audio/")) {
-      setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
-    }
-  };
+  // Clean up previous preview
+  if (mediaPreview && typeof mediaPreview === "string") {
+    URL.revokeObjectURL(mediaPreview);
+  }
 
-  const handleCancelMedia = () => {
-    setMediaFile(null);
-    setAudioBlob(null);
-    setAudioPreview(null);
-    setMediaPreview(null);
-  };
+  setMediaFile(file);
+  const url = URL.createObjectURL(file);
+
+  if (file.type.startsWith("image/")) {
+    setMediaPreview(<Image src={url} alt="Preview" maxH="150px" borderRadius="md" />);
+  } else if (file.type.startsWith("video/")) {
+    setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
+  } else if (file.type.startsWith("audio/")) {
+    setMediaPreview(<audio src={url} controls style={{ maxHeight: "150px" }} />);
+  } else if (file.type === "application/pdf") {
+    setMediaPreview(
+      <iframe src={url} title="PDF Preview" style={{ width: "100%", height: "170px" }} />
+    );
+  } else {
+    setMediaPreview(
+      <Flex align="center" gap={2}>
+        <Box
+          p={2}
+          border="1px solid"
+          borderColor={borderColor}
+          borderRadius="md"
+          bg={useColorModeValue("gray.100", "gray.700")}
+        >
+          📄 {file.name}
+        </Box>
+      </Flex>
+    );
+  }
+  e.target.value = null;
+};
+
+ const handleCancelMedia = () => {
+  if (mediaPreview && typeof mediaPreview === "string") {
+    URL.revokeObjectURL(mediaPreview);
+  }
+  setMediaFile(null);
+  setAudioBlob(null);
+  setAudioPreview(null);
+  setMediaPreview(null);
+  if (fileInputRef.current) fileInputRef.current.value = null;
+};
 
   return (
     <Box w="full">
@@ -300,7 +329,19 @@ const MessageInput = ({
       {mediaPreview && (
         <Box mb={4} p={2} bg={bgColor} border="1px solid" borderColor={borderColor} borderRadius="md" position="relative">
           {mediaPreview}
-          <CloseButton position="absolute" top={2} right={2} onClick={handleCancelMedia} aria-label="Cancel" />
+          <CloseButton
+  position="absolute"
+  top={2}
+  right={2}
+  size="lg"
+  color="white"
+  bg="gray.500"
+  _hover={{ bg: "gray.600", transform: "scale(1.1)" }}
+  borderRadius="full"
+  boxShadow="md"
+  onClick={handleCancelMedia}
+  aria-label="Cancel"
+/>
         </Box>
       )}
 
@@ -318,8 +359,9 @@ const MessageInput = ({
         borderColor={borderColor}
       >
         <input
+         ref={fileInputRef}
           type="file"
-          accept="image/*,video/*"
+          accept="*/*"
           style={{ display: "none" }}
           id="media-upload"
           onChange={handleMediaUpload}

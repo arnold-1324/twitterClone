@@ -22,6 +22,7 @@ import { useSocket } from "../context/SocketContext";
 import { motion } from "framer-motion";
 import GroupUIComponents from "../components/GroupUIComponents";
 import CreateGroupButton from "../components/CreateGroupButton";
+import "../styles/ChatResponsive.css";
 //import { CreateGroupModal, InviteModal, PermissionsDropdown } from "../components/GroupUIComponents";
 
 const MotionFlex = motion(Flex);
@@ -156,135 +157,136 @@ const ChatPage = () => {
   const groupId = isGroupConversation ? selectedConversation.groupId : null;
 
   return (
-    <Box
-      position="absolute"
-      left="50%"
-      w={{ base: "100%", md: "80%", lg: "950px" }}
-      p={4}
-      mt="49px"
-      transform="translateX(-50%)"
-    >
-      <Flex
-        gap={4}
-        flexDirection={isMobileView && selectedConversation._id ? "column" : "row"}
-        mx="auto"
-        my="10px"
-        maxW={{ sm: "400px", md: "full" }}
-      >
-        {(!isMobileView || !selectedConversation._id) && (
-          <Flex flex={30} flexDirection="column" gap={4} maxH={"600px"}>
-            {/* Group creation and management buttons */}
-            <Flex gap={2}>
-              <CreateGroupButton onClick={() => setGroupInfoModalOpen(true)} />
-            </Flex>
+    <div className="chat-app-shell">
+      <div className="chat-page-container">
+        <div className="chat-flex-container">
+          {/* Conversation List - Hide on mobile when conversation is selected */}
+          {(!isMobileView || !selectedConversation._id) && (
+            <div className="conversation-list">
+              {/* Create Group Button */}
+              <div className="create-group-button">
+                <CreateGroupButton onClick={() => setGroupInfoModalOpen(true)} />
+              </div>
 
-            <form onSubmit={handleConversationSearch}>
-              <Flex gap={2}>
-                <Input
-                  placeholder="Search for a user"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                />
-                <Button
-                  type="submit"
-                  isLoading={searchingUser}
-                  size="sm"
-                  aria-label="Search for user"
-                >
-                  <SearchIcon />
-                </Button>
-              </Flex>
-            </form>
-
-            <Box
-              flex="1"
-              maxH={{ base: "400px", md: "500px" }}
-              overflowY="auto"
-              sx={{
-                "&::-webkit-scrollbar": { display: "none" },
-                "-ms-overflow-style": "none",
-                "scrollbar-width": "none",
-              }}
-            >
-              {loadingConversations ? (
-                [0, 1, 2, 3].map((_, i) => (
-                  <Flex key={i} gap={4} alignItems="center">
-                    <SkeletonCircle size="10" />
-                    <Flex flexDirection="column" gap={2} w="full">
-                      <Skeleton h="10px" w="80px" />
-                      <Skeleton h="8px" w="90%" />
-                    </Flex>
-                  </Flex>
-                ))
-              ) : conversations.length ? (
-                conversations.map((conversation) => (
-                  <Conversation
-                    key={conversation._id}
-                    conversation={conversation}
-                    onlineUsers={onlineUsers}
-                    sx={{
-                      transition: "box-shadow 0.2s ease-in-out",
-                      _hover: { boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)" },
-                      ...(selectedConversation._id === conversation._id && {
-                        boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
-                      }),
+              {/* Search Form */}
+              <div className="chat-search-container">
+                <form onSubmit={handleConversationSearch} className="chat-search-form">
+                  <Input
+                    className="chat-search-input"
+                    placeholder="Search for a user"
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    size="md"
+                    fontSize="16px"
+                    _focus={{
+                      borderColor: "blue.500",
+                      boxShadow: "0 0 0 1px var(--chakra-colors-blue-500)"
                     }}
                   />
-                ))
-              ) : (
-                <Text>No conversations found.</Text>
+                  <Button
+                    className="chat-search-button"
+                    type="submit"
+                    isLoading={searchingUser}
+                    colorScheme="blue"
+                    size="md"
+                    aria-label="Search for user"
+                    minW="44px"
+                    h="44px"
+                  >
+                    <SearchIcon />
+                  </Button>
+                </form>
+              </div>
+
+              {/* Conversations Scroll Area */}
+              <div className="conversation-list-scroll">
+                {loadingConversations ? (
+                  [0, 1, 2, 3].map((_, i) => (
+                    <Flex key={i} gap={4} alignItems="center" p={3}>
+                      <SkeletonCircle size="10" />
+                      <Flex flexDirection="column" gap={2} w="full">
+                        <Skeleton h="10px" w="80px" />
+                        <Skeleton h="8px" w="90%" />
+                      </Flex>
+                    </Flex>
+                  ))
+                ) : conversations.length ? (
+                  conversations.map((conversation) => (
+                    <Conversation
+                      key={conversation._id}
+                      conversation={conversation}
+                      onlineUsers={onlineUsers}
+                      sx={{
+                        transition: "box-shadow 0.2s ease-in-out",
+                        borderRadius: "12px",
+                        p: 3,
+                        mb: 2,
+                        cursor: "pointer",
+                        _hover: { 
+                          boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.6)",
+                          transform: "translateY(-1px)"
+                        },
+                        ...(selectedConversation._id === conversation._id && {
+                          boxShadow: "0px 0px 8px 0px rgba(66, 153, 225, 0.8)",
+                          bg: "gray.800"
+                        }),
+                      }}
+                    />
+                  ))
+                ) : (
+                  <Text textAlign="center" color="gray.400" py={8}>
+                    No conversations found.
+                  </Text>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Message Container */}
+          {selectedConversation._id ? (
+            <div className="message-container">
+              {isGroupConversation && (
+                <Box mb={2} p={3}>
+                  {/* Group permissions component can go here */}
+                </Box>
               )}
-            </Box>
-          </Flex>
-        )}
+              <MessageContainer 
+                isMobileView={isMobileView} 
+                setSelectedConversation={setSelectedConversation} 
+              />
+            </div>
+          ) : (
+            !isMobileView && (
+              <Flex
+                className="message-container"
+                flexDirection="column"
+                alignItems="center"
+                justifyContent="center"
+                borderRadius="md"
+                bg="gray.800"
+                border="2px dashed"
+                borderColor="gray.600"
+              >
+                <GiConversation size={80} color="var(--chakra-colors-gray-500)" />
+                <Text mt={4} color="gray.400" textAlign="center" fontSize="lg">
+                  Select a conversation to start messaging
+                </Text>
+                <Text mt={2} color="gray.500" textAlign="center" fontSize="sm">
+                  Choose from your conversations or search for users
+                </Text>
+              </Flex>
+            )
+          )}
+        </div>
 
-        {selectedConversation._id ? (
-          <Flex flex={70} flexDirection="column" gap={2}>
-          {isGroupConversation && (
-              <Box mb={2}>
-                {/* <PermissionsDropdown
-                  groupId={groupId}
-                  currentUserId={currentUser._id}
-                  value={groupPermissions || (selectedConversation.groupInfo?.permissions?.canMessage || "all")}
-                  onChange={setGroupPermissions}
-                /> */}
-              </Box>
-            )} 
-            <MessageContainer isMobileView={isMobileView} setSelectedConversation={setSelectedConversation} />
-          </Flex>
-        ) : (
-          !isMobileView && (
-            <Flex
-              flex={70}
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              h="400px"
-              borderRadius="md"
-            >
-              <GiConversation size={100} />
-              <Text>Select a conversation to start messaging</Text>
-            </Flex>
-          )
-        )}
-      </Flex>
-
-      <GroupUIComponents
-        isOpen={groupInfoModalOpen}
-        onClose={() => 
-          setGroupInfoModalOpen(false)}
-        mode="create" // or "edit"
-      />
-
-       {/* {isGroupConversation && (
-        <InviteModal
-          isOpen={inviteModalOpen}
-          onClose={() => setInviteModalOpen(false)}
-          groupId={groupId}
-          currentUserId={currentUser._id}
+        {/* Group Management Modal */}
+        <GroupUIComponents
+          isOpen={groupInfoModalOpen}
+          onClose={() => setGroupInfoModalOpen(false)}
+          mode="create"
         />
-      )}  */}
-    </Box>
+      </div>
+    </div>
   );
 };
 

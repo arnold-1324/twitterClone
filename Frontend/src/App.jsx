@@ -2,6 +2,7 @@ import React, { Suspense, useEffect } from "react";
 import { Container, Box } from "@chakra-ui/react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import Header from "./components/Header";
+import ConnectionStatus from "./components/ConnectionStatus";
 import { useRecoilValue, useSetRecoilState } from "recoil";
 import userAtom from "./atom/userAtom";
 import NotifyAtom from "./atom/notifyAtom";
@@ -44,13 +45,12 @@ function App() {
   }, [setNotify, showToast]);
 
   return (
-    <Box position={"relative"} w="full" minHeight="100vh">
+    <Box position={"relative"} w="full">
+      {/* Connection Status Indicator */}
+      <ConnectionStatus />
+      
       <Container
         maxW={pathname === "/" ? { base: "620px", md: "900px" } : "620px"}
-        minHeight="100vh"
-       
-        display="flex"
-        flexDirection="column"
       >
         <Header />
         {user && (

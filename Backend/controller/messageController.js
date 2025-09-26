@@ -37,6 +37,9 @@ export const sendMessage = async (req, res) => {
         video = publicUrl;
       } else if (req.file.mimetype.startsWith("audio/")) {
         audio = publicUrl;
+      } else {
+        fileUrl = publicUrl;
+        messageType = "file";
       }
     }
 
@@ -48,10 +51,12 @@ export const sendMessage = async (req, res) => {
       messageType = "video";
     } else if (audio) {
       messageType = "audio";
+    }
+    else if (fileUrl) {
+      messageType = "file";
     } else {
       messageType = "";
     }
-
     // Encrypt the message text
     const encryptedMessage = encrypt(message);
 

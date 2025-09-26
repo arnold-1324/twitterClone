@@ -66,9 +66,14 @@ export default defineConfig({
 							}
 						}
 					},
+					// Handle Socket.IO requests with better error handling
 					{
-						urlPattern: ({ url }) => url.pathname.startsWith('/socket.io'),
+						urlPattern: ({ url }) => 
+							url.pathname.startsWith('/socket.io') || 
+							url.pathname.includes('socket.io'),
 						handler: 'NetworkOnly'
+							// Note: Removed networkTimeoutSeconds and plugins as NetworkOnly doesn't support them
+							// Socket.IO connections should bypass service worker caching entirely
 					},
 					{
 						urlPattern: /\.(png|jpg|jpeg|svg|gif)$/,
@@ -92,13 +97,42 @@ export default defineConfig({
 			"/api": {
 				target: "https://twitterclone-backend-681i.onrender.com",
 				changeOrigin: true,
-				secure: false,
+				secure: true,
+				configure: (proxy) => {
+					proxy.on('error', (err, req, res) => {
+						console.log('API proxy error:', err);
+					});
+					proxy.on('proxyReq', (proxyReq, req) => {
+						console.log('Sending API Request to:', proxyReq.path);
+					});
+				}
 			},
 			"/socket.io": {
 				target: "https://twitterclone-backend-681i.onrender.com",
 				changeOrigin: true,
-				secure: false,
+				secure: true,
 				ws: true,
+				// Additional WebSocket proxy options
+				xfwd: true,
+				toProxy: true,
+				configure: (proxy) => {
+					proxy.on('error', (err, req, res) => {
+						console.log('Socket.IO proxy error:', err);
+						// Don't crash on proxy errors
+						if (res && !res.headersSent) {
+							res.writeHead(500, {
+								'Content-Type': 'text/plain'
+							});
+							res.end('Socket.IO proxy error');
+						}
+					});
+					proxy.on('proxyReq', (proxyReq, req) => {
+						console.log('Sending Socket.IO Request to:', proxyReq.path);
+					});
+					proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+						console.log('WebSocket connection established');
+					});
+				}
 			},
 		},
 	},

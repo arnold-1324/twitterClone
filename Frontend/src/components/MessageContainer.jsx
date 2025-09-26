@@ -34,23 +34,16 @@ import TypingIndicator from "./TypingIndicator";
 import AudioPlayer from "./AudioPlayer";
 import GroupManagement from "./GroupManagement";
 import groupMessagesByDate from "../Utils/GroupMsg";
+import "../styles/ChatResponsive.css";
 
 const MotionFlex = motion(Flex);
 
 const DateSeparator = ({ date }) => (
-  <Flex justify="center" align="center" my={4}>
-    <Box
-      px={4}
-      py={1}
-      bg={useColorModeValue("gray.700", "gray.600")}
-      borderRadius="full"
-      shadow="sm"
-    >
-      <Text fontSize="xs" color="white">
-        {date}
-      </Text>
-    </Box>
-  </Flex>
+  <div className="date-separator">
+    <div className="date-separator-badge">
+      {date}
+    </div>
+  </div>
 );
 
 const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
@@ -258,54 +251,50 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   const isGroupConversation = Boolean(selectedConversation?.isGroup);
 
   return (
-    <Flex
-      flex="70"
-      bg={useColorModeValue("gray.900", "black")}
-      borderRadius="md"
-      p={4}
-      flexDirection="column"
-      maxW="496.22px"
-      maxH="537.05px"
-      overflow="hidden"
-      minWidth="340px"
-      width="100%"
-    >
+    <div className="message-container">
       {/* Header */}
-      <Flex w="full" h={12} alignItems="center" gap={2} mb={2}>
+      <div className="message-container-header">
         {isMobileView && (
-          <IconButton
-            icon={<BiArrowBack />}
-            aria-label="Back to conversations"
+          <button
+            className="mobile-back-button"
             onClick={clearSelectedConversation}
-            alignSelf="flex-start"
-          />
+            aria-label="Back to conversations"
+          >
+            <BiArrowBack size={20} />
+          </button>
         )}
+        
         <Avatar
+          className="message-container-avatar"
           src={selectedConversation?.userProfilePic}
           size="sm"
           bg={isGroupConversation ? "teal.500" : undefined}
         >
           {isGroupConversation && <FaUsers />}
         </Avatar>
-        <Flex direction="column" flex="1">
-          <Text display="flex" alignItems="center">
-            {selectedConversation?.username}
+        
+        <div className="message-container-info">
+          <div className="message-container-name">
+            <Text as="span" noOfLines={1}>
+              {selectedConversation?.username}
+            </Text>
             {isGroupConversation && (
-              <Badge ml={2} colorScheme="teal" variant="subtle">
+              <Badge ml={2} colorScheme="teal" variant="subtle" fontSize="xs">
                 Group
               </Badge>
             )}
             {!isGroupConversation && (
               <Image src="/verified.png" w={4} h={4} ml={1} />
             )}
-          </Text>
+          </div>
           {isGroupConversation &&
             Array.isArray(selectedConversation?.participants) && (
-              <Text fontSize="xs" color="gray.400">
+              <div className="message-container-status">
                 {selectedConversation.participants.length} members
-              </Text>
+              </div>
             )}
-        </Flex>
+        </div>
+        
         {isGroupConversation && (
           <IconButton
             icon={<FaInfoCircle />}
@@ -313,62 +302,40 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
             size="sm"
             variant="ghost"
             onClick={() => setIsGroupManagementOpen(true)}
+            minW="44px"
+            h="44px"
           />
         )}
-      </Flex>
-
-      <Divider />
+      </div>
 
       {/* Messages List */}
-      <Flex
-        flexDir="column"
-        gap={14}
-        my={4}
-        p={2}
-        height="calc(400px - 2rem)"
-        overflowY="auto"
-        overflowX="hidden"
-        borderRadius="md"
-        bg={useColorModeValue("gray.800", "black")}
-        boxShadow="md"
-        width="100%"
-        minWidth="0"
-        sx={{
-          "::-webkit-scrollbar": { width: "8px" },
-          "::-webkit-scrollbar-track": { background: "#f1f1f1" },
-          "::-webkit-scrollbar-thumb": {
-            background: "#888",
-            borderRadius: "50%",
-          },
-          "::-webkit-scrollbar-thumb:hover": { background: "#555" },
-        }}
-      >
+      <div className="messages-list">
         {loadingMessages
           ? [...Array(5)].map((_, i) => (
               <MotionFlex
                 key={i}
                 gap={2}
                 alignItems="center"
-                p={1}
+                p={3}
                 borderRadius="md"
                 alignSelf={i % 2 === 0 ? "flex-start" : "flex-end"}
+                maxW="80%"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3 }}
               >
                 {i % 2 === 0 && <SkeletonCircle size={7} />}
                 <Flex flexDir={"column"} gap={2}>
-                  <Skeleton h="8px" w="250px" />
-                  <Skeleton h="8px" w="250px" />
-                  <Skeleton h="8px" w="250px" />
-                  <Skeleton h="8px" w="250px" />
+                  <Skeleton h="8px" w="200px" />
+                  <Skeleton h="8px" w="150px" />
+                  <Skeleton h="8px" w="180px" />
                 </Flex>
-                {i % 2 === 0 && <SkeletonCircle size={7} />}
+                {i % 2 !== 0 && <SkeletonCircle size={7} />}
               </MotionFlex>
             ))
           : Object.entries(groupMessagesByDate(messages)).map(
               ([date, dateMessages]) => (
-                <Box key={date} width="100%">
+                <div key={date} style={{ width: "100%" }}>
                   <DateSeparator date={date} />
                   {dateMessages.map((message = {}) => {
                     const sender = message?.sender || {};
@@ -387,31 +354,17 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
                     return (
                       <Flex
-                        id="message-box"
-                        key={
-                          message?._id ||
-                          message?.messageId ||
-                          Math.random()
-                        }
-                        justifyContent={
-                          isOwnMessage ? "flex-end" : "flex-start"
-                        }
-                        mb={2}
+                        key={message?._id || message?.messageId || Math.random()}
+                        justifyContent={isOwnMessage ? "flex-end" : "flex-start"}
+                        mb={3}
                         width="100%"
                       >
                         <Box
-                          bg={isHighlighted ? "green.900" : "transparent"}
-                          minW="120px"
-                          maxW={
-                            message?.audio ? "100%" : { base: "90%", md: "75%" }
-                          }
-                          width={message?.audio ? "100%" : undefined}
-                          borderRadius="lg"
-                          wordBreak="break-word"
-                          boxShadow="sm"
-                          px={1}
-                          py={1}
-                          display="inline-block"
+                          className={`message-bubble ${
+                            isOwnMessage ? "message-bubble--own" : "message-bubble--other"
+                          }`}
+                          bg={isHighlighted ? "green.900" : undefined}
+                          boxShadow={isHighlighted ? "0 0 10px rgba(34, 197, 94, 0.5)" : undefined}
                         >
                           <Message
                             message={message}
@@ -483,27 +436,25 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                       </Flex>
                     );
                   })}
-                </Box>
+                </div>
               )
             )}
 
         <div ref={messageEndRef} />
-        <IconButton
-          onClick={scrollToBottom}
-          aria-label="Scroll to bottom"
-          position="absolute"
-          alignSelf={"flex-end"}
-          top={"430px"}
-          rounded={"full"}
-          bg={useColorModeValue("gray.800", "gray.700")}
-        >
-          <FaAnglesDown size={24} />
-        </IconButton>
-      </Flex>
+      </div>
+
+      {/* Scroll to Bottom Button */}
+      <button
+        className="scroll-to-bottom"
+        onClick={scrollToBottom}
+        aria-label="Scroll to bottom"
+      >
+        <FaAnglesDown size={18} />
+      </button>
 
       {/* Typing Indicator */}
       {typingUsers.length > 0 && (
-        <Box w="100%" px={2} pb={1} position="relative">
+        <Box w="100%" px={4} pb={2} position="relative">
           <TypingIndicator
             usernames={
               isGroupConversation
@@ -521,22 +472,24 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
       )}
 
       {/* Input */}
-      <MessageInput
-        setMessages={setMessages}
-        editingMessageId={editingMessageId}
-        setEditingMessageId={setEditingMessageId}
-        editingText={editingText}
-        setEditingText={setEditingText}
-        isGroupConversation={isGroupConversation}
-        groupId={isGroupConversation ? selectedConversation.groupId : undefined}
-      />
+      <div className="message-input-container">
+        <MessageInput
+          setMessages={setMessages}
+          editingMessageId={editingMessageId}
+          setEditingMessageId={setEditingMessageId}
+          editingText={editingText}
+          setEditingText={setEditingText}
+          isGroupConversation={isGroupConversation}
+          groupId={isGroupConversation ? selectedConversation.groupId : undefined}
+        />
+      </div>
 
       {/* Group Management */}
       <GroupManagement
         isOpen={isGroupManagementOpen}
         onClose={() => setIsGroupManagementOpen(false)}
       />
-    </Flex>
+    </div>
   );
 };
 
