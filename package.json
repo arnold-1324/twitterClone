@@ -16,6 +16,7 @@
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/cloudfront-signer": "^3.887.0",
     "@aws-sdk/s3-request-presigner": "^3.616.0",
     "aws-sdk": "^2.1659.0",
     "bcryptjs": "^2.4.3",
@@ -25,8 +26,8 @@
     "corn": "^0.0.1",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
-    "dotenv": "^16.4.7",
-    "express": "^4.19.2",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.5.0",
     "hpp": "^0.2.3",

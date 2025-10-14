@@ -23,7 +23,7 @@ import connectmongoDB from "./DB/ConnectMongodb.js";
 import Notification from "./routers/notification.routers.js"; 
 import MessageRoutes from "./routers/message.routers.js";
 import GroupRoutes from "./routers/group.routers.js";
-
+import PollRoutes from "./routers/poll.routers.js";
 dotenv.config();
 
 
@@ -43,9 +43,10 @@ const __dirname = path.resolve();
 //app.use(helmet()); 
 //app.use(express.static(path.join(__dirname, '../Frontend/dist')));
 app.use(cors({
-  origin: "https://frontend-gamma-opal-34.vercel.app", // no trailing slash
+  origin: ["https://frontend-gamma-opal-34.vercel.app", "http://localhost:3000"],
   credentials: true,
 }));
+
 app.use(mongoSanitize()); 
 app.use(xss()); 
 app.use(hpp()); 
@@ -62,6 +63,7 @@ app.use("/api/posts",PostRouters);
 app.use("/api/notification",Notification);
 app.use("/api/messages",MessageRoutes);
 app.use("/api/groups", GroupRoutes);
+app.use("/api/polls", PollRoutes);
 //app.use('/uploads', express.static('uploads'));
 
 const httpServer = createServer(app);

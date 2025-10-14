@@ -23,6 +23,7 @@ import formatMessageTime from "../Utils/Timeformate";
 import { useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import AudioPlayer from "./AudioPlayer"; // Assuming you have an AudioPlayer component
+import PollMessage from "./PollMessage";
 
 const MotionFlex = motion(Flex);
 
@@ -128,6 +129,15 @@ const Message = ({
             }
           }}
         />
+        </Box>
+      );
+    }
+
+    // Poll message
+    if (message.type === "poll" && message.poll) {
+      return (
+        <Box alignSelf={isOwnMessage ? "flex-end" : "flex-start"} mt={2} width="100%">
+          <PollMessage message={message} currentUserId={currentUser._id} />
         </Box>
       );
     }
@@ -279,8 +289,8 @@ const Message = ({
       direction="column"
       alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
       minW="120px"
-      width={message.video || message.postReference || message.img ? "100%" : "60%"}
-      maxWidth={message.video || message.postReference || message.img ? "100%" : "80%"}
+      width={message.video || message.postReference || message.img || message.type === "poll" ? "100%" : "60%"}
+      maxWidth={message.video || message.postReference || message.img || message.type === "poll" ? "100%" : "80%"}
       p={2}
       mt={2}
       borderRadius="15px"

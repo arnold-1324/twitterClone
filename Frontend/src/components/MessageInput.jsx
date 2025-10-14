@@ -8,6 +8,7 @@ import {
   Spinner,
   Image,
   Text,
+  Checkbox,
   CloseButton,
 } from "@chakra-ui/react";
 import { useState, useRef, useEffect } from "react";
@@ -18,6 +19,14 @@ import { selectedConversationAtom, selectedMsg } from "../atom/messagesAtom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import useUploadWithProgress from "../hooks/useUploadWithProgress";
 import { useSocket } from "../context/SocketContext";
+import PollMessage from "./PollMessage";
+import { MdPoll } from "react-icons/md";
+import {
+  Modal, ModalOverlay, ModalContent, ModalHeader,
+  ModalBody, ModalFooter, ModalCloseButton, Button,
+  VStack, Input as ChakraInput
+} from "@chakra-ui/react";
+
 
 const MotionFlex = motion(Flex);
 
@@ -38,7 +47,11 @@ const MessageInput = ({
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  
+  const [isPollModalOpen, setIsPollModalOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+   const [multiSelect, setMultiSelect] = useState(false);
+   const [expiresAt, setExpiresAt] = useState("");
   const { upload } = useUploadWithProgress();
   const mediaRecorderRef = useRef(null);
   const recipient = useRecoilValue(selectedConversationAtom);
@@ -48,6 +61,61 @@ const MessageInput = ({
   const { socket } = useSocket();
   const lastTyping = useRef(0);
   const typingTimeout = useRef(null);
+  const fileInputRef = useRef(null);
+
+const handleOptionChange = (index, value) => {
+    const newOptions = [...pollOptions];
+    newOptions[index] = value;
+    setPollOptions(newOptions);
+  };
+
+  const handleAddOption = () => {
+    setPollOptions([...pollOptions, ""]);
+  };
+
+  const handleCreatePoll = async () => {
+    if (!pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2) {
+      toast({ title: "Please enter a question and at least 2 options", status: "warning" });
+      return;
+    }
+
+    const pollPayload = {
+      conversationId: recipient._id,
+      question: pollQuestion,
+      options: pollOptions.filter(o => o.trim()),
+      multiSelect: false, // or true if you want
+      expiresAt: null, // optional
+    };
+
+    try {
+      const res = await fetch("api/polls/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pollPayload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to create poll");
+
+      // Update frontend immediately
+      setMessages(prev => [...prev, { type: "poll", poll: data.poll }]);
+
+      // Emit socket event so others get it in real-time
+      socket.emit("newMessage", {
+        conversationId: recipient._id,
+        message: { type: "poll", poll: data.poll },
+      });
+
+      setIsPollModalOpen(false);
+      setPollQuestion("");
+      setPollOptions(["", ""]);
+      toast({ title: "Poll created successfully", status: "success" });
+    } catch (err) {
+      toast({ title: "Error", description: err.message, status: "error" });
+    }
+  };
+
+
 
   // Prefill input when editing
   useEffect(() => {
@@ -69,7 +137,7 @@ const MessageInput = ({
     return () => socket.off("uploadProgress", handleProgress);
   }, [socket]);
 
-  const isValidReply = (replyMsg.text || replyMsg.media) && 
+  const isValidReply = (replyMsg.text || replyMsg.media) &&
     (!replyMsg.media || ['img', 'video', 'audio'].includes(replyMsg.mediaType));
 
   // Theme-aware styles
@@ -81,7 +149,7 @@ const MessageInput = ({
     e.preventDefault();
     if (!messageText && !audioBlob && !mediaFile) return;
     setIsSending(true);
-    
+
     try {
       // Handle message editing
       if (editingMessageId) {
@@ -98,27 +166,27 @@ const MessageInput = ({
         resetInputs();
         return;
       }
-      
+
       // Handle new message sending
       const formData = new FormData();
       formData.append("message", messageText);
-      
+
       if (isGroupConversation) {
         formData.append("groupId", recipient.groupId);
       } else {
         formData.append("recipientId", recipient.userId);
       }
-      
+
       if (replyMsg.id) {
         formData.append("messageId", replyMsg.id);
         if (isGroupConversation) formData.append("groupId", recipient.groupId);
       }
-      
+
       if (audioBlob) formData.append("media", audioBlob, "voice-message.webm");
       if (mediaFile) formData.append("media", mediaFile);
-      
+
       const url = replyMsg.id ? "/api/messages/reply" : "/api/messages/send";
-      
+
       await new Promise((resolve, reject) => {
         upload(
           url,
@@ -165,7 +233,7 @@ const MessageInput = ({
   const handleTyping = (e) => {
     setMessageText(e.target.value);
     if (!socket || !recipient._id) return;
-    
+
     const now = Date.now();
     if (now - lastTyping.current > 300) {
       socket.emit("typing", {
@@ -175,7 +243,7 @@ const MessageInput = ({
       });
       lastTyping.current = now;
     }
-    
+
     if (typingTimeout.current) clearTimeout(typingTimeout.current);
     typingTimeout.current = setTimeout(() => {
       socket.emit("typing", {
@@ -192,7 +260,7 @@ const MessageInput = ({
       setIsRecording(false);
       return;
     }
-    
+
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then((stream) => {
         mediaRecorderRef.current = new MediaRecorder(stream);
@@ -226,7 +294,12 @@ const MessageInput = ({
   const handleMediaUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
+    // Clean up previous preview
+    if (mediaPreview && typeof mediaPreview === "string") {
+      URL.revokeObjectURL(mediaPreview);
+    }
+
     setMediaFile(file);
     const url = URL.createObjectURL(file);
 
@@ -235,15 +308,38 @@ const MessageInput = ({
     } else if (file.type.startsWith("video/")) {
       setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
     } else if (file.type.startsWith("audio/")) {
-      setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
+      setMediaPreview(<audio src={url} controls style={{ maxHeight: "150px" }} />);
+    } else if (file.type === "application/pdf") {
+      setMediaPreview(
+        <iframe src={url} title="PDF Preview" style={{ width: "100%", height: "170px" }} />
+      );
+    } else {
+      setMediaPreview(
+        <Flex align="center" gap={2}>
+          <Box
+            p={2}
+            border="1px solid"
+            borderColor={borderColor}
+            borderRadius="md"
+            bg={useColorModeValue("gray.100", "gray.700")}
+          >
+            📄 {file.name}
+          </Box>
+        </Flex>
+      );
     }
+    e.target.value = null;
   };
 
   const handleCancelMedia = () => {
+    if (mediaPreview && typeof mediaPreview === "string") {
+      URL.revokeObjectURL(mediaPreview);
+    }
     setMediaFile(null);
     setAudioBlob(null);
     setAudioPreview(null);
     setMediaPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = null;
   };
 
   return (
@@ -300,7 +396,19 @@ const MessageInput = ({
       {mediaPreview && (
         <Box mb={4} p={2} bg={bgColor} border="1px solid" borderColor={borderColor} borderRadius="md" position="relative">
           {mediaPreview}
-          <CloseButton position="absolute" top={2} right={2} onClick={handleCancelMedia} aria-label="Cancel" />
+          <CloseButton
+            position="absolute"
+            top={2}
+            right={2}
+            size="lg"
+            color="white"
+            bg="gray.500"
+            _hover={{ bg: "gray.600", transform: "scale(1.1)" }}
+            borderRadius="full"
+            boxShadow="md"
+            onClick={handleCancelMedia}
+            aria-label="Cancel"
+          />
         </Box>
       )}
 
@@ -318,8 +426,9 @@ const MessageInput = ({
         borderColor={borderColor}
       >
         <input
+          ref={fileInputRef}
           type="file"
-          accept="image/*,video/*"
+          accept="*/*"
           style={{ display: "none" }}
           id="media-upload"
           onChange={handleMediaUpload}
@@ -334,9 +443,19 @@ const MessageInput = ({
           _hover={{ bg: iconHoverColor }}
         />
 
+        <IconButton
+          icon={<MdPoll />}
+          aria-label="Create Poll"
+          variant="ghost"
+          size="lg"
+          _hover={{ bg: iconHoverColor }}
+          onClick={() => setIsPollModalOpen(true)}
+        />
+
+
         <Input
-          placeholder={editingMessageId 
-            ? "Edit your message..." 
+          placeholder={editingMessageId
+            ? "Edit your message..."
             : (isGroupConversation ? "Type a message to group..." : "Type a message")}
           value={messageText}
           onChange={handleTyping}
@@ -364,6 +483,57 @@ const MessageInput = ({
           _hover={{ bg: iconHoverColor }}
         />
       </MotionFlex>
+
+
+      <Modal isOpen={isPollModalOpen} onClose={() => setIsPollModalOpen(false)}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Create a Poll</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={3}>
+              <ChakraInput
+                placeholder="Poll question"
+                value={pollQuestion}
+                onChange={(e) => setPollQuestion(e.target.value)}
+              />
+
+              {pollOptions.map((opt, i) => (
+                <ChakraInput
+                  key={i}
+                  placeholder={`Option ${i + 1}`}
+                  value={opt}
+                  onChange={(e) => handleOptionChange(i, e.target.value)}
+                />
+              ))}
+
+              <Button onClick={handleAddOption} variant="ghost" colorScheme="blue">
+                + Add Option
+              </Button>
+
+              <Checkbox
+                isChecked={multiSelect}
+                onChange={(e) => setMultiSelect(e.target.checked)}
+              >
+                Allow multiple choices
+              </Checkbox>
+
+              <ChakraInput
+                type="datetime-local"
+                placeholder="Expiry date & time"
+                value={expiresAt}
+                onChange={(e) => setExpiresAt(e.target.value)}
+              />
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" onClick={handleCreatePoll}>
+              Create Poll
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
     </Box>
   );
 };

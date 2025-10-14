@@ -15,8 +15,11 @@ export const sendMessage = async (req, res) => {
   let img = "";
   let video = "";
   let audio = "";
-  let messageType;
+  let file = "";
+  let messageType = "text"; 
+
   try {
+   
     if (req.file) {
       const fileUrl = generateFileName();
       const params = {
@@ -25,54 +28,39 @@ export const sendMessage = async (req, res) => {
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
       };
-
-      const command = new PutObjectCommand(params);
-      await s3.send(command);
-
+      await s3.send(new PutObjectCommand(params));
       const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
 
-      if (req.file.mimetype.startsWith("image/")) {
-        img = publicUrl;
-      } else if (req.file.mimetype.startsWith("video/")) {
-        video = publicUrl;
-      } else if (req.file.mimetype.startsWith("audio/")) {
-        audio = publicUrl;
-      }
+      if (req.file.mimetype.startsWith("image/")) img = publicUrl;
+      else if (req.file.mimetype.startsWith("video/")) video = publicUrl;
+      else if (req.file.mimetype.startsWith("audio/")) audio = publicUrl;
+      else file = publicUrl; // PDFs / other files
     }
 
-    if (message !== undefined && message !== null && message.trim() !== "") {
-      messageType = "text";
-    } else if (img) {
-      messageType = "image";
-    } else if (video) {
-      messageType = "video";
-    } else if (audio) {
-      messageType = "audio";
-    } else {
-      messageType = "";
+    // 2️⃣ Determine message type
+    if (message && message.trim() !== "") messageType = "text";
+    else if (img) messageType = "image";
+    else if (video) messageType = "video";
+    else if (audio) messageType = "audio";
+    else if (file) messageType = "file";
+
+    // 3️⃣ Encrypt text only
+    let encryptedMessage = { encryptedData: "", iv: "" };
+    if (messageType === "text" && message) {
+      encryptedMessage = encrypt(message);
     }
 
-    // Encrypt the message text
-    const encryptedMessage = encrypt(message);
-
+    // 4️⃣ Handle conversation creation/update
     let conversation;
     let isGroupMessage = false;
 
-    // Check if this is a group message
     if (groupId) {
       isGroupMessage = true;
-
-      // Verify user is member of the group
       const group = await Group.findById(groupId);
-      if (!group) {
-        return res.status(404).json({ error: "Group not found" });
-      }
-
-      if (!group.members.includes(senderId)) {
+      if (!group) return res.status(404).json({ error: "Group not found" });
+      if (!group.members.includes(senderId))
         return res.status(403).json({ error: "You are not a member of this group" });
-      }
 
-      // Check if group has conversation, if not create one
       if (!group.conversation) {
         conversation = new Conversation({
           participants: group.members,
@@ -83,12 +71,9 @@ export const sendMessage = async (req, res) => {
           },
         });
         await conversation.save();
-
-        // Update group with conversation reference
         group.conversation = conversation._id;
         await group.save();
       } else {
-        // Update existing conversation
         conversation = await Conversation.findByIdAndUpdate(
           group.conversation,
           {
@@ -104,15 +89,8 @@ export const sendMessage = async (req, res) => {
         );
       }
     } else {
-      // Regular one-on-one message
-      // Find or create a conversation
       conversation = await Conversation.findOneAndUpdate(
-        {
-          participants: {
-            $size: 2,
-            $all: [senderId, recipientId],
-          },
-        },
+        { participants: { $size: 2, $all: [senderId, recipientId] } },
         {
           $set: {
             lastMessage: {
@@ -125,7 +103,6 @@ export const sendMessage = async (req, res) => {
         { new: true }
       );
 
-      // If no conversation exists, create a new one
       if (!conversation) {
         conversation = new Conversation({
           participants: [senderId, recipientId],
@@ -139,117 +116,97 @@ export const sendMessage = async (req, res) => {
       }
     }
 
-    // Create a new message document including media
+    // 5️⃣ Save message
     let newMessage = new Message({
       conversationId: conversation._id,
       sender: senderId,
       type: messageType,
-      text: encryptedMessage.encryptedData,
-      img: img,
-      video: video,
-      audio: audio,
-      iv: encryptedMessage.iv,
+      text: encryptedMessage.encryptedData || "",
+      img,
+      video,
+      audio,
+      file,
+      iv: encryptedMessage.iv || null,
     });
-
     await newMessage.save();
 
-    // Populate all fields as in getMessages
+    // 6️⃣ Populate references
     newMessage = await Message.findById(newMessage._id)
-      .populate({ path: 'sender', select: 'username profileImg' })
-      .populate({ path: 'replyTo', select: 'text iv sender video img audio', populate: { path: 'sender', select: 'username profileImg' } })
-      .populate({ path: 'postReference', select: 'postedBy images', populate: { path: 'postedBy', select: 'username profileImg' } })
-      .populate({ path: 'reactions', select: 'user type', populate: { path: 'user', select: 'username profileImg' } })
+      .populate({ path: "sender", select: "username profileImg" })
+      .populate({
+        path: "replyTo",
+        select: "text iv sender video img audio file",
+        populate: { path: "sender", select: "username profileImg" },
+      })
+      .populate({
+        path: "postReference",
+        select: "postedBy images",
+        populate: { path: "postedBy", select: "username profileImg" },
+      })
+      .populate({
+        path: "reactions",
+        select: "user type",
+        populate: { path: "user", select: "username profileImg" },
+      })
       .lean();
 
-    // Decrypt text and replyTo text
+    // 7️⃣ Decrypt safely
     const decryptSafely = ({ iv, encryptedData }) => {
       try {
         return decrypt({ iv, encryptedData });
       } catch {
-        return 'Bad message';
+        return "Bad message";
       }
     };
 
     const socketPayload = {
       ...newMessage,
-      text: newMessage.iv ? decryptSafely({ iv: newMessage.iv, encryptedData: newMessage.text }) : newMessage.text,
+      text: newMessage.iv
+        ? decryptSafely({ iv: newMessage.iv, encryptedData: newMessage.text })
+        : newMessage.text,
       iv: undefined,
-      replyTo: newMessage.replyTo ? {
-        ...newMessage.replyTo,
-        text: newMessage.replyTo.iv ? decryptSafely({ iv: newMessage.replyTo.iv, encryptedData: newMessage.replyTo.text }) : newMessage.replyTo.text,
-        iv: undefined,
-      } : null,
+      replyTo: newMessage.replyTo
+        ? {
+            ...newMessage.replyTo,
+            text: newMessage.replyTo.iv
+              ? decryptSafely({ iv: newMessage.replyTo.iv, encryptedData: newMessage.replyTo.text })
+              : newMessage.replyTo.text,
+            iv: undefined,
+          }
+        : null,
       isGroupMessage,
-      groupId: groupId || null
+      groupId: groupId || null,
     };
 
-    // Notify recipients via socket (if online)
+    // 8️⃣ Emit sockets
     const io = getIO();
     if (isGroupMessage) {
-     
-      // Robust emission: collect unique socket ids for members (excluding sender)
       const group = await Group.findById(groupId).lean();
       if (group) {
-        const memberIds = (group.members || []).map(m => (m && m.toString) ? m.toString() : String(m));
-        const uniqueSocketIds = new Set();
-
+        const memberIds = (group.members || []).map((m) => String(m));
         for (const memberId of memberIds) {
-          if (memberId === String(senderId)) continue; // skip sender
-
-          // Try to get socket id for this member
+          if (memberId === String(senderId)) continue;
           const memberSocketId = getRecipientSocketId(memberId);
-         
-
-          if (memberSocketId) {
-            uniqueSocketIds.add(memberSocketId);
-          }
-        }
-
-        if (uniqueSocketIds.size > 0) {
-          // emit to each unique socket id
-          for (const sid of uniqueSocketIds) {
-            io.to(sid).emit("newGroupMessage", {
+          if (memberSocketId)
+            io.to(memberSocketId).emit("newGroupMessage", {
               message: socketPayload,
-              groupId: groupId,
-              conversationId: conversation._id
+              groupId,
+              conversationId: conversation._id,
             });
-          }
-         
-        } else {
-          // fallback: emit to a conversation room (if you maintain rooms on server)
-          // This prevents silently dropping the message when no individual socket found.
-          // If you don't use rooms, you can remove this fallback.
-          try {
-            io.to(String(conversation._id)).emit("newGroupMessage", {
-              message: socketPayload,
-              groupId: groupId,
-              conversationId: conversation._id
-            });
-           
-          } catch (e) {
-           
-          }
         }
-      } else {
-       
       }
     } else {
-      // For one-on-one messages
       const recipientSocketId = getRecipientSocketId(recipientId);
       if (recipientSocketId) {
         io.to(recipientSocketId).emit("newMessage", socketPayload);
         io.to(recipientSocketId).emit("stopTyping", { conversationId: conversation._id });
       } else {
-        // fallback to conversation room
         io.to(String(conversation._id)).emit("newMessage", socketPayload);
       }
     }
 
-    // Respond with the same payload
-    res.status(201).json(socketPayload);  // Send the message back with media URL
-
+    res.status(201).json(socketPayload);
   } catch (error) {
-   
     res.status(500).json({ error: error.message });
   }
 };
@@ -563,7 +520,7 @@ export const getConversation = async (req, res) => {
       };
     });
 
-    // merge, deduplicate by _id, prefer isGroup:true if duplicate
+    
     const merged = [...convoData, ...groupConvoData];
     const uniqueMap = new Map();
     for (const convo of merged) {
@@ -581,7 +538,7 @@ export const getConversation = async (req, res) => {
       (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
     );
 
-    //console.log("All conversations:", allConversations);
+   
     await redisClient.setEx(cacheKey, 60, JSON.stringify(allConversations));
     res.status(200).json(allConversations);
   } catch (error) {

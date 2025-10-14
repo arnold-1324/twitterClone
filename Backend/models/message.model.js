@@ -1,5 +1,11 @@
 import mongoose from "mongoose";
 
+const pollOptionSchema = new mongoose.Schema({
+    optionText: { type: String, required: true },
+    votes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+})
+
+
 const messageSchema = new mongoose.Schema(
     {
         conversationId: { type: mongoose.Schema.Types.ObjectId, ref: "Conversation" },
@@ -10,7 +16,7 @@ const messageSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["text", "image", "video","post","audio"], 
+            enum: ["text", "image", "video","post","audio","file","poll"], 
             default: "text",
         },
         iv: {
@@ -18,6 +24,19 @@ const messageSchema = new mongoose.Schema(
       required: function () {
         return this.text && typeof this.text === "string" && this.text.trim().length > 0;
       },
+    },
+    poll:{
+     question: {
+    type: String,
+    required: function () {
+      return this.type === "poll";
+    },
+  },
+     options: [pollOptionSchema],
+     totalVotes: { type: Number, default: 0 },
+     multiSelect: { type: Boolean, default: false },
+     expiresAt: { type: Date, default: null },
+     closed:{type:Boolean,default:false}
     },
         seen: {
             type: Boolean,
@@ -53,6 +72,17 @@ const messageSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+messageSchema.pre("save", function (next) {
+  if (this.type === "poll" && this.poll?.options) {
+    this.poll.totalVotes = this.poll.options.reduce(
+      (sum, opt) => sum + opt.votes.length,
+      0
+    );
+  }
+  next();
+});
+
 
 const Message = mongoose.model("Message", messageSchema);
 

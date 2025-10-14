@@ -120,6 +120,101 @@ export function setupSocket(server) {
             io.to(conversationId).emit("newGroupMessage", { message, groupId, conversationId });
         });
 
+
+                // ✅ Create poll in a group
+        socket.on("createPoll", async ({ conversationId, poll }) => {
+            try {
+                const newPoll = await Message.create({
+                    conversationId,
+                    sender: poll.sender,
+                    type: "poll",
+                    poll: {
+                        question: poll.question,
+                        options: poll.options.map((opt) => ({ optionText: opt })),
+                        multiSelect: poll.multiSelect || false,
+                        expiresAt: poll.expiresAt || null,
+                    },
+                });
+
+                // Broadcast to group members
+                io.to(conversationId).emit("pollCreated", newPoll);
+            } catch (error) {
+                console.error("Error creating poll via socket:", error);
+                socket.emit("pollError", { message: "Failed to create poll" });
+            }
+        });
+
+        // ✅ Vote on a poll
+        socket.on("votePoll", async ({ messageId, userId, selectedOptions }) => {
+            try {
+                const pollMessage = await Message.findById(messageId);
+                if (!pollMessage || pollMessage.type !== "poll") return;
+
+                if (pollMessage.poll.closed) {
+                    socket.emit("pollError", { message: "Poll is closed" });
+                    return;
+                }
+
+                if (pollMessage.poll.expiresAt && new Date() > pollMessage.poll.expiresAt) {
+                    pollMessage.poll.closed = true;
+                    await pollMessage.save();
+                    io.to(pollMessage.conversationId.toString()).emit("pollClosed", pollMessage);
+                    return;
+                }
+
+                // Clear previous votes
+                pollMessage.poll.options.forEach(opt => {
+                    opt.votes = opt.votes.filter(id => id.toString() !== userId);
+                });
+
+                // Add new votes
+                if (pollMessage.poll.multiSelect) {
+                    selectedOptions.forEach(index => {
+                        if (pollMessage.poll.options[index]) {
+                            pollMessage.poll.options[index].votes.push(userId);
+                        }
+                    });
+                } else {
+                    if (selectedOptions.length > 1) return;
+                    const index = selectedOptions[0];
+                    if (pollMessage.poll.options[index]) {
+                        pollMessage.poll.options[index].votes.push(userId);
+                    }
+                }
+
+                // Update total votes
+                pollMessage.poll.totalVotes = pollMessage.poll.options.reduce(
+                    (sum, opt) => sum + opt.votes.length,
+                    0
+                );
+
+                await pollMessage.save();
+
+                // ✅ Notify all group members
+                io.to(pollMessage.conversationId.toString()).emit("pollVoted", pollMessage);
+            } catch (error) {
+                console.error("Error voting via socket:", error);
+                socket.emit("pollError", { message: "Failed to record vote" });
+            }
+        });
+
+        // ✅ Close a poll manually (by admin or creator)
+        socket.on("closePoll", async ({ messageId }) => {
+            try {
+                const pollMessage = await Message.findById(messageId);
+                if (!pollMessage || pollMessage.type !== "poll") return;
+
+                pollMessage.poll.closed = true;
+                await pollMessage.save();
+
+                io.to(pollMessage.conversationId.toString()).emit("pollClosed", pollMessage);
+            } catch (error) {
+                console.error("Error closing poll via socket:", error);
+                socket.emit("pollError", { message: "Failed to close poll" });
+            }
+        });
+
+
         socket.on("reconnect", () => {
             if (userId && userId !== "undefined") {
                 userSocketMap[userId] = socket.id;
