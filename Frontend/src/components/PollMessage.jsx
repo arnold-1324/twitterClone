@@ -18,15 +18,18 @@ const PollMessage = ({ message, currentUserId }) => {
           : [...prev, index]
       );
     } else {
+      // Single-select: tap submits immediately (WhatsApp-like)
       setSelectedOptions([index]);
+      submitVote([index]);
     }
   };
 
-  const optimisticApplyVote = (draft) => {
+  const optimisticApplyVote = (draft, indexes) => {
     // Add current user id to each selected option if not already present
     const added = new Set();
+    const target = Array.isArray(indexes) && indexes.length ? indexes : selectedOptions;
     const nextOptions = draft.options.map((opt, idx) => {
-      if (!selectedOptions.includes(idx)) return opt;
+      if (!target.includes(idx)) return opt;
       if (opt.votes.includes(currentUserId)) return opt;
       added.add(idx);
       return { ...opt, votes: [...opt.votes, currentUserId] };
@@ -36,23 +39,23 @@ const PollMessage = ({ message, currentUserId }) => {
     return { ...draft, options: nextOptions, totalVotes: nextTotal };
   };
 
-  const submitVote = async () => {
-    if (selectedOptions.length === 0) return;
+  const submitVote = async (indexesOverride) => {
+    const indexes = Array.isArray(indexesOverride) ? indexesOverride : selectedOptions;
+    if (!indexes || indexes.length === 0) return;
     setLoading(true);
     try {
+      // Optimistic update first
+      setPoll((prev) => optimisticApplyVote(prev, indexes));
+
       const res = await axios.post(`/api/polls/${message._id}/vote`, {
-        selectedOptions,
+        selectedOptions: indexes,
       });
       const nextPoll = res.data?.poll?.poll || res.data?.poll || res.data;
       if (nextPoll) {
         setPoll(nextPoll);
-      } else {
-        // Fallback optimistic update if API returns unexpected shape
-        setPoll((prev) => optimisticApplyVote(prev));
       }
     } catch (err) {
-      // Apply optimistic update even on failure to satisfy UX; backend sync may correct later
-      setPoll((prev) => optimisticApplyVote(prev));
+      // Keep optimistic state; backend will re-sync on next fetch
       console.error(err);
     } finally {
       setLoading(false);
@@ -116,9 +119,11 @@ const PollMessage = ({ message, currentUserId }) => {
         <div className="mt-3 flex items-center justify-between">
           {!voted && !poll.closed ? (
             <button
-              onClick={submitVote}
-              disabled={loading || selectedOptions.length === 0}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:bg-emerald-200"
+              onClick={() => submitVote()}
+              disabled={loading || (!poll.multiSelect && selectedOptions.length === 0) || (poll.multiSelect && selectedOptions.length === 0)}
+              className={`px-3 py-1.5 rounded-lg text-white text-sm font-semibold ${
+                poll.multiSelect ? "bg-emerald-600 disabled:bg-emerald-200" : "bg-emerald-600 disabled:bg-emerald-200 hidden"
+              }`}
             >
               {loading ? "Voting..." : poll.multiSelect ? "Submit votes" : "Vote"}
             </button>
