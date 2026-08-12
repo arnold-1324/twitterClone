@@ -16,11 +16,16 @@ export const SocketContextProvider = ({ children }) => {
 	const user = useRecoilValue(userAtom);
 
 	useEffect(() => {
-		const socket = io("/", {
-			query: {
-				userId: user?._id,
-			},
-			transports: ["websocket"], // recommended for Railway
+		if (!user?._id) return;
+
+		// Prefer explicit socket URL via env var `VITE_SOCKET_URL`,
+		// fallback to localhost:5000 when running locally.
+		const defaultLocal = `${window.location.protocol}//${window.location.hostname}:5000`;
+		const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === "localhost" ? defaultLocal : "/");
+
+		const socket = io(SOCKET_URL, {
+			query: { userId: user._id },
+			transports: ["websocket"],
 		});
 
 		setSocket(socket);

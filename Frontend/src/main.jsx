@@ -2,10 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
-import { ChakraProvider } from "@chakra-ui/react";
+import { ChakraProvider, ColorModeScript, extendTheme } from "@chakra-ui/react";
 import { mode } from "@chakra-ui/theme-tools";
-import { extendTheme } from "@chakra-ui/theme-utils"
-import { ColorModeScript } from '@chakra-ui/react'
 import { BrowserRouter } from 'react-router-dom';
 import { RecoilRoot } from "recoil";
 import { SocketContextProvider } from "./context/SocketContext.jsx";
@@ -20,20 +18,19 @@ const styles = {
   })
 };
 
-const config={
-  initialColorMode:"dark",
+const config = {
+  initialColorMode: "dark",
   useSystemColorMode: true,
 };
 
-const color= {
-  gray:{
-    light:"#616161",
-    dark:"#1e1e1e"
-
-  }
+const colors = {
+  gray: {
+    light: "#616161",
+    dark: "#1e1e1e",
+  },
 };
 
-const theme = extendTheme({config,styles,color});
+const theme = extendTheme({ config, styles, colors });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

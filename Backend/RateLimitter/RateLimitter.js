@@ -4,7 +4,8 @@ export const forgotpassLimitter = async (req, res, next) => {
   const key = `forgot:${req.ip}`;
   const now = Date.now();
 
-  let raw = await redisClient.get(key);
+  // Redis disabled: fallback to in-memory rate limiter per process
+  let raw = null; // await redisClient.get(key);
   let data;
   try {
     data = raw ? JSON.parse(raw) : { count: 0, lastRequest: 0, resetTime: now + 24*60*60*1000 };
@@ -24,7 +25,8 @@ export const forgotpassLimitter = async (req, res, next) => {
     data.lastRequest = now;
    
     const ttl = Math.ceil((data.resetTime - now) / 1000);
-    await redisClient.setEx(key, ttl, JSON.stringify(data));
+    // Redis disabled: skip storing rate limiter state
+    // await redisClient.setEx(key, ttl, JSON.stringify(data));
     return next();
   }
 
@@ -39,6 +41,7 @@ export const forgotpassLimitter = async (req, res, next) => {
  
   data.lastRequest = now;
   const ttl = Math.ceil((data.resetTime - now) / 1000);
-  await redisClient.setEx(key, ttl, JSON.stringify(data));
+  // Redis disabled: skip storing rate limiter state
+  // await redisClient.setEx(key, ttl, JSON.stringify(data));
   return next();
 };

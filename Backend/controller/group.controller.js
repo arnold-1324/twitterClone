@@ -5,7 +5,7 @@ import User from "../models/user.model.js";
 import validator from "validator";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
-import { s3, generateFileName } from "../lib/utils/uploader.js";
+import { s3, generateFileName, getPresignedUrl } from "../lib/utils/uploader.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
 const { Types } = mongoose;
@@ -58,19 +58,20 @@ export const createGroup = async (req, res) => {
 
     // Handle profile image upload
     let profileImage = "";
-    if (req.file) {
+    if (req.file && req.file.buffer) {
       const fileUrl = generateFileName();
       const params = {
         Bucket: process.env.BUCKET_NAME,
         Key: fileUrl,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
+        ACL: "public-read",
       };
 
       const command = new PutObjectCommand(params);
       await s3.send(command);
 
-      profileImage = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
+      profileImage = fileUrl;
     }
 
     // Ensure members is an array
@@ -353,19 +354,20 @@ export const updateGroup = async (req, res) => {
 
     // Handle profile image upload
     let profileImage = group.profileImage; // Keep existing if no new image
-    if (req.file) {
+    if (req.file && req.file.buffer) {
       const fileUrl = generateFileName();
       const params = {
         Bucket: process.env.BUCKET_NAME,
         Key: fileUrl,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
+        ACL: "public-read",
       };
 
       const command = new PutObjectCommand(params);
       await s3.send(command);
 
-      profileImage = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
+      profileImage = fileUrl;
     }
 
     // Update group

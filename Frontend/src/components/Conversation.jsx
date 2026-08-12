@@ -111,7 +111,12 @@ const Conversation = ({ conversation, onlineUsers }) => {
       onClick={handleSelectConversation}
       bg={selectedConversation?._id === conversation._id ? selectedBgColor : "transparent"}
       borderRadius={"md"}
-      boxShadow="md"
+      boxShadow="none"
+      borderBottom="1px solid"
+      borderColor={useColorModeValue("transparent", "rgba(255,255,255,0.02)")}
+      px={4}
+      py={3}
+      mb={2}
     >
       <WrapItem>
         <Avatar

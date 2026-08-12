@@ -6,18 +6,16 @@ import {
 	IconButton,
 	useColorMode,
 	Tooltip,
-	Badge,
 } from "@chakra-ui/react";
-import { useRecoilValue, useSetRecoilState } from "recoil";
+import { useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import { AiFillHome } from "react-icons/ai";
 import { RxAvatar } from "react-icons/rx";
 import { FiLogOut } from "react-icons/fi";
-import { BsFillChatQuoteFill, BsBellFill } from "react-icons/bs";
+import { BsFillChatQuoteFill } from "react-icons/bs";
 import { MdOutlineSettings } from "react-icons/md";
 import { Link as RouterLink } from "react-router-dom";
 import useLogout from "../hooks/useLogout";
-import authScreenAtom from "../atom/authAtom";
 import NotificationIcon from "./NotificationIcon";
 import NotifyAtom from "../atom/notifyAtom";
 
@@ -25,10 +23,9 @@ const Header = () => {
 	const { colorMode, toggleColorMode } = useColorMode();
 	const user = useRecoilValue(userAtom);
 	const logout = useLogout();
-	const setAuthScreen = useSetRecoilState(authScreenAtom);
 	const { unreadCount } = useRecoilValue(NotifyAtom);
-	// Mockup for unread notifications count
-	const unreadNotifications = 3;
+	const logoBase = import.meta.env.BASE_URL || "/";
+	const logoSrc = colorMode === "dark" ? `${logoBase}light-logo.svg` : `${logoBase}dark-logo.svg`;
 
 	return (
 		<Flex justifyContent="space-between" align="center" alignItems={"center"} mt={6} mb={6} px={4}>
@@ -46,12 +43,20 @@ const Header = () => {
 
 			{/* Logo with Color Mode Toggle */}
 			<IconButton
-				icon={<Image alt="logo" src={colorMode === "dark" ? "/light-logo.svg" : "/dark-logo.svg"} />}
+				icon={
+					<Image
+						alt="logo"
+						src={logoSrc}
+						boxSize="28px"
+						objectFit="contain"
+					/>
+				}
 				onClick={toggleColorMode}
 				aria-label="Toggle Color Mode"
 				variant="ghost"
-				alignItems={"center"}
-				mx={"auto"}
+				minW={0}
+				mx="auto"
+				rounded="full"
 			/>
 
 			{/* User Icons Section */}

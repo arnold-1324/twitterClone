@@ -3,9 +3,9 @@ import { IconButton, Badge, Tooltip, Box } from "@chakra-ui/react";
 import { BsBellFill } from "react-icons/bs";
 import { motion } from "framer-motion";
 
-// Wrapping Chakra Box and Badge with motion for animations
-const MotionBox = motion(Box);
-const MotionBadge = motion(Badge);
+// Use the new motion.create API to wrap Chakra components
+const MotionBox = motion.create ? motion.create(Box) : motion(Box);
+const MotionBadge = motion.create ? motion.create(Badge) : motion(Badge);
 
 const NotificationIcon = ({ unreadCount }) => {
   return (

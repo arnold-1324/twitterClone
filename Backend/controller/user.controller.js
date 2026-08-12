@@ -2,8 +2,8 @@ import User from "../models/user.model.js";
 import Post from "../models/post.model.js";
 import Notification from "../models/notification.model.js";
 import bcrypt from "bcryptjs";
-import { PutObjectCommand,DeleteObjectCommand } from "@aws-sdk/client-s3"
-import { s3,generateFileName } from "../lib/utils/uploader.js";
+import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { s3, generateFileName, getPresignedUrl } from "../lib/utils/uploader.js";
 import mongoose from "mongoose";
 import { redisClient } from "../Redis.js";
 
@@ -88,11 +88,11 @@ export const getUserProfile = async (req, res) => {
     const { query } = req.params;   
     const cacheKey = `user:profile:${query}`;
 
-  
-    const cachedUser = await redisClient.get(cacheKey);
-    if (cachedUser) {
-      return res.status(200).json(JSON.parse(cachedUser));
-    }
+    // Redis disabled: skip fetching cached user profile
+    // const cachedUser = await redisClient.get(cacheKey);
+    // if (cachedUser) {
+    //   return res.status(200).json(JSON.parse(cachedUser));
+    // }
 
 
     let user;
@@ -111,7 +111,8 @@ export const getUserProfile = async (req, res) => {
     }
 
  
-    await redisClient.setEx(cacheKey, 600, JSON.stringify(user));
+    // Redis disabled: skip storing cached user profile
+    // await redisClient.setEx(cacheKey, 600, JSON.stringify(user));
 
     return res.status(200).json(user);
 
@@ -125,10 +126,11 @@ export const getSuggestedUser = async (req, res) => {
   try {
     const userId = req.user._id.toString();
     const cacheKey = `user:suggested:${userId}`;
-    const cachedSuggestions = await redisClient.get(cacheKey);
-    if (cachedSuggestions) {
-      return res.status(200).json(JSON.parse(cachedSuggestions));
-    }
+    // Redis disabled: skip fetching cached suggestions
+    // const cachedSuggestions = await redisClient.get(cacheKey);
+    // if (cachedSuggestions) {
+    //   return res.status(200).json(JSON.parse(cachedSuggestions));
+    // }
 
     // Fetch user's following list, defaulting to empty array if none
     const userDoc = await User.findById(userId).select('following');
@@ -166,7 +168,8 @@ export const getSuggestedUser = async (req, res) => {
       _id: { $in: suggestedUserIds }
     })
     .select('-password -updatedAt -verificationToken -verificationTokenExpiresAt');
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(users));
+    // Redis disabled: skip storing cached suggestions
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(users));
     res.status(200).json(users);
   } catch (error) {
     console.error('Error in suggestedUser:', error.message);
@@ -207,11 +210,11 @@ export const UpdateUserProfile = async (req, res) => {
 
     let fileName = user.profileImg || "";
 
-    if (req.file) {
+    if (req.file && req.file.buffer) {
       if (user.profileImg) {
         const deleteParams = {
           Bucket: process.env.BUCKET_NAME,
-          Key: user.profileImg.split('/').pop()
+          Key: user.profileImg.includes('/') ? user.profileImg.split('/').pop() : user.profileImg,
         };
 
         const deleteCommand = new DeleteObjectCommand(deleteParams);
@@ -225,15 +228,14 @@ export const UpdateUserProfile = async (req, res) => {
         Key: fileName,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
+        ACL: "public-read",
       };
 
       const uploadCommand = new PutObjectCommand(uploadParams);
       await s3.send(uploadCommand);
       console.log("Uploaded new profile image:", fileName);
-      
-      
-      const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileName}`;
-      user.profileImg = publicUrl; 
+
+      user.profileImg = fileName;
     }
 
     user.fullName = fullName || user.fullName;

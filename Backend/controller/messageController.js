@@ -1,5 +1,5 @@
 import moment from "moment";
-import { s3, generateFileName } from "../lib/utils/uploader.js";
+import { s3, generateFileName, getPresignedUrl } from "../lib/utils/uploader.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import Group from "../models/group.model.js";
@@ -7,6 +7,78 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getIO, getRecipientSocketId } from "../socket/socket.js";
 import { encrypt, decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
 import { redisClient } from "../Redis.js";
+
+const signKey = async (key) => {
+  if (!key || typeof key !== "string") return "";
+  try {
+    return await getPresignedUrl(key);
+  } catch (err) {
+    console.error("Failed to sign media url:", err.message || err);
+    return "";
+  }
+};
+
+const signMessagePayload = async (msg) => {
+  const signedMsg = {
+    ...msg,
+    img: await signKey(msg.img),
+    video: await signKey(msg.video),
+    audio: await signKey(msg.audio),
+    file: await signKey(msg.file),
+  };
+
+  if (signedMsg.sender && signedMsg.sender.profileImg) {
+    signedMsg.sender = {
+      ...signedMsg.sender,
+      profileImg: await signKey(signedMsg.sender.profileImg),
+    };
+  }
+
+  if (signedMsg.replyTo) {
+    signedMsg.replyTo = {
+      ...signedMsg.replyTo,
+      img: await signKey(signedMsg.replyTo.img),
+      video: await signKey(signedMsg.replyTo.video),
+      audio: await signKey(signedMsg.replyTo.audio),
+      file: await signKey(signedMsg.replyTo.file),
+      sender: signedMsg.replyTo.sender
+        ? {
+            ...signedMsg.replyTo.sender,
+            profileImg: await signKey(signedMsg.replyTo.sender.profileImg),
+          }
+        : signedMsg.replyTo.sender,
+    };
+  }
+
+  if (signedMsg.postReference) {
+    signedMsg.postReference = {
+      ...signedMsg.postReference,
+      images: await signKey(signedMsg.postReference.images),
+      postedBy: signedMsg.postReference.postedBy
+        ? {
+            ...signedMsg.postReference.postedBy,
+            profileImg: await signKey(signedMsg.postReference.postedBy.profileImg),
+          }
+        : signedMsg.postReference.postedBy,
+    };
+  }
+
+  if (Array.isArray(signedMsg.reactions)) {
+    signedMsg.reactions = await Promise.all(
+      signedMsg.reactions.map(async (reaction) => ({
+        ...reaction,
+        user: reaction.user
+          ? {
+              ...reaction.user,
+              profileImg: await signKey(reaction.user.profileImg),
+            }
+          : reaction.user,
+      }))
+    );
+  }
+
+  return signedMsg;
+};
 
 export const sendMessage = async (req, res) => {
   const { recipientId, message, groupId } = req.body;
@@ -20,21 +92,20 @@ export const sendMessage = async (req, res) => {
 
   try {
    
-    if (req.file) {
+    if (req.file && req.file.buffer) {
       const fileUrl = generateFileName();
       const params = {
         Bucket: process.env.BUCKET_NAME,
         Key: fileUrl,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
+        ACL: "public-read",
       };
       await s3.send(new PutObjectCommand(params));
-      const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
-
-      if (req.file.mimetype.startsWith("image/")) img = publicUrl;
-      else if (req.file.mimetype.startsWith("video/")) video = publicUrl;
-      else if (req.file.mimetype.startsWith("audio/")) audio = publicUrl;
-      else file = publicUrl; // PDFs / other files
+      if (req.file.mimetype.startsWith("image/")) img = fileUrl;
+      else if (req.file.mimetype.startsWith("video/")) video = fileUrl;
+      else if (req.file.mimetype.startsWith("audio/")) audio = fileUrl;
+      else file = fileUrl; // PDFs / other files
     }
 
     // 2️⃣ Determine message type
@@ -221,10 +292,11 @@ export const getMessages = async (req, res) => {
    
   try {
     const cacheKey = `messages:convo:${userId}:${otherUserId  || groupId}`;
-    const cachedMessages = await redisClient.get(cacheKey);
-    if (cachedMessages) {
-      return res.status(200).json(JSON.parse(cachedMessages));
-    }
+    // Redis caching disabled — skip fetching cached messages
+    // const cachedMessages = await redisClient.get(cacheKey);
+    // if (cachedMessages) {
+    //   return res.status(200).json(JSON.parse(cachedMessages));
+    // }
     let conversation;
     let isGroupConversation = false;
 
@@ -304,17 +376,30 @@ export const getMessages = async (req, res) => {
       }
     };
 
-    const decryptedMessages = messages.map(msg => ({
-      ...msg,
-      text: msg.iv ? decryptSafely({ iv: msg.iv, encryptedData: msg.text }) : msg.text,
-      iv: undefined,
-      replyTo: msg.replyTo ? {
+    const decryptedMessages = await Promise.all(messages.map(async (msg) => {
+      const safeReply = msg.replyTo ? {
         ...msg.replyTo,
         text: msg.replyTo.iv ? decryptSafely({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : msg.replyTo.text,
         iv: undefined,
-      } : null,
-      isGroupMessage: isGroupConversation,
-      groupId: groupId || null
+      } : null;
+
+      const signedReply = safeReply ? await signMessagePayload({
+        ...msg.replyTo,
+        replyTo: null,
+      }) : null;
+
+      return {
+        ...msg,
+        text: msg.iv ? decryptSafely({ iv: msg.iv, encryptedData: msg.text }) : msg.text,
+        iv: undefined,
+        img: await signKey(msg.img),
+        video: await signKey(msg.video),
+        audio: await signKey(msg.audio),
+        file: await signKey(msg.file),
+        replyTo: signedReply,
+        isGroupMessage: isGroupConversation,
+        groupId: groupId || null,
+      };
     }));
 
     const io = getIO();
@@ -342,7 +427,8 @@ export const getMessages = async (req, res) => {
         io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
       }
     }
-  await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
+  // Redis disabled: skip storing cached messages
+  // await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
     res.status(200).json(decryptedMessages);
   } catch (error) {
     console.error("Error in getMessages:", error.message);
@@ -421,10 +507,11 @@ export const getConversation = async (req, res) => {
   try {
     const currentUserId = req.user._id.toString();
     const cacheKey = `messages:convo:${currentUserId}`;
-    const cachedConversations = await redisClient.get(cacheKey);
-    if (cachedConversations) {
-      return res.status(200).json(JSON.parse(cachedConversations));
-    }
+    // Redis disabled: skip fetching cached conversations
+    // const cachedConversations = await redisClient.get(cacheKey);
+    // if (cachedConversations) {
+    //   return res.status(200).json(JSON.parse(cachedConversations));
+    // }
     // 1:1 conversations
     const conversations = await Conversation.find({
       participants: currentUserId,
@@ -539,7 +626,8 @@ export const getConversation = async (req, res) => {
     );
 
    
-    await redisClient.setEx(cacheKey, 60, JSON.stringify(allConversations));
+    // Redis disabled: skip storing cached conversations
+    // await redisClient.setEx(cacheKey, 60, JSON.stringify(allConversations));
     res.status(200).json(allConversations);
   } catch (error) {
     console.error("Error in getConversation:", error);
@@ -555,10 +643,11 @@ export const getGroupConversationInfo = async (req, res) => {
 
   try {
     const cacheKey = `group:info:${groupId}:${userId}`;
-    const cachedGroupInfo = await redisClient.get(cacheKey);
-    if (cachedGroupInfo) {
-      return res.status(200).json(JSON.parse(cachedGroupInfo));
-    }
+    // Redis disabled: skip fetching cached group info
+    // const cachedGroupInfo = await redisClient.get(cacheKey);
+    // if (cachedGroupInfo) {
+    //   return res.status(200).json(JSON.parse(cachedGroupInfo));
+    // }
     const group = await Group.findById(groupId)
       .populate('members', 'username profileImg')
       .populate('admins', 'username profileImg')
@@ -609,7 +698,8 @@ export const getGroupConversationInfo = async (req, res) => {
       updatedAt: group.conversation?.updatedAt || group.updatedAt,
       createdAt: group.createdAt
     };
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(groupInfo));
+    // Redis disabled: skip storing cached group info
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(groupInfo));
     res.status(200).json(groupInfo);
   } catch (error) {
     console.error("Error in getGroupConversationInfo:", error.message);
@@ -729,19 +819,18 @@ export const sendGroupMessage = async (req, res) => {
         Key: fileUrl,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
+        ACL: "public-read",
       };
 
       const command = new PutObjectCommand(params);
       await s3.send(command);
 
-      const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
-
       if (req.file.mimetype.startsWith("image/")) {
-        img = publicUrl;
+        img = fileUrl;
       } else if (req.file.mimetype.startsWith("video/")) {
-        video = publicUrl;
+        video = fileUrl;
       } else if (req.file.mimetype.startsWith("audio/")) {
-        audio = publicUrl;
+        audio = fileUrl;
       }
     }
 
@@ -859,21 +948,18 @@ export const replyToMessage = async (req, res) => {
         Key: fileUrl,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
+        ACL: "public-read",
       };
 
       const command = new PutObjectCommand(params);
       await s3.send(command);
 
-      const publicUrl = `https://${process.env.BUCKET_NAME}.s3.${process.env.REGION}.amazonaws.com/${fileUrl}`;
-
       if (req.file.mimetype.startsWith("image/")) {
-
-        img = publicUrl;
+        img = fileUrl;
       } else if (req.file.mimetype.startsWith("video/")) {
-
-        video = publicUrl;
+        video = fileUrl;
       } else if (req.file.mimetype.startsWith("audio/")) {
-        audio = publicUrl;
+        audio = fileUrl;
       }
     }
 
@@ -1013,10 +1099,11 @@ export const getGroupMessages = async (req, res) => {
   try {
     // Verify user is member of the group
     const cacheKey = `group:messages:${groupId}:${userId}`; 
-    const cachedMessages = await redisClient.get(cacheKey);
-    if (cachedMessages) {
-      return res.status(200).json(JSON.parse(cachedMessages));
-    }
+    // Redis disabled: skip fetching cached group messages
+    // const cachedMessages = await redisClient.get(cacheKey);
+    // if (cachedMessages) {
+    //   return res.status(200).json(JSON.parse(cachedMessages));
+    // }
     const group = await Group.findById(groupId).lean();
     if (!group) return res.status(404).json({ error: "Group not found" });
 
@@ -1106,27 +1193,30 @@ export const getGroupMessages = async (req, res) => {
       }
     };
 
-    const decryptedMessages = messages.map(msg => {
+    const decryptedMessages = await Promise.all(messages.map(async (msg) => {
       const sender = msg.sender || null;
       const replyTo = msg.replyTo || null;
 
       const safeText = msg.iv ? decryptSafely({ iv: msg.iv, encryptedData: msg.text }) : msg.text;
 
-      const safeReply = replyTo ? {
+      const signedReply = replyTo ? await signMessagePayload({
         ...replyTo,
-        text: replyTo.iv ? decryptSafely({ iv: replyTo.iv, encryptedData: replyTo.text }) : replyTo.text,
-        iv: undefined,
-      } : null;
+        replyTo: null,
+      }) : null;
 
       return {
         ...msg,
         text: safeText,
         iv: undefined,
-        replyTo: safeReply,
+        img: await signKey(msg.img),
+        video: await signKey(msg.video),
+        audio: await signKey(msg.audio),
+        file: await signKey(msg.file),
+        replyTo: signedReply,
         isGroupMessage: true,
-        groupId: groupId
+        groupId: groupId,
       };
-    });
+    }));
 
     // Notify other group members that messages have been seen
     const io = getIO();
@@ -1141,7 +1231,8 @@ export const getGroupMessages = async (req, res) => {
         });
       }
     });
-    await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
+    // Redis caching disabled — skip storing cached messages
+    // await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
     res.status(200).json(decryptedMessages);
   } catch (error) {
     console.error("Error in getGroupMessages:", error);

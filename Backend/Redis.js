@@ -1,18 +1,33 @@
-import { createClient } from "redis";
+// Redis support has been commented out to disable caching during development
+// and avoid connection errors when Redis is not available.
+// Original implementation used `createClient` and attempted to connect.
+// Keeping a no-op stub allows existing imports across controllers
+// to continue working without runtime errors.
 
-const url = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+// import { createClient } from "redis";
 
+// const url = process.env.REDIS_URL;
+// if (url) {
+//   const client = createClient({ url });
+//   client.on("error", (err) => console.error("❌ Redis Client Error:", err));
+//   (async () => {
+//     try {
+//       await client.connect();
+//       console.log("✅ Redis connected to", url);
+//     } catch (err) {
+//       console.error("❌ Redis failed to connect:", err.message);
+//     }
+//   })();
+// } else {
+//   console.warn("⚠️ REDIS_URL is not set. Redis cache is disabled.");
+// }
 
-const redisClient = createClient({ url });
+const redisClient = {
+  get: async () => null,
+  setEx: async () => {},
+  del: async () => {},
+};
 
-redisClient.on("error", (err) => {
-  console.error("❌ Redis Client Error:", err);
-});
-
-// don’t use top-level await in a module unless your Node version supports it fully
-(async () => {
-  await redisClient.connect();
-  console.log("✅ Redis connected to", url);
-})();
+console.warn("⚠️ Redis is disabled. `redisClient` is a no-op stub.");
 
 export { redisClient };

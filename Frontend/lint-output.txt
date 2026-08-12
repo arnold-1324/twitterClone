@@ -1,0 +1,277 @@
+﻿
+> frontend@0.0.0 lint
+> eslint "./src/**/*.{js,jsx}" --report-unused-disable-directives --max-warnings 0
+
+
+C:\Users\80133\twitterClone\Frontend\src\Pages\ChatPage.jsx
+    6:3  error    'IconButton' is defined but never used                                                                        no-unused-vars
+   27:7  error    'MotionFlex' is assigned a value but never used                                                               no-unused-vars
+   28:7  error    'MotionBox' is assigned a value but never used                                                                no-unused-vars
+   88:6  warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  156:9  error    'groupId' is assigned a value but never used                                                                  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\Pages\Home.jsx
+   8:8  error    'SongPage' is defined but never used                                                                          no-unused-vars
+  10:8  error    'AudioPlayer' is defined but never used                                                                       no-unused-vars
+  11:8  error    'audioFile' is defined but never used                                                                         no-unused-vars
+  39:6  warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\80133\twitterClone\Frontend\src\Pages\NotificationPage.jsx
+   63:6   warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array                                                 react-hooks/exhaustive-deps
+  140:46  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  152:42  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\Pages\PostPage.jsx
+  45:6  warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\80133\twitterClone\Frontend\src\Pages\SettingPage.jsx
+    1:8    error  'React' is defined but never used                                                                                                                            no-unused-vars
+   27:10   error  'Link' is defined but never used                                                                                                                             no-unused-vars
+   28:84   error  'FaEnvelope' is defined but never used                                                                                                                       no-unused-vars
+   28:114  error  'FaExclamationTriangle' is defined but never used                                                                                                            no-unused-vars
+  105:21   error  React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  106:31   error  React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  140:67   error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                         react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\Pages\UpdateProfile.jsx
+  2:38  error  'useNavi' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\Pages\Userpage.jsx
+   2:8  error    'UserPost' is defined but never used                                                                          no-unused-vars
+  40:6  warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\80133\twitterClone\Frontend\src\Utils\Thumbnail.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\Actions.jsx
+   70:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   72:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   73:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   74:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   77:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   79:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   81:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   82:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   87:4   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   88:4   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   89:4   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   91:3   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   93:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   96:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+   98:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  101:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  103:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  106:3   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  108:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  109:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  110:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  111:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  115:3   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  117:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  119:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  120:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  121:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  123:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  125:2   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  127:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  128:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  129:1   error  Mixed spaces and tabs                                                                                                                                        no-mixed-spaces-and-tabs
+  339:16  error  React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  343:26  error  React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  427:7   error  'ShareSVG' is assigned a value but never used                                                                                                                no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\AudioPlayer.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\AudioPlayerNew.jsx
+    1:8   error    'React' is defined but never used                                                                                                                                                                                              no-unused-vars
+   28:10  error    'duration' is assigned a value but never used                                                                                                                                                                                  no-unused-vars
+   89:6   warning  React Hook useEffect has a missing dependency: 'onError'. Either include it or remove the dependency array. If 'onError' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+  121:9   error    'handleFallbackTimeUpdate' is assigned a value but never used                                                                                                                                                                  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\Conversation.jsx
+  143:38  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+  156:36  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\components\DraggableText.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\GroupManagement.jsx
+    1:8   error    'React' is defined but never used                                                                                                                                                                    no-unused-vars
+   22:3   error    'Image' is defined but never used                                                                                                                                                                    no-unused-vars
+   27:3   error    'ListIcon' is defined but never used                                                                                                                                                                 no-unused-vars
+   50:9   error    'toast' is assigned a value but never used                                                                                                                                                           no-unused-vars
+   53:9   error    'borderColor' is assigned a value but never used                                                                                                                                                     no-unused-vars
+   64:6   warning  React Hook useEffect has a missing dependency: 'fetchGroupDetails'. Either include it or remove the dependency array                                                                                 react-hooks/exhaustive-deps
+  274:57  error    React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+  290:81  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function                                          react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\components\GroupUIComponents.jsx
+    1:8   error    'React' is defined but never used                                                                                                                            no-unused-vars
+   34:18  error    'AnimatePresence' is defined but never used                                                                                                                  no-unused-vars
+  118:6   warning  React Hook useEffect has a missing dependency: 'fetchGroupDetails'. Either include it or remove the dependency array                                         react-hooks/exhaustive-deps
+  283:71  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  384:39  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  503:89  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\components\ImageEditor.jsx
+  1:8   error  'React' is defined but never used  no-unused-vars
+  5:22  error  Unexpected empty object pattern    no-empty-pattern
+
+C:\Users\80133\twitterClone\Frontend\src\components\LazyImage.jsx
+  1:8   error  'React' is defined but never used      no-unused-vars
+  1:27  error  'useEffect' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\Login.jsx
+  107:62  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\components\Logout.jsx
+  9:12  error  'user' is assigned a value but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\Lyrics.jsx
+  1:8   error  'React' is defined but never used        no-unused-vars
+  6:27  error  'currentTime' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\Message.jsx
+   60:10   error  'audioRef' is assigned a value but never used                                                                                                                                                                                                               no-unused-vars
+  159:24   error  React Hook "useColorModeValue" is called in function "renderMedia" that is neither a React function component nor a custom React Hook function. React component names must start with an uppercase letter. React Hook names must start with the word "use"  react-hooks/rules-of-hooks
+  177:42   error  React Hook "useColorModeValue" is called in function "renderMedia" that is neither a React function component nor a custom React Hook function. React component names must start with an uppercase letter. React Hook names must start with the word "use"  react-hooks/rules-of-hooks
+  196:20   error  React Hook "useColorModeValue" is called in function "renderMedia" that is neither a React function component nor a custom React Hook function. React component names must start with an uppercase letter. React Hook names must start with the word "use"  react-hooks/rules-of-hooks
+  251:55   error  React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function                                                                                                 react-hooks/rules-of-hooks
+  258:55   error  React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function                                                                                                 react-hooks/rules-of-hooks
+  311:56   error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                        react-hooks/rules-of-hooks
+  321:15   error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                        react-hooks/rules-of-hooks
+  323:24   error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                        react-hooks/rules-of-hooks
+  328:25   error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                        react-hooks/rules-of-hooks
+  333:60   error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                        react-hooks/rules-of-hooks
+  340:42   error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                        react-hooks/rules-of-hooks
+  395:66   error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                        react-hooks/rules-of-hooks
+  395:113  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                        react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\components\MessageContainer.jsx
+   13:3   error    'Button' is defined but never used                                                                                                                                  no-unused-vars
+   34:8   error    'AudioPlayer' is defined but never used                                                                                                                             no-unused-vars
+   69:10  error    'Msg' is assigned a value but never used                                                                                                                            no-unused-vars
+  151:47  error    'groupId' is defined but never used                                                                                                                                 no-unused-vars
+  197:6   warning  React Hook useEffect has missing dependencies: 'setConversations', 'setMessages', and 'updateMessageReactions'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  234:6   warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array                                                        react-hooks/exhaustive-deps
+
+C:\Users\80133\twitterClone\Frontend\src\components\MessageContainer.stories.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\MessageInput.jsx
+   22:8   error  'PollMessage' is defined but never used                                                                                                                                                                                                                           no-unused-vars
+   46:10  error  'audioPreview' is assigned a value but never used                                                                                                                                                                                                                 no-unused-vars
+   60:10  error  'reply' is assigned a value but never used                                                                                                                                                                                                                        no-unused-vars
+  324:17  error  React Hook "useColorModeValue" is called in function "handleMediaUpload" that is neither a React function component nor a custom React Hook function. React component names must start with an uppercase letter. React Hook names must start with the word "use"  react-hooks/rules-of-hooks
+  349:10  error  'UploadProgressBar' is not defined                                                                                                                                                                                                                                react/jsx-no-undef
+  356:15  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                              react-hooks/rules-of-hooks
+  358:24  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                              react-hooks/rules-of-hooks
+  361:22  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                              react-hooks/rules-of-hooks
+  365:60  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                              react-hooks/rules-of-hooks
+  368:42  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                              react-hooks/rules-of-hooks
+  373:92  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                                                                              react-hooks/rules-of-hooks
+  377:26  error  Unknown property 'w' found                                                                                                                                                                                                                                        react/no-unknown-property
+  377:35  error  Unknown property 'h' found                                                                                                                                                                                                                                        react/no-unknown-property
+  377:44  error  Unknown property 'objectFit' found                                                                                                                                                                                                                                react/no-unknown-property
+
+C:\Users\80133\twitterClone\Frontend\src\components\MusicPlayer\Controls.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\MusicPlayer\Player.jsx
+  1:1  error  Definition for rule 'jsx-a11y/media-has-caption' was not found                            jsx-a11y/media-has-caption
+  2:8  error  'React' is defined but never used                                                         no-unused-vars
+  6:3  error  Unused eslint-disable directive (no problems were reported from 'no-unused-expressions')
+
+C:\Users\80133\twitterClone\Frontend\src\components\MusicPlayer\Seekbar.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\MusicPlayer\Track.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\MusicPlayer\VolumeBar.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\MusicPlayer\index.jsx
+   1:8  error    'React' is defined but never used                                                                                                        no-unused-vars
+  23:6  warning  React Hook useEffect has missing dependencies: 'currentSongs.length' and 'dispatch'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\80133\twitterClone\Frontend\src\components\NotificationIcon.jsx
+  7:7  error  'MotionBox' is assigned a value but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\PollMessage.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\Post.jsx
+   2:10  error    'Image' is defined but never used                                                                             no-unused-vars
+  43:6   warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\80133\twitterClone\Frontend\src\components\Reaction.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\SharePost.jsx
+    1:8   error    'React' is defined but never used                                                                                                                            no-unused-vars
+   32:10  error    'posts' is assigned a value but never used                                                                                                                   no-unused-vars
+   64:6   warning  React Hook useEffect has a missing dependency: 'user'. Either include it or remove the dependency array                                                      react-hooks/exhaustive-deps
+   64:7   warning  React Hook useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                     react-hooks/exhaustive-deps
+  193:29  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  197:39  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  238:27  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+  242:37  error    React Hook "useColorModeValue" cannot be called inside a callback. React Hooks must be called in a React function component or a custom React Hook function  react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\components\SignupCard.jsx
+  155:32  error  React Hook "useColorModeValue" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+C:\Users\80133\twitterClone\Frontend\src\components\SongCard.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\SongPage.jsx
+   1:8   error  'React' is defined but never used                   no-unused-vars
+  24:10  error  'currentStanza' is assigned a value but never used  no-unused-vars
+  31:9   error  'toast' is assigned a value but never used          no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\StoryEditPage.jsx
+   1:8   error  'React' is defined but never used              no-unused-vars
+   6:3   error  'Text' is defined but never used               no-unused-vars
+  11:3   error  'Slider' is defined but never used             no-unused-vars
+  12:3   error  'SliderTrack' is defined but never used        no-unused-vars
+  13:3   error  'SliderFilledTrack' is defined but never used  no-unused-vars
+  14:3   error  'SliderThumb' is defined but never used        no-unused-vars
+  17:10  error  'FaMusic' is defined but never used            no-unused-vars
+  20:10  error  'Howl' is defined but never used               no-unused-vars
+  77:5   error  Unexpected 'debugger' statement                no-debugger
+
+C:\Users\80133\twitterClone\Frontend\src\components\SuggestedUsers.jsx
+  30:5  warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\80133\twitterClone\Frontend\src\components\TypingIndicator.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\UserHeader.jsx
+  6:10  error  'BsInstagram' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\components\verifyEmail.jsx
+  96:21  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+C:\Users\80133\twitterClone\Frontend\src\context\SocketContext.jsx
+  8:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\80133\twitterClone\Frontend\src\hooks\useFollowUnfollow.js
+  49:13  error  'updatedFollowers' is assigned a value but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\hooks\useGetUserprofile.js
+  34:5  warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\80133\twitterClone\Frontend\src\stories\Button.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\stories\Header.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\Users\80133\twitterClone\Frontend\src\stories\Page.jsx
+  35:13  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  35:18  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+Γ£û 171 problems (154 errors, 17 warnings)
+  1 error and 0 warnings potentially fixable with the `--fix` option.
+
