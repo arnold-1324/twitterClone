@@ -1,6 +1,7 @@
+import { limitResource, limitUpload } from "../lib/rateLimits.js";
 import express from "express";
 import { protectRoute } from "../middleware/protectRoute.js";
-import { upload } from "../lib/utils/uploader.js";
+import { uploadPostImage, validateImageBytes } from "../lib/utils/uploader.js";
 import {
   createGroup,
   getUserGroups,
@@ -21,41 +22,41 @@ import {
 
 const router = express.Router();
 
-router.use(protectRoute);
+
 
 // Group creation with file upload
-router.post("/create", upload.single("profileImage"), createGroup);
+router.post("/create", protectRoute, limitResource, limitUpload, uploadPostImage.single("profileImage"), validateImageBytes, createGroup);
 
 // Get groups
-router.get("/user-groups", getUserGroups);
-router.get("/:groupId", getGroupDetails);
+router.get("/user-groups", protectRoute, limitResource, getUserGroups);
+router.get("/:groupId", protectRoute, limitResource, getGroupDetails);
 
 // Update group
-router.put("/:groupId", upload.single("profileImage"), updateGroup);
+router.put("/permissions", protectRoute, limitResource, setGroupPermissions);
+router.put("/:groupId", protectRoute, limitResource, limitUpload, uploadPostImage.single("profileImage"), validateImageBytes, updateGroup);
 
 // Invite management
-router.post("/invite", inviteToGroup);
-router.post("/accept-invite", acceptInvite);
-router.post("/deny-invite", denyInvite);
+router.post("/invite", protectRoute, limitResource, inviteToGroup);
+router.post("/accept-invite", protectRoute, limitResource, acceptInvite);
+router.post("/deny-invite", protectRoute, limitResource, denyInvite);
 
 // Membership controls
-router.post("/leave", leaveGroup);
+router.post("/leave", protectRoute, limitResource, leaveGroup);
 
 // Permissions
-router.put("/permissions", setGroupPermissions);
 
 // Blocking users
-router.post("/block", blockUserInGroup);
-router.post("/unblock", unblockUserInGroup);
+router.post("/block", protectRoute, limitResource, blockUserInGroup);
+router.post("/unblock", protectRoute, limitResource, unblockUserInGroup);
 
 // Invite links
-router.post("/generate-invite-link", generateInviteLink);
-router.post("/join-with-token", joinWithInvite);
+router.post("/generate-invite-link", protectRoute, limitResource, generateInviteLink);
+router.post("/join-with-token", protectRoute, limitResource, joinWithInvite);
 
 // Analytics
-router.get("/:groupId/analytics", getGroupAnalytics);
+router.get("/:groupId/analytics", protectRoute, limitResource, getGroupAnalytics);
 
 // Group deletion
-router.delete("/delete", deleteGroup);
+router.delete("/delete", protectRoute, limitResource, deleteGroup);
 
 export default router;

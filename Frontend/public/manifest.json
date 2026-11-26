@@ -1,12 +1,13 @@
 {
-  "name": "Twitter Clone - React PWA",
-  "short_name": "TwitterClone",
-  "description": "A Twitter clone built with React",
-  "theme_color": "#1DA1F2",
-  "background_color": "#ffffff",
+  "id": "/",
+  "name": "Social app",
+  "short_name": "Social",
+  "description": "Share posts and photos, watch reels, and message your people.",
+  "theme_color": "#15141a",
+  "background_color": "#15141a",
   "display": "standalone",
-  "scope": ".",
-  "start_url": "./index.html",
+  "scope": "/",
+  "start_url": "/",
   "icons": [
     {
       "src": "dark-logo-192.png",

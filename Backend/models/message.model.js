@@ -46,6 +46,7 @@ const messageSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+        file: { type: String, default: "" },
         audio: {
             type: String,
             default: "",
@@ -83,6 +84,9 @@ messageSchema.pre("save", function (next) {
   next();
 });
 
+
+messageSchema.index({ conversationId: 1, createdAt: 1 });
+messageSchema.index({ conversationId: 1, createdAt: -1, _id: -1 });
 
 const Message = mongoose.model("Message", messageSchema);
 

@@ -1,6 +1,6 @@
 # TwitterClone
 
-TwitterClone is a full-stack social networking and real-time messaging application. It combines a React/Vite Progressive Web App with an Express, MongoDB, Socket.IO, and S3-compatible media backend. The product supports authenticated timelines, user profiles, posts, likes, replies, sharing, notifications, direct messages, group chats, media uploads, encrypted message text, polls, and deployment-ready configurations for Vercel and Render.
+TwitterClone is a full-stack social networking and real-time messaging application. It combines a React/Vite Progressive Web App with an Express, MongoDB, Socket.IO, and local media storage. The product supports authenticated timelines, user profiles, posts, likes, replies, sharing, notifications, direct messages, group chats, media uploads, encrypted message text, polls, and deployment-ready configurations for Vercel and Render.
 
 ## Table of contents
 
@@ -37,12 +37,12 @@ Node.js API
         ├── REST routers for auth, users, posts, notifications, messages, groups, polls
         ├── Socket.IO server for online users and realtime message delivery
         ├── Mongoose models backed by MongoDB
-        ├── Multer memory uploads to S3-compatible object storage
+        ├── Multer uploads to local media storage
         └── cookie-based JWT authentication
 
 External services
   ├── MongoDB database
-  ├── S3-compatible storage, optionally fronted by CloudFront
+  ├── Local media directory with optional legacy S3 reads
   ├── Mailtrap email delivery
   └── Optional Redis service; currently implemented as a no-op cache stub
 ```
@@ -84,7 +84,7 @@ The frontend entrypoint is `Frontend/src/main.jsx`, and top-level application ro
 
 ### Media and PWA support
 
-- S3-compatible uploads through Multer memory storage.
+- Local uploads through Multer, with image compression and adaptive video streaming.
 - Presigned read URLs for private media retrieval.
 - Vite PWA/service-worker configuration and public app assets.
 
@@ -95,7 +95,7 @@ The frontend entrypoint is `Frontend/src/main.jsx`, and top-level application ro
 | Frontend | React 18, Vite 5, Chakra UI, Recoil, React Router, Socket.IO Client, Tailwind CSS, DaisyUI |
 | Backend | Node.js, Express, Socket.IO, Mongoose, JWT, Multer, AWS SDK v3, Mailtrap |
 | Data | MongoDB, Mongoose schemas |
-| Storage | S3-compatible object storage; CloudFront helper script available |
+| Storage | Local media directory; optional S3 compatibility for existing uploads |
 | Tooling | Jest, Supertest, ESLint, Vite, Docker Compose |
 | Deployment | Vercel frontend config, Render backend blueprint, Dockerfile for backend |
 
@@ -135,10 +135,10 @@ The frontend entrypoint is `Frontend/src/main.jsx`, and top-level application ro
 
 ## Runtime requirements
 
-- Node.js 18 or newer.
+- Node.js 22 or newer.
 - npm 9 or newer.
 - MongoDB connection string or a local MongoDB instance.
-- S3-compatible object storage bucket and credentials for media features.
+- FFmpeg and FFprobe for video processing. The backend container and dev container include both.
 - Mailtrap credentials for email verification and password reset flows.
 - Docker, only if using the Redis Docker Compose helper.
 
@@ -150,6 +150,8 @@ Create a `.env` file at the repository root for local backend development. Some 
 # Server
 NODE_ENV=development
 PORT=5000
+# Optional for an isolated development instance with no email service
+LOCAL_SIGNUP=true
 CLIENT_URL=http://localhost:3000/
 FRONTEND_URL=http://localhost:3000
 APP_URL=http://localhost:3000
@@ -165,16 +167,10 @@ ENCRYPTION_ALGO=aes-256-cbc
 ENCRYPTION_SECRET=replace-with-a-long-random-secret
 
 # Mailtrap
-ENDPOINT=https://send.api.mailtrap.io/
 TOKEN=replace-with-mailtrap-token
 
-# S3-compatible storage
-REGION=auto
-ACCESS_KEY=replace-with-access-key
-SECRET_KEY=replace-with-secret-key
-BUCKET_NAME=twitterclone-dev
-S3_ENDPOINT=https://t3.storageapi.dev
-S3_FORCE_PATH_STYLE=true
+# Optional persistent media location (defaults to .dayline-media in the repository)
+# MEDIA_DIR=/var/lib/dayline/media
 
 # Optional Redis URL if Redis support is restored
 REDIS_URL=redis://localhost:6379
@@ -182,11 +178,12 @@ REDIS_URL=redis://localhost:6379
 
 ### Environment variable notes
 
-- `MONGODB_URL` is the primary MongoDB variable used by the backend database connector.
+- `MONGODB_URL` is the primary MongoDB URI. Development can fall back to `MONGODB_LOCAL_URL` when the primary connection fails. When a SOCKS proxy is needed, set `MONGODB_PROXY_HOST` and optionally `MONGODB_PROXY_PORT` (default 9050).
 - `JWT_SECRET` is required for protected API routes and signed auth cookies.
 - `ENCRYPTION_ALGO` and `ENCRYPTION_SECRET` are required for message encryption/decryption helpers.
-- `ACCESS_KEY`, `SECRET_KEY`, `REGION`, `BUCKET_NAME`, `S3_ENDPOINT`, and `S3_FORCE_PATH_STYLE` configure uploads and presigned media URLs.
-- `ENDPOINT` and `TOKEN` are consumed by the Mailtrap client.
+- `MEDIA_DIR` selects the directory for local uploads. The backend process needs read and write access.
+- Existing S3 objects remain readable when `ACCESS_KEY`, `SECRET_KEY`, `REGION` and `BUCKET_NAME` are configured. For a compatible provider, include `S3_ENDPOINT` and set `S3_FORCE_PATH_STYLE` if needed.
+- `TOKEN` is used by Mailtrap. With `NODE_ENV=development`, `LOCAL_SIGNUP=true` enables local account creation without Mailtrap. Use this only for an isolated development database.
 - `CLIENT_URL`, `FRONTEND_URL`, and `APP_URL` are used in email links and group invite links. Normalize trailing slashes before production rollout.
 
 ## Local development
@@ -196,9 +193,9 @@ REDIS_URL=redis://localhost:6379
 From the repository root:
 
 ```bash
-npm install
-npm install --prefix Backend
-npm install --prefix Frontend
+npm ci --ignore-scripts
+npm ci --prefix Backend
+npm ci --prefix Frontend
 ```
 
 ### 2. Start supporting services
@@ -209,7 +206,7 @@ Start MongoDB locally by your preferred method. If you want a local Redis contai
 docker compose up -d redis
 ```
 
-Redis is currently disabled in application code through a no-op client stub, so MongoDB and S3-compatible credentials are the core runtime dependencies.
+Redis is disabled in application code. MongoDB is required. Local media uploads require no S3 credentials.
 
 ### 3. Run the backend
 
@@ -235,7 +232,13 @@ The Vite dev server starts on its configured local port, commonly `http://localh
 npm run build --prefix Frontend
 ```
 
-The production bundle is emitted to `Frontend/dist`.
+The production bundle is emitted to `Frontend/dist`. To test PWA installation with the local backend, run the built frontend after freeing port 3000 from the development server.
+
+```bash
+DAYLINE_API_TARGET=http://127.0.0.1:5000 npm run preview --prefix Frontend -- --port 3000 --strictPort
+```
+
+Open `http://localhost:3000` in a browser that supports PWA installation. The production service worker caches the app shell for offline startup. API data still requires a connection.
 
 ## Available scripts
 
@@ -366,13 +369,28 @@ Socket.IO is initialized by `Backend/socket/socket.js`.
 
 | Event | Direction | Description |
 | --- | --- | --- |
-| `getOnlineUsers` | Server → Client | Broadcasts currently online user IDs whenever users connect or disconnect. |
-| `newMessage` | Server → Client | Emitted to the recipient of a direct message. |
-| `messageSent` | Server → Client | Emitted to the sender after direct message creation. |
-| `newGroupMessage` | Server → Client | Emitted to online members of a group when a new group message is sent. |
-| `groupMessageSent` | Server → Client | Emitted to the group-message sender after message creation. |
+| `getOnlineUsers` | Server → Client | Initial presence snapshot after a connection is authenticated. |
+| `presenceChanged` | Server → Client | Batched changes when an account comes online or its last connection closes. |
+| `joinRoom`, `leaveRoom` | Client → Server | Change the active conversation used for typing updates. Room access requires current membership. |
+| `typingStatus` | Server → Client | A typing update scoped to the active conversation. |
+| `newMessage`, `newGroupMessage` | Server → Client | Deliver persisted messages to all connected tabs for each recipient. |
+| `groupCreated` | Server → Client | Refresh the inbox for members of a newly created group. |
 
-Clients should connect with a `userId` query parameter after authentication.
+Socket.IO uses the signed session cookie. Keep the frontend connection pointed at the same-origin proxy for local development. Reconnecting restores realtime delivery and reloads history for the active chat. Presence and rooms use Socket.IO's in-memory adapter in a single backend process. Horizontal deployment requires shared Socket.IO room and presence state.
+
+## Sessions and media discovery
+
+Access JWTs expire after 15 minutes and identify a server-side session. The refresh cookie expires after 30 days, rotates on use, and is scoped to the auth endpoints. MongoDB stores the token hash and rotation generation. Reusing an older refresh token revokes its session, including issued access tokens. Logout revokes the current session. Password changes and resets invalidate earlier sessions. Users signed in before this upgrade need to sign in again. A stolen access token can still be used until it expires or the session is revoked.
+
+Posts support up to six photos at 4 MB each. Reels accept one browser-compatible MP4 or WebM up to 20 MB and use the same likes, comments, private saves, and chat sharing as other posts. The app transcodes reels for adaptive streaming. Discover and Reels rank a recent candidate window using follows, hashtag overlap from likes and followed authors, recency, and engagement. People suggestions combine mutual follows with creators who post about those topics.
+
+## Calls and service limits
+
+Open an existing direct conversation and choose the phone or camera button. The recipient can answer in one tab. The app sends the call setup over the authenticated Socket.IO connection. Audio and video use WebRTC, and users can mute, disable their camera, or hang up. Calls require a secure browser origin and microphone or camera permission. Compatible browsers can use direct ICE candidates on the same network. For calls across different networks, configure STUN and TURN through `CALL_STUN_URL`, `CALL_TURN_URL`, and `CALL_TURN_SECRET`. The backend issues one-hour TURN REST credentials to signed-in users. Set the matching secret on your TURN server.
+
+The API applies a per-IP ceiling before body parsing and independent budgets for each route and signed-in account. Login, signup, reset, search, analytics, and upload routes use stricter budgets. HTTP 429 responses include `Retry-After`. Set `TRUST_PROXY_HOPS` only for deployments with a fixed, trusted proxy path. MongoDB connections use a bounded pool and wait timeout.
+
+Public post details and people-search results use bounded in-process caches. Feed, profile-post and chat-history responses include `X-Next-Cursor` when another page is available. Streamed WebRTC media, private message bodies, and authorization checks bypass those caches. Cache, limiter, presence, and call state are local to one application instance. Multi-instance deployments need shared coordination.
 
 ## Data model
 
@@ -380,22 +398,20 @@ Clients should connect with a `userId` query parameter after authentication.
 | --- | --- | --- |
 | `User` | Account/profile identity | `username`, `fullName`, `email`, `password`, `followers`, `following`, `profileImg`, `bio`, verification/reset fields |
 | `Post` | Social feed post | `postedBy`, `caption`, `images`, `likes`, `replies`, `sharedBy`, `shareCount` |
-| `Conversation` | Direct-message conversation summary | `participants`, `lastMessage` |
+| `Conversation` | Direct and group conversation summaries | `kind`, `participants`, `directKey`, `lastMessage` |
 | `Message` | Direct/group message payload | `conversationId`, `sender`, `text`, `type`, `iv`, media URLs, `postReference`, `reactions`, `replyTo`, `deletedFor`, `poll` |
 | `Group` | Group chat membership and controls | `name`, `description`, `profileImage`, `owner`, `admins`, `members`, `invites`, `permissions`, `blocked`, `conversation`, `messages` |
 | `Notification` | User notifications | `from`, `to`, `type`, `post`, `read` |
 
+A partial unique index on `Conversation.directKey` keeps new direct chats unique per account pair. Existing chats without the key remain readable. Historical duplicate threads are retained, with direct lookups preferring the most recently updated one. Deploy with the index built before opening message writes.
+
 ## Media storage
 
-Uploads use Multer memory storage and the AWS SDK S3 client. The helper supports either AWS S3-style virtual-hosted URLs or S3-compatible path-style URLs depending on `S3_ENDPOINT` and `S3_FORCE_PATH_STYLE`. Public media URLs are derived from the configured endpoint and bucket, while protected reads can be served with presigned URLs.
+Posts, reels, profile photos, group images and chat attachments are written to the local media directory. MongoDB stores their keys. Photos are resized within 1,800 pixels per side and compressed as WebP, with smaller JPEGs kept when they fit the limits. Other attachments retain their bytes. Videos up to three minutes are encoded as HLS renditions up to the source resolution or a 1,280-pixel long edge. Playback adjusts to available bandwidth, with a smaller MP4 available as a fallback.
 
-The optional `Backend/infrastructure/secure-s3-cloudfront.js` script provisions a private S3 bucket, enables Block Public Access, creates a CloudFront Origin Access Control, creates a distribution, and writes a bucket policy that permits CloudFront reads.
+The backend serves uploads through `/api/media`. Group photos and message attachments require a signed-in account with access to the group or conversation. Keep `MEDIA_DIR` on a persistent volume in production and back up the directory together with MongoDB. For the backend Docker image the default volume path is `/usr/src/app/.dayline-media`.
 
-Run the infrastructure script only against the intended AWS account and after confirming the environment variables:
-
-```bash
-node Backend/infrastructure/secure-s3-cloudfront.js
-```
+Previously stored S3 keys use a compatibility adapter when the original bucket remains configured. New uploads use local storage.
 
 ## Security model
 

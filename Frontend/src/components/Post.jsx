@@ -1,162 +1,85 @@
-import { Avatar } from "@chakra-ui/avatar";
-import { Image } from "@chakra-ui/image";
-import { Box, Flex, Text, Skeleton, SkeletonCircle, SkeletonText,AvatarGroup } from "@chakra-ui/react";
-import { Link, useNavigate } from "react-router-dom";
-import Actions from "./Actions";
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
+import { Avatar, AvatarGroup, IconButton, Skeleton } from "@chakra-ui/react";
+import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import useShowToast from "../hooks/useShowToast";
 import { formatDistanceToNow } from "date-fns";
-import { DeleteIcon } from "@chakra-ui/icons";
-import { useRecoilState, useRecoilValue } from "recoil";
+import { FiTrash2 } from "react-icons/fi";
+import { useRecoilValue, useSetRecoilState } from "recoil";
+import PostMedia from "./PostMedia";
+import Actions from "./Actions";
 import userAtom from "../atom/userAtom";
 import postsAtom from "../atom/postsAtom";
-import { motion } from "framer-motion";
-import LazyImage from "./LazyImage";
+import useShowToast from "../hooks/useShowToast";
 
-const MotionFlex = motion(Flex); // Wrapping Chakra's Flex with motion for animations
-
-const Post = ({ post, postedBy }) => {
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const showToast = useShowToast();
+export default function Post({ post, postedBy, playWhenVisible = false, showPermalink = true }) {
+  const [legacyAuthor, setLegacyAuthor] = useState(null);
   const currentUser = useRecoilValue(userAtom);
-  const [posts, setPosts] = useRecoilState(postsAtom);
-  const navigate = useNavigate();
+  const setPosts = useSetRecoilState(postsAtom);
+  const showToast = useShowToast();
+  const author = typeof postedBy === "object" ? postedBy : legacyAuthor;
+  const createdAt = new Date(post.createdAt);
 
   useEffect(() => {
-    const getUser = async () => {
-      setIsLoading(true);
-      try {
-        const res = await fetch(`/api/users/profile/${postedBy}`);
-        if (!res.ok) throw new Error("Failed to fetch user data");
-
-        const data = await res.json();
-        setUser(data);
-      } catch (error) {
-        showToast("Error", error.message || "Failed to fetch data", "error");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (postedBy) getUser();
+    if (typeof postedBy !== "string") return;
+    const request = new AbortController();
+    setLegacyAuthor(null);
+    apiFetch(`/api/users/profile/${encodeURIComponent(postedBy)}`, { signal: request.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not load the post author.");
+        return readApiJson(response);
+      })
+      .then(setLegacyAuthor)
+      .catch(() => {
+        if (!request.signal.aborted) setLegacyAuthor({ username: "Unavailable" });
+      });
+    return () => request.abort();
   }, [postedBy]);
 
-  const handleDeletePost = async (e) => {
-    e.preventDefault();
-    if (!window.confirm("Are you sure you want to delete this post?")) return;
-
+  async function deletePost() {
+    if (!window.confirm("Delete this post?")) return;
     try {
-      const res = await fetch(`/api/posts/${post._id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete post");
-
-      showToast("Success", "Post deleted", "success");
-      setPosts(posts.filter((p) => p._id !== post._id));
+      const result = await apiFetch(`/api/posts/${post._id}`, { method: "DELETE" });
+      if (!result.ok) throw new Error("Could not delete the post.");
+      setPosts((items) => items.filter((item) => item._id !== post._id));
     } catch (error) {
       showToast("Error", error.message, "error");
     }
-  };
-
-  if (isLoading) {
-    return (
-      <MotionFlex
-        gap={3}
-        mb={4}
-        py={5}
-        borderWidth="1px"
-        borderRadius="md"
-        p={4}
-        shadow="md"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-      >
-        <SkeletonCircle size="10" />
-        <Flex flex={1} flexDirection="column" gap={2}>
-          <SkeletonText noOfLines={1} width="40%" />
-          <SkeletonText noOfLines={2} spacing="4" mb={2} />
-          <Skeleton height="200px" borderRadius="md" />
-          <SkeletonText noOfLines={1} width="30%" />
-        </Flex>
-      </MotionFlex>
-    );
   }
 
-  if (!user) return null;
+  if (!author && postedBy) return <Skeleton height="140px" mb={4} borderRadius="xl" />;
 
+  const profile = author?._id && `/${author.username}`;
+  const postLink = profile && `${profile}/post/${post._id}`;
   return (
-    <Link to={`/${user.username}/post/${post._id}`}>
-
-    
-    <MotionFlex
-      gap={3}
-      mb={4}
-      py={5}
-      borderWidth="1px"
-      borderRadius="md"
-      p={4}
-      shadow="md"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.6 }}
-      _hover={{
-        scale: 1.02,
-        boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.15)",
-      }}
-    >
-      <Avatar
-        size="md"
-        name={user.fullName}
-        src={user.profileImg}
-        onClick={(e) => {
-          e.preventDefault();
-          navigate(`/${user.username}`);
-        }}
-      />
-      <Flex flex={1} flexDirection="column" gap={2}>
-        <Flex justifyContent="space-between">
-          <Text fontWeight="bold" fontSize="sm">{user.username}</Text>
-          <Text fontSize="xs" color="gray.500">
-            {formatDistanceToNow(new Date(post.createdAt))} ago
-          </Text>
-        </Flex>
-        <Box>
-          <Text mb={2}>{post.caption}</Text>
-          {post.images && 
-          <LazyImage
-          src={post.images} alt={post.caption}
-          errorPlaceholder="https://via.placeholder.com/150?text=Error"
-          className="custom-lazy-image"
-        />}
-        </Box>
-        
-          <AvatarGroup size="sm" stacking="last-on-top"
-            style={{ marginLeft: "-41px", marginTop: "22px" }}>
-            {post.likes.slice(-5).reverse().map((item) => (
-              <Avatar key={item._id} src={item.profileImg} name={item.username} size="xs" />
-            ))}
-          </AvatarGroup>
-        <Actions post={post} />
-        
-        {/* Make sure the share button doesn't trigger navigation */}
-       
-  
-        {user._id === currentUser?._id && (
-          <DeleteIcon
-            cursor="pointer"
-            onClick={handleDeletePost}
-            _hover={{ color: "red.500" }}
-          />
+    <article className="social-panel feed-post">
+      <header>
+        <Avatar as={profile ? Link : undefined} to={profile || undefined} size="sm"
+          src={author?.profileImg} name={author?.fullName} aria-label={author?.username} />
+        <div className="feed-byline">
+          {profile ? <Link to={profile}>{author.fullName || author.username}</Link> : <strong>Unavailable account</strong>}
+          {profile && <span>@{author.username}</span>}
+        </div>
+        {Number.isFinite(createdAt.getTime()) && (
+          <time dateTime={createdAt.toISOString()}>
+            {postLink ? <Link to={postLink}>{formatDistanceToNow(createdAt, { addSuffix: true })}</Link>
+              : formatDistanceToNow(createdAt, { addSuffix: true })}
+          </time>
         )}
-      </Flex>
-    </MotionFlex>
-    </Link>
-    
+        {currentUser && author?._id === currentUser._id && (
+          <IconButton size="sm" variant="ghost" aria-label="Delete post" onClick={deletePost} icon={<FiTrash2 />} />
+        )}
+      </header>
+      {post.caption && <p className="feed-caption">{post.caption}</p>}
+      <PostMedia post={post} playWhenVisible={playWhenVisible} />
+      <footer>
+        <Actions post={post} />
+        {showPermalink && postLink && <Link className="feed-permalink" to={postLink}>View post</Link>}
+        <AvatarGroup size="xs" max={4}>
+          {(post.likes ?? []).filter((item) => typeof item === "object" && item).slice(-4).map((item) => (
+            <Avatar key={item._id} src={item.profileImg} name={item.username} />
+          ))}
+        </AvatarGroup>
+      </footer>
+    </article>
   );
-  
-};
-
-export default Post;
+}

@@ -1,66 +1,67 @@
+import { beforeCursor, sendCursor } from "../lib/cursorPage.js";
+import mongoose from "mongoose";
 import moment from "moment";
-import { s3, generateFileName, getPresignedUrl } from "../lib/utils/uploader.js";
+import { mediaUrl, streamUrl, saveMedia, removeMedia } from "../lib/mediaStore.js";
+import { presentPost } from "../lib/utils/presentPost.js";
+import { presentProfile } from "../lib/utils/presentProfile.js";
+import User from "../models/user.model.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import Group from "../models/group.model.js";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getIO, getRecipientSocketId } from "../socket/socket.js";
+import { belongsToConversation, getIO, getRecipientRoom } from "../socket/socket.js";
 import { encrypt, decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
 import { redisClient } from "../Redis.js";
 
-const signKey = async (key) => {
-  if (!key || typeof key !== "string") return "";
-  try {
-    return await getPresignedUrl(key);
-  } catch (err) {
-    console.error("Failed to sign media url:", err.message || err);
-    return "";
-  }
-};
+async function findDirectConversation(userId, recipientId) {
+  if (!mongoose.isObjectIdOrHexString(recipientId) || String(userId) === String(recipientId)) return null;
+  const candidates = await Conversation.find({
+    kind: { $ne: "group" },
+    participants: { $size: 2, $all: [userId, recipientId] },
+  }).sort({ updatedAt: -1 }).lean();
+  if (!candidates.length) return null;
+  const groupConversations = new Set((await Group.distinct("conversation", {
+    conversation: { $in: candidates.map(({ _id }) => _id) },
+  })).map(String));
+  return candidates.find(({ _id }) => !groupConversations.has(String(_id))) ?? null;
+}
 
 const signMessagePayload = async (msg) => {
   const signedMsg = {
     ...msg,
-    img: await signKey(msg.img),
-    video: await signKey(msg.video),
-    audio: await signKey(msg.audio),
-    file: await signKey(msg.file),
+    img: await mediaUrl(msg.img),
+    video: await mediaUrl(msg.video),
+    videoStreamUrl: streamUrl(msg.video),
+    audio: await mediaUrl(msg.audio),
+    file: await mediaUrl(msg.file),
   };
 
   if (signedMsg.sender && signedMsg.sender.profileImg) {
     signedMsg.sender = {
       ...signedMsg.sender,
-      profileImg: await signKey(signedMsg.sender.profileImg),
+      profileImg: await mediaUrl(signedMsg.sender.profileImg),
     };
   }
 
   if (signedMsg.replyTo) {
     signedMsg.replyTo = {
       ...signedMsg.replyTo,
-      img: await signKey(signedMsg.replyTo.img),
-      video: await signKey(signedMsg.replyTo.video),
-      audio: await signKey(signedMsg.replyTo.audio),
-      file: await signKey(signedMsg.replyTo.file),
+      img: await mediaUrl(signedMsg.replyTo.img),
+      video: await mediaUrl(signedMsg.replyTo.video),
+      videoStreamUrl: streamUrl(signedMsg.replyTo.video),
+      audio: await mediaUrl(signedMsg.replyTo.audio),
+      file: await mediaUrl(signedMsg.replyTo.file),
       sender: signedMsg.replyTo.sender
         ? {
             ...signedMsg.replyTo.sender,
-            profileImg: await signKey(signedMsg.replyTo.sender.profileImg),
+            profileImg: await mediaUrl(signedMsg.replyTo.sender.profileImg),
           }
         : signedMsg.replyTo.sender,
     };
   }
 
   if (signedMsg.postReference) {
-    signedMsg.postReference = {
-      ...signedMsg.postReference,
-      images: await signKey(signedMsg.postReference.images),
-      postedBy: signedMsg.postReference.postedBy
-        ? {
-            ...signedMsg.postReference.postedBy,
-            profileImg: await signKey(signedMsg.postReference.postedBy.profileImg),
-          }
-        : signedMsg.postReference.postedBy,
-    };
+    const post = await presentPost(signedMsg.postReference);
+    signedMsg.postReference = { ...post, images: post.imageUrl };
   }
 
   if (Array.isArray(signedMsg.reactions)) {
@@ -70,7 +71,7 @@ const signMessagePayload = async (msg) => {
         user: reaction.user
           ? {
               ...reaction.user,
-              profileImg: await signKey(reaction.user.profileImg),
+              profileImg: await mediaUrl(reaction.user.profileImg),
             }
           : reaction.user,
       }))
@@ -80,213 +81,130 @@ const signMessagePayload = async (msg) => {
   return signedMsg;
 };
 
-export const sendMessage = async (req, res) => {
-  const { recipientId, message, groupId } = req.body;
-  const senderId = req.user._id;
-
-  let img = "";
-  let video = "";
-  let audio = "";
-  let file = "";
-  let messageType = "text"; 
-
+async function getOrCreateDirect(senderId, recipientId) {
+  const existing = await findDirectConversation(senderId, recipientId);
+  if (existing) return existing;
+  const directKey = [String(senderId), recipientId.toLowerCase()].sort().join(":");
   try {
-   
-    if (req.file && req.file.buffer) {
-      const fileUrl = generateFileName();
-      const params = {
-        Bucket: process.env.BUCKET_NAME,
-        Key: fileUrl,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype,
-        ACL: "public-read",
-      };
-      await s3.send(new PutObjectCommand(params));
-      if (req.file.mimetype.startsWith("image/")) img = fileUrl;
-      else if (req.file.mimetype.startsWith("video/")) video = fileUrl;
-      else if (req.file.mimetype.startsWith("audio/")) audio = fileUrl;
-      else file = fileUrl; // PDFs / other files
-    }
-
-    // 2️⃣ Determine message type
-    if (message && message.trim() !== "") messageType = "text";
-    else if (img) messageType = "image";
-    else if (video) messageType = "video";
-    else if (audio) messageType = "audio";
-    else if (file) messageType = "file";
-
-    // 3️⃣ Encrypt text only
-    let encryptedMessage = { encryptedData: "", iv: "" };
-    if (messageType === "text" && message) {
-      encryptedMessage = encrypt(message);
-    }
-
-    // 4️⃣ Handle conversation creation/update
-    let conversation;
-    let isGroupMessage = false;
-
-    if (groupId) {
-      isGroupMessage = true;
-      const group = await Group.findById(groupId);
-      if (!group) return res.status(404).json({ error: "Group not found" });
-      if (!group.members.includes(senderId))
-        return res.status(403).json({ error: "You are not a member of this group" });
-
-      if (!group.conversation) {
-        conversation = new Conversation({
-          participants: group.members,
-          lastMessage: {
-            text: encryptedMessage.encryptedData,
-            iv: encryptedMessage.iv,
-            sender: senderId,
-          },
-        });
-        await conversation.save();
-        group.conversation = conversation._id;
-        await group.save();
-      } else {
-        conversation = await Conversation.findByIdAndUpdate(
-          group.conversation,
-          {
-            $set: {
-              lastMessage: {
-                text: encryptedMessage.encryptedData,
-                iv: encryptedMessage.iv,
-                sender: senderId,
-              },
-            },
-          },
-          { new: true }
-        );
-      }
-    } else {
-      conversation = await Conversation.findOneAndUpdate(
-        { participants: { $size: 2, $all: [senderId, recipientId] } },
-        {
-          $set: {
-            lastMessage: {
-              text: encryptedMessage.encryptedData,
-              iv: encryptedMessage.iv,
-              sender: senderId,
-            },
-          },
-        },
-        { new: true }
-      );
-
-      if (!conversation) {
-        conversation = new Conversation({
-          participants: [senderId, recipientId],
-          lastMessage: {
-            text: encryptedMessage.encryptedData,
-            iv: encryptedMessage.iv,
-            sender: senderId,
-          },
-        });
-        await conversation.save();
-      }
-    }
-
-    // 5️⃣ Save message
-    let newMessage = new Message({
-      conversationId: conversation._id,
-      sender: senderId,
-      type: messageType,
-      text: encryptedMessage.encryptedData || "",
-      img,
-      video,
-      audio,
-      file,
-      iv: encryptedMessage.iv || null,
-    });
-    await newMessage.save();
-
-    // 6️⃣ Populate references
-    newMessage = await Message.findById(newMessage._id)
-      .populate({ path: "sender", select: "username profileImg" })
-      .populate({
-        path: "replyTo",
-        select: "text iv sender video img audio file",
-        populate: { path: "sender", select: "username profileImg" },
-      })
-      .populate({
-        path: "postReference",
-        select: "postedBy images",
-        populate: { path: "postedBy", select: "username profileImg" },
-      })
-      .populate({
-        path: "reactions",
-        select: "user type",
-        populate: { path: "user", select: "username profileImg" },
-      })
-      .lean();
-
-    // 7️⃣ Decrypt safely
-    const decryptSafely = ({ iv, encryptedData }) => {
-      try {
-        return decrypt({ iv, encryptedData });
-      } catch {
-        return "Bad message";
-      }
-    };
-
-    const socketPayload = {
-      ...newMessage,
-      text: newMessage.iv
-        ? decryptSafely({ iv: newMessage.iv, encryptedData: newMessage.text })
-        : newMessage.text,
-      iv: undefined,
-      replyTo: newMessage.replyTo
-        ? {
-            ...newMessage.replyTo,
-            text: newMessage.replyTo.iv
-              ? decryptSafely({ iv: newMessage.replyTo.iv, encryptedData: newMessage.replyTo.text })
-              : newMessage.replyTo.text,
-            iv: undefined,
-          }
-        : null,
-      isGroupMessage,
-      groupId: groupId || null,
-    };
-
-    // 8️⃣ Emit sockets
-    const io = getIO();
-    if (isGroupMessage) {
-      const group = await Group.findById(groupId).lean();
-      if (group) {
-        const memberIds = (group.members || []).map((m) => String(m));
-        for (const memberId of memberIds) {
-          if (memberId === String(senderId)) continue;
-          const memberSocketId = getRecipientSocketId(memberId);
-          if (memberSocketId)
-            io.to(memberSocketId).emit("newGroupMessage", {
-              message: socketPayload,
-              groupId,
-              conversationId: conversation._id,
-            });
-        }
-      }
-    } else {
-      const recipientSocketId = getRecipientSocketId(recipientId);
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit("newMessage", socketPayload);
-        io.to(recipientSocketId).emit("stopTyping", { conversationId: conversation._id });
-      } else {
-        io.to(String(conversation._id)).emit("newMessage", socketPayload);
-      }
-    }
-
-    res.status(201).json(socketPayload);
+    return await Conversation.findOneAndUpdate({ directKey }, {
+      $setOnInsert: { directKey, kind: "direct", participants: [senderId, recipientId], createdAt: new Date(), updatedAt: new Date() },
+    }, { new: true, upsert: true, timestamps: false });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    if (error.code !== 11000) throw error;
+    return Conversation.findOne({ directKey });
   }
-};
+}
 
+export async function saveConversationPreview(message, preview) {
+  const sentAt = message.createdAt;
+  await Conversation.updateOne({
+    _id: message.conversationId,
+    $or: [
+      { "lastMessage.sentAt": { $exists: false } },
+      { "lastMessage.sentAt": { $lt: sentAt } },
+      { "lastMessage.sentAt": sentAt, "lastMessage.messageId": { $lt: message._id } },
+    ],
+  }, { $set: { lastMessage: { ...preview, sender: message.sender, messageId: message._id, sentAt, seen: false } } });
+}
 
+async function writeMessage(req, res, parentId) {
+  const { recipientId, groupId } = req.body;
+  const sender = req.user._id;
+  const text = typeof req.body.message === "string" ? req.body.message.trim() : "";
+  if ((!text && !req.file) || text.length > 4000) {
+    return res.status(400).json({ error: "Enter a message of up to 4,000 characters or attach a file." });
+  }
+  let uploadedKey;
+  let persisted = false;
+  try {
+    let conversation;
+    let group;
+    if (groupId) {
+      if (!mongoose.isObjectIdOrHexString(groupId)) return res.status(400).json({ error: "Invalid group." });
+      group = await Group.findOne({ _id: groupId, members: sender, blocked: { $ne: sender } });
+      if (!group) return res.status(404).json({ error: "Group unavailable." });
+      const owner = group.owner.equals(sender);
+      const admin = group.admins.some((id) => id.equals(sender));
+      const permissions = group.permissions?.canMessage;
+      if (!owner && (permissions === "owner" || (permissions === "admins" && !admin))) {
+        return res.status(403).json({ error: "Only group managers can send messages here." });
+      }
+      if (parentId && !group.conversation) return res.status(404).json({ error: "Conversation unavailable." });
+      if (!group.conversation) {
+        await Group.updateOne({ _id: group._id, conversation: null }, { $set: { conversation: group._id } });
+        group = await Group.findById(group._id);
+      }
+      conversation = await Conversation.findByIdAndUpdate(group.conversation, {
+        $setOnInsert: { kind: "group", participants: group.members, createdAt: new Date(), updatedAt: new Date() },
+      }, { upsert: true, new: true, timestamps: false });
+    } else {
+      if (typeof recipientId !== "string" || !mongoose.isObjectIdOrHexString(recipientId)
+        || String(sender) === recipientId.toLowerCase() || !(await User.exists({ _id: recipientId }))) {
+        return res.status(400).json({ error: "Choose a valid recipient." });
+      }
+      conversation = parentId ? await findDirectConversation(sender, recipientId) : await getOrCreateDirect(sender, recipientId);
+    }
 
+    let parent;
+    if (parentId) {
+      if (!conversation) return res.status(404).json({ error: "Conversation unavailable." });
+      parent = await Message.findOne({
+        _id: parentId, conversationId: conversation._id, deletedFor: { $ne: sender },
+      }).select("text iv img video audio file sender").populate("sender", "username profileImg").lean();
+      if (!parent) return res.status(404).json({ error: "Parent message unavailable." });
+    }
 
+    const encrypted = text ? encrypt(text) : {};
+    const data = { sender, conversationId: conversation._id, text: encrypted.encryptedData || "", iv: encrypted.iv };
+    if (parent) data.replyTo = parent._id;
+    if (req.file) {
+      data._id = new mongoose.Types.ObjectId();
+      const { key, kind } = await saveMedia(req.file, { conversationId: conversation._id, messageId: data._id });
+      uploadedKey = key;
+      data[kind === "image" ? "img" : kind] = key;
+      data.type = kind;
+    }
+    const saved = await Message.create(data);
+    persisted = true;
+    await saveConversationPreview(saved, { text: data.text, iv: data.iv }).catch((error) => {
+      console.error("Could not update conversation preview:", error.message);
+    });
+    await saved.populate("sender", "username profileImg");
+    const payload = await signMessagePayload({ ...saved.toObject(), text, iv: undefined,
+      replyTo: parent ? { ...parent, text: readMessageText(parent), iv: undefined } : null,
+      isGroupMessage: Boolean(group), groupId: group?._id ?? null });
+    const io = getIO();
+    if (group) {
+      const blocked = new Set(group.blocked.map(String));
+      for (const member of group.members) {
+        if (member.equals(sender) || blocked.has(String(member))) continue;
+        io?.to(getRecipientRoom(member)).emit("newGroupMessage", {
+          message: payload, groupId: group._id, conversationId: conversation._id,
+        });
+      }
+    } else {
+      io?.to(getRecipientRoom(recipientId)).emit("newMessage", payload);
+    }
+    return res.status(201).json(payload);
+  } catch (error) {
+    if (uploadedKey && !persisted) await removeMedia([uploadedKey]);
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    console.error("Could not send message:", error.message);
+    return res.status(500).json({ error: "Could not send message." });
+  }
+}
+export const sendMessage = (req, res) => writeMessage(req, res);
 
-export const getMessages = async (req, res) => {
+function readMessageText(message) {
+  if (!message.iv) return message.text;
+  try {
+    return decrypt({ iv: message.iv, encryptedData: message.text });
+  } catch {
+    return "[Message unavailable]";
+  }
+}
+
+export const getMessages = async (req, res, next) => {
   const { otherUserId, groupId } = req.params;
   const userId = req.user._id;
    
@@ -310,7 +228,7 @@ export const getMessages = async (req, res) => {
         return res.status(404).json({ error: "Group not found" });
       }
 
-      if (!group.members.includes(userId)) {
+      if (!group.members.includes(userId) || group.blocked.some((id) => id.equals(userId))) {
         return res.status(403).json({ error: "You are not a member of this group" });
       }
 
@@ -321,29 +239,28 @@ export const getMessages = async (req, res) => {
       conversation = await Conversation.findById(group.conversation).lean();
     } else {
       // One-on-one conversation
-      conversation = await Conversation.findOne({
-        participants: { $all: [userId, otherUserId] }
-      }).lean();
+      conversation = await findDirectConversation(userId, otherUserId);
     }
 
     if (!conversation) {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    const messages = await Message.find({ conversationId: conversation._id })
-      .sort({ createdAt: 1 })
+    const pageRows = await Message.find({ conversationId: conversation._id, deletedFor: { $ne: userId },
+      ...beforeCursor(req.query.before),
+    }).sort({ createdAt: -1, _id: -1 }).limit(51).maxTimeMS(3000)
       .populate({
         path: 'sender',
         select: 'username profileImg'
       })
       .populate({
         path: 'replyTo',
-        select: 'text iv sender video img audio',
+        select: 'text iv sender video img audio file',
         populate: { path: 'sender', select: 'username profileImg' }
       })
       .populate({
         path: 'postReference',
-        select: 'postedBy images',
+        select: 'postedBy caption images media kind',
         populate: { path: 'postedBy', select: 'username profileImg' }
       })
       .populate({
@@ -353,7 +270,8 @@ export const getMessages = async (req, res) => {
       })
       .lean();
 
-    const unseenMessages = messages.filter(msg => !msg.seen && msg.sender._id.toString() !== userId);
+    const messages = sendCursor(res, pageRows, 50).reverse();
+    const unseenMessages = messages.filter(msg => !msg.seen && String(msg.sender?._id ?? msg.sender) !== String(userId));
     if (unseenMessages.length > 0) {
       await Message.updateMany(
         { _id: { $in: unseenMessages.map(msg => msg._id) } },
@@ -361,46 +279,18 @@ export const getMessages = async (req, res) => {
       );
     }
 
-    if (conversation.lastMessage?.sender.toString() !== userId) {
+    if (!req.query.before && conversation.lastMessage?.sender && String(conversation.lastMessage.sender) !== String(userId)) {
       await Conversation.updateOne(
-        { _id: conversation._id },
+        { _id: conversation._id, "lastMessage.messageId": conversation.lastMessage.messageId ?? null },
         { 'lastMessage.seen': true }
       );
     }
 
-    const decryptSafely = ({ iv, encryptedData }) => {
-      try {
-        return decrypt({ iv, encryptedData });  // Try to decrypt
-      } catch (error) {
-        return 'Bad message';  // Return default message on failure
-      }
-    };
-
-    const decryptedMessages = await Promise.all(messages.map(async (msg) => {
-      const safeReply = msg.replyTo ? {
-        ...msg.replyTo,
-        text: msg.replyTo.iv ? decryptSafely({ iv: msg.replyTo.iv, encryptedData: msg.replyTo.text }) : msg.replyTo.text,
-        iv: undefined,
-      } : null;
-
-      const signedReply = safeReply ? await signMessagePayload({
-        ...msg.replyTo,
-        replyTo: null,
-      }) : null;
-
-      return {
-        ...msg,
-        text: msg.iv ? decryptSafely({ iv: msg.iv, encryptedData: msg.text }) : msg.text,
-        iv: undefined,
-        img: await signKey(msg.img),
-        video: await signKey(msg.video),
-        audio: await signKey(msg.audio),
-        file: await signKey(msg.file),
-        replyTo: signedReply,
-        isGroupMessage: isGroupConversation,
-        groupId: groupId || null,
-      };
-    }));
+    const decryptedMessages = await Promise.all(messages.map((msg) => signMessagePayload({
+      ...msg, text: readMessageText(msg), iv: undefined,
+      replyTo: msg.replyTo ? { ...msg.replyTo, text: readMessageText(msg.replyTo), iv: undefined } : null,
+      isGroupMessage: isGroupConversation, groupId: groupId || null,
+    })));
 
     const io = getIO();
 
@@ -412,9 +302,9 @@ export const getMessages = async (req, res) => {
         .map(member => member._id.toString());
 
       memberIds.forEach(memberId => {
-        const memberSocketId = getRecipientSocketId(memberId);
+        const memberSocketId = getRecipientRoom(memberId);
         if (memberSocketId) {
-          io.to(memberSocketId).emit("messagesSeen", {
+          io?.to(memberSocketId).emit("messagesSeen", {
             conversationId: conversation._id,
             groupId: groupId
           });
@@ -422,52 +312,39 @@ export const getMessages = async (req, res) => {
       });
     } else {
       // For one-on-one conversations
-      const recipientSocketId = getRecipientSocketId(otherUserId);
+      const recipientSocketId = getRecipientRoom(otherUserId);
       if (recipientSocketId) {
-        io.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
+        io?.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
       }
     }
   // Redis disabled: skip storing cached messages
   // await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
     res.status(200).json(decryptedMessages);
   } catch (error) {
-    console.error("Error in getMessages:", error.message);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
-
-
 
 export const reactTomsg = async (req, res) => {
   try {
     const { messageId, emoji } = req.body;
     const userId = req.user._id;
 
-    if (!messageId || !emoji) {
+    if (!mongoose.isObjectIdOrHexString(messageId) || typeof emoji !== "string" || !emoji.trim() || emoji.length > 32) {
       return res.status(400).json({ error: "Message ID and emoji are required" });
     }
 
     const message = await Message.findById(messageId);
-    if (!message) {
-      return res.status(404).json({ error: "Message not found", params: req.body });
+    if (!message || !(await belongsToConversation(message.conversationId, userId))) {
+      return res.status(404).json({ error: "Message not found" });
     }
 
-    // Find if the user already reacted
-    const existingReactionIndex = message.reactions.findIndex(
-      (reaction) => reaction.user.toString() === userId.toString()
-    );
-
-    if (existingReactionIndex !== -1) {
-      // Update existing reaction
-      message.reactions[existingReactionIndex].type = emoji;
-    } else {
-      // Add new reaction
-      message.reactions.push({ user: userId, type: emoji });
-    }
-
-    // Save the message
-    await message.save();
-
+    await Message.updateOne({ _id: messageId }, [{ $set: {
+      reactions: { $concatArrays: [
+        { $filter: { input: { $ifNull: ["$reactions", []] }, as: "item", cond: { $ne: ["$$item.user", userId] } } },
+        [{ _id: new mongoose.Types.ObjectId(), user: userId, type: { $literal: emoji } }],
+      ] },
+    } }]);
     // Populate reactions with user details
     const populatedMessage = await Message.findById(messageId)
       .populate({
@@ -477,25 +354,11 @@ export const reactTomsg = async (req, res) => {
       })
       .populate('conversationId', 'participants');
 
-    // Emit updated reactions to all participants in the conversation
-    const io = getIO();
-    let participantIds = [];
-    if (populatedMessage.conversationId && populatedMessage.conversationId.participants) {
-      participantIds = populatedMessage.conversationId.participants.map(id => id.toString());
-    }
-
-    participantIds.forEach(pid => {
-      const socketId = getRecipientSocketId(pid);
-      if (socketId) {
-        io.to(socketId).emit("messageReactionUpdated", {
-          messageId,
-          reactions: populatedMessage.reactions
-        });
-      }
-    });
-
-    // Respond with updated message
-    res.status(200).json(populatedMessage);
+    if (!populatedMessage) return res.status(404).json({ error: "Message not found" });
+    const { members } = await messageAudience(message.conversationId);
+    const reactions = populatedMessage.reactions;
+    getIO()?.to(members.map(getRecipientRoom)).emit("messageReactionUpdated", { messageId, reactions });
+    return res.json({ reactions });
   } catch (error) {
     console.error("Error in reactToMsg:", error.message);
     res.status(500).json({ error: "Internal Server Error" });
@@ -515,6 +378,7 @@ export const getConversation = async (req, res) => {
     // 1:1 conversations
     const conversations = await Conversation.find({
       participants: currentUserId,
+      kind: { $ne: "group" },
     }).populate({
       path: "participants",
       select: "username profileImg",
@@ -523,6 +387,7 @@ export const getConversation = async (req, res) => {
     // group conversations where user is a member
     const userGroups = await Group.find({
       members: currentUserId,
+      blocked: { $ne: currentUserId },
       conversation: { $exists: true, $ne: null },
     })
       .select("name description profileImage owner admins members conversation")
@@ -538,27 +403,26 @@ export const getConversation = async (req, res) => {
         select: "username profileImg",
       });
 
-    // map 1:1
-    const convoData = conversations.map((convo) => {
+    const referencedGroups = new Set((await Group.distinct("conversation", {
+      conversation: { $in: conversations.map(({ _id }) => _id) },
+    })).map(String));
+    // Legacy groups may have conversation records without a kind.
+    const convoData = await Promise.all(conversations.filter((convo) => !referencedGroups.has(String(convo._id))).map(async (convo) => {
       const others = convo.participants.filter(
         (p) => p._id.toString() !== currentUserId
       );
       let decryptedText;
       try {
-        decryptedText = decrypt({
-          iv: convo.lastMessage?.iv,
-          encryptedData: convo.lastMessage?.text,
-        });
+        decryptedText = convo.lastMessage?.iv ? decrypt({
+          iv: convo.lastMessage.iv,
+          encryptedData: convo.lastMessage.text,
+        }) : "";
       } catch {
         decryptedText = "[Decryption failed]";
       }
       return {
         _id: convo._id,
-        participants: others.map((p) => ({
-          _id: p._id,
-          username: p.username,
-          profileImg: p.profileImg,
-        })),
+        participants: await Promise.all(others.map(presentProfile)),
         lastMessage: {
           text: decryptedText,
           sender: convo.lastMessage?.sender || null,
@@ -568,16 +432,16 @@ export const getConversation = async (req, res) => {
         isGroup: false,
         groupId: null,
       };
-    });
+    }));
 
     // map group chats
-    const groupConvoData = userGroups.map((group) => {
+    const groupConvoData = await Promise.all(userGroups.filter((group) => group.conversation).map(async (group) => {
       let decryptedText;
       try {
-        decryptedText = decrypt({
-          iv: group.conversation.lastMessage?.iv,
-          encryptedData: group.conversation.lastMessage?.text,
-        });
+        decryptedText = group.conversation.lastMessage?.iv ? decrypt({
+          iv: group.conversation.lastMessage.iv,
+          encryptedData: group.conversation.lastMessage.text,
+        }) : "";
       } catch {
         decryptedText = "[Decryption failed]";
       }
@@ -587,15 +451,11 @@ export const getConversation = async (req, res) => {
           _id: group._id,
           name: group.name,
           description: group.description,
-          profileImage: group.profileImage,
+          profileImage: await mediaUrl(group.profileImage),
           owner: group.owner,
           admins: group.admins,
         },
-        participants: group.members.map((m) => ({
-          _id: m._id,
-          username: m.username,
-          profileImg: m.profileImg,
-        })),
+        participants: await Promise.all(group.members.map(presentProfile)),
         lastMessage: {
           text: decryptedText,
           sender: group.conversation.lastMessage?.sender || null,
@@ -605,7 +465,7 @@ export const getConversation = async (req, res) => {
         isGroup: true,
         groupId: group._id,
       };
-    });
+    }));
 
     
     const merged = [...convoData, ...groupConvoData];
@@ -664,7 +524,7 @@ export const getGroupConversationInfo = async (req, res) => {
       return res.status(404).json({ error: "Group not found" });
     }
 
-    if (!group.members.some(member => member._id.toString() === userId.toString())) {
+    if (!group.members.some((member) => member._id.equals(userId)) || group.blocked.some((id) => id.equals(userId))) {
       return res.status(403).json({ error: "You are not a member of this group" });
     }
 
@@ -685,9 +545,10 @@ export const getGroupConversationInfo = async (req, res) => {
       _id: group._id,
       name: group.name,
       description: group.description,
-      owner: group.owner,
-      admins: group.admins,
-      members: group.members,
+      profileImage: await mediaUrl(group.profileImage),
+      owner: group.owner && await presentProfile(group.owner),
+      admins: await Promise.all(group.admins.map(presentProfile)),
+      members: await Promise.all(group.members.map(presentProfile)),
       permissions: group.permissions,
       conversationId: group.conversation?._id || null,
       lastMessage: decryptedLastMessage ? {
@@ -709,390 +570,56 @@ export const getGroupConversationInfo = async (req, res) => {
 
 
 
-export const editMessage = async (req, res) => {
-  const { messageId, newText, groupId } = req.body;
+export async function messageAudience(conversationId) {
+  const group = await Group.findOne({ conversation: conversationId }).select("members blocked permissions owner admins").lean();
+  if (group) {
+    const blocked = new Set(group.blocked.map(String));
+    return { group, members: group.members.map(String).filter((id) => !blocked.has(id)) };
+  }
+  const conversation = await Conversation.findOne({ _id: conversationId, kind: { $ne: "group" } }).select("participants").lean();
+  return { members: (conversation?.participants ?? []).map(String) };
+}
+
+export const editMessage = async (req, res, next) => {
+  const { messageId, newText } = req.body;
   const userId = req.user._id;
-
+  if (!mongoose.isObjectIdOrHexString(messageId) || typeof newText !== "string"
+    || !newText.trim() || newText.length > 4000) return res.status(400).json({ error: "Enter a valid message." });
   try {
-    const encryptedMessage = encrypt(newText);
-
-    const message = await Message.findOneAndUpdate(
-      { _id: messageId, sender: userId },
-      { text: encryptedMessage.encryptedData, edited: true, iv: encryptedMessage.iv },
-      { new: true }
-    )
-      .populate('sender', 'username profileImg')
-      .populate('replyTo', 'text')
-      .populate('reactions.user', 'username');
-
-    if (!message) {
-      return res.status(404).json({ error: "Message not found or not authorized" });
+    const filter = { _id: messageId, sender: userId, type: { $nin: ["poll", "post"] }, deletedFor: { $ne: userId } };
+    const original = await Message.findOne(filter).select("conversationId").lean();
+    if (!original) return res.status(404).json({ error: "Message not found." });
+    const { members, group } = await messageAudience(original.conversationId);
+    if (!members.includes(String(userId))) return res.status(404).json({ error: "Message not found." });
+    if (group && !group.owner.equals(userId) && (group.permissions?.canMessage === "owner"
+      || (group.permissions?.canMessage === "admins" && !group.admins.some((admin) => admin.equals(userId))))) {
+      return res.status(403).json({ error: "Only group managers can edit messages here." });
     }
-
-    const conversation = await Conversation.findById(message.conversationId)
-      .populate('participants', 'username');
-
-    // Determine if this is a group message
-    let isGroupMessage = false;
-    if (groupId || (conversation && conversation.participants.length > 2)) {
-      isGroupMessage = true;
-
-      // If groupId not provided, find it
-      if (!groupId) {
-        const group = await Group.findOne({ conversation: conversation._id });
-        if (group) {
-          groupId = group._id;
-        }
-      }
-    }
-
-
-    // Emit to all participants (including the editor)
-    const io = getIO();
-    let participantIds = [];
-    if (isGroupMessage) {
-      const group = await Group.findById(groupId).populate('members');
-      if (group) {
-        participantIds = group.members.map(member => member._id.toString());
-      }
-    } else if (conversation && conversation.participants) {
-      participantIds = conversation.participants.map(p => p._id.toString ? p._id.toString() : p._id);
-    }
-
-    // Prepare decrypted message object
-    const decryptedMessage = {
-      ...message.toObject(),
-      text: (() => { try { return decrypt({ iv: message.iv, encryptedData: message.text }); } catch { return '[Decryption failed]'; } })(),
-      iv: undefined,
-      isGroupMessage,
-      groupId: groupId || null,
-      edited: true
-    };
-
-    participantIds.forEach(pid => {
-      const socketId = getRecipientSocketId(pid);
-      if (socketId) {
-        io.to(socketId).emit("messageEdited", decryptedMessage);
-      }
-    });
-
-    const decryptMessage = (() => {
-      try {
-        return decrypt({
-          iv: message.iv, encryptedData: message.text
-        });
-      } catch {
-        return "[Decryption failed]";
-      }
-    })();
-
-    const responsMessage = {
-      ...message._doc,
-      text: decryptMessage,
-      iv: undefined,
-      isGroupMessage,
-      groupId: groupId || null
-    };
-
-    res.status(200).json(responsMessage);
+    const text = newText.trim();
+    const encrypted = encrypt(text);
+    const change = { text: encrypted.encryptedData, iv: encrypted.iv, edited: true };
+    const result = await Message.updateOne(filter, { $set: change });
+    if (!result.matchedCount) return res.status(404).json({ error: "Message not found." });
+    await Conversation.updateOne({
+      _id: original.conversationId, "lastMessage.messageId": messageId,
+    }, { $set: { "lastMessage.text": change.text, "lastMessage.iv": change.iv } }, { timestamps: false });
+    const payload = { _id: messageId, conversationId: original.conversationId, text, edited: true };
+    getIO()?.to(members.map(getRecipientRoom)).emit("messageEdited", payload);
+    return res.json(payload);
   } catch (error) {
-    res.status(500).json({ error: error.message });
-    console.log("Error in editMessage:", error.message);
+    return next(error);
   }
 };
 
+export const sendGroupMessage = sendMessage;
 
-export const sendGroupMessage = async (req, res) => {
-  const { groupId, message } = req.body;
-  const senderId = req.user._id;
-
-  let img = "";
-  let video = "";
-  let audio = "";
-
-  try {
-    // Handle file upload if present
-    if (req.file) {
-      const fileUrl = generateFileName();
-      const params = {
-        Bucket: process.env.BUCKET_NAME,
-        Key: fileUrl,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype,
-        ACL: "public-read",
-      };
-
-      const command = new PutObjectCommand(params);
-      await s3.send(command);
-
-      if (req.file.mimetype.startsWith("image/")) {
-        img = fileUrl;
-      } else if (req.file.mimetype.startsWith("video/")) {
-        video = fileUrl;
-      } else if (req.file.mimetype.startsWith("audio/")) {
-        audio = fileUrl;
-      }
-    }
-
-    // Verify user is member of the group
-    const group = await Group.findById(groupId);
-    if (!group) {
-      return res.status(404).json({ error: "Group not found" });
-    }
-
-    if (!group.members.includes(senderId)) {
-      return res.status(403).json({ error: "You are not a member of this group" });
-    }
-
-    // Check group permissions
-    if (group.permissions.canMessage === "admins" && !group.admins.includes(senderId)) {
-      return res.status(403).json({ error: "Only admins can send messages in this group" });
-    }
-
-    if (group.permissions.canMessage === "owner" && group.owner.toString() !== senderId.toString()) {
-      return res.status(403).json({ error: "Only the owner can send messages in this group" });
-    }
-
-    // Encrypt the message
-    const encryptedMessage = encrypt(message);
-
-    let conversation;
-    // Check if group has conversation, if not create one
-    if (!group.conversation) {
-      conversation = new Conversation({
-        participants: group.members,
-        lastMessage: {
-          text: encryptedMessage.encryptedData,
-          iv: encryptedMessage.iv,
-          sender: senderId,
-        },
-      });
-      await conversation.save();
-
-      // Update group with conversation reference
-      group.conversation = conversation._id;
-      await group.save();
-    } else {
-      // Update existing conversation
-      conversation = await Conversation.findByIdAndUpdate(
-        group.conversation,
-        {
-          $set: {
-            lastMessage: {
-              text: encryptedMessage.encryptedData,
-              iv: encryptedMessage.iv,
-              sender: senderId,
-            },
-          },
-        },
-        { new: true }
-      );
-    }
-
-    // Create the message
-    let newMessage = new Message({
-      conversationId: conversation._id,
-      sender: senderId,
-      text: encryptedMessage.encryptedData,
-      img: img,
-      video: video,
-      audio: audio,
-      iv: encryptedMessage.iv,
-    });
-
-    await newMessage.save();
-
-    // Populate sender for the new message
-    newMessage = await newMessage.populate('sender', 'username profileImg');
-
-    // Decrypt message for response
-    const decryptedMessage = decrypt({
-      iv: newMessage.iv,
-      encryptedData: newMessage.text,
-    });
-
-    const responseMessage = {
-      ...newMessage._doc,
-      text: decryptedMessage,
-      iv: undefined,
-      isGroupMessage: true,
-      groupId: groupId
-    };
-
-    // Notify all group members via conversation room with the fully populated and decrypted message
-    const io = getIO();
-    io.to(conversation._id.toString()).emit("newGroupMessage", {
-      message: responseMessage,
-      groupId: groupId,
-      conversationId: conversation._id
-    });
-
-    res.status(201).json(responseMessage);
-  } catch (error) {
-    console.error("Error in sendGroupMessage:", error.message);
-    res.status(500).json({ error: error.message });
-  }
+export const replyToMessage = (req, res) => {
+  const { messageId } = req.body;
+  if (!mongoose.isObjectIdOrHexString(messageId)) return res.status(400).json({ error: "Choose a message to reply to." });
+  return writeMessage(req, res, messageId);
 };
 
-export const replyToMessage = async (req, res) => {
-  const { recipientId, messageId, message, groupId } = req.body;
-  const senderId = req.user._id;
-  let img = "";
-  let video = "";
-  let audio = "";
-  try {
-    if (req.file) {
-      const fileUrl = generateFileName();
-      const params = {
-        Bucket: process.env.BUCKET_NAME,
-        Key: fileUrl,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype,
-        ACL: "public-read",
-      };
-
-      const command = new PutObjectCommand(params);
-      await s3.send(command);
-
-      if (req.file.mimetype.startsWith("image/")) {
-        img = fileUrl;
-      } else if (req.file.mimetype.startsWith("video/")) {
-        video = fileUrl;
-      } else if (req.file.mimetype.startsWith("audio/")) {
-        audio = fileUrl;
-      }
-    }
-
-    const encryptedMessage = encrypt(message);
-
-    const parentMessage = await Message.findById(messageId).populate('sender', 'username');
-    if (!parentMessage) {
-      return res.status(404).json({ error: "Parent message not found" });
-    }
-
-    let conversation;
-    let isGroupReply = false;
-
-    if (groupId) {
-      // Group reply
-      isGroupReply = true;
-
-      // Verify user is member of the group
-      const group = await Group.findById(groupId);
-      if (!group) {
-        return res.status(404).json({ error: "Group not found" });
-      }
-
-      if (!group.members.includes(senderId)) {
-        return res.status(403).json({ error: "You are not a member of this group" });
-      }
-
-      if (!group.conversation) {
-        return res.status(404).json({ error: "No conversation found for this group" });
-      }
-
-      conversation = await Conversation.findById(group.conversation);
-    } else {
-      // One-on-one reply
-      conversation = await Conversation.findOneAndUpdate(
-        { participants: { $all: [senderId, recipientId] } },
-        { text: encryptedMessage.encryptedData, edited: true, iv: encryptedMessage.iv },
-        { new: true, upsert: true }
-      );
-    }
-
-    const replyMessage = new Message({
-      conversationId: conversation._id,
-      sender: senderId,
-      text: encryptedMessage.encryptedData,
-      iv: encryptedMessage.iv,
-      img: img,
-      video: video,
-      audio: audio,
-      replyTo: parentMessage._id
-    });
-
-    const savedReplyMessage = await replyMessage.save();
-    const populatedReplyMessage = await savedReplyMessage.populate('sender', 'username profileImg');
-
-    const decryptParentMessage = decrypt({ iv: parentMessage.iv, encryptedData: parentMessage.text });
-    const decrytreplyMessage = decrypt({ iv: populatedReplyMessage.iv, encryptedData: populatedReplyMessage.text });
-
-    // Notify recipients
-    const io = getIO();
-   
-
-    const responsePayload = {
-      messageId: populatedReplyMessage._id,
-      conversationId: populatedReplyMessage.conversationId,
-      sender: {
-        id: populatedReplyMessage.sender._id,
-        username: populatedReplyMessage.sender.username,
-        profileImg: populatedReplyMessage.sender.profileImg
-      },
-      text: decrytreplyMessage,
-      img: populatedReplyMessage.img,
-      video: populatedReplyMessage.video,
-      audio: populatedReplyMessage.audio,
-      type: "text",
-      replyTo: {
-        messageId: parentMessage._id,
-        text: decryptParentMessage,
-        img: parentMessage.img,
-        video: parentMessage.video,
-        audio: parentMessage.audio,
-        sender: {
-          id: parentMessage.sender._id,
-          name: parentMessage.sender.name
-        }
-      },
-      status: {
-        seen: false,
-        edited: false,
-        deletedFor: []
-      },
-      reactions: [],
-      createdAt: populatedReplyMessage.createdAt,
-      updatedAt: populatedReplyMessage.updatedAt,
-      isGroupMessage: isGroupReply,
-      groupId: groupId || null
-    };
-
-    // Socket emit
-    if (isGroupReply) {
-      const group = await Group.findById(groupId).populate('members');
-      const recipientIds = group.members
-        .filter(member => member._id.toString() !== senderId.toString())
-        .map(member => member._id.toString());
-      recipientIds.forEach(rId => {
-        const recipientSocketId = getRecipientSocketId(rId);
-        if (recipientSocketId) {
-          io.to(recipientSocketId).emit("newGroupMessage", {
-            message: responsePayload,
-            groupId: groupId,
-            conversationId: responsePayload.conversationId
-          });
-        }
-      });
-    } else {
-      const recipientSocketId = getRecipientSocketId(recipientId);
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit("newMessage", responsePayload);
-      }
-    }
-
-    // HTTP response
-    res.status(201).json(responsePayload);
-
-
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-    console.log("Error in replyToMessage:", error.message);
-  }
-};
-
-export const getGroupMessages = async (req, res) => {
+export const getGroupMessages = async (req, res, next) => {
   const { groupId } = req.params;
   const userId = req.user._id;
   
@@ -1111,7 +638,7 @@ export const getGroupMessages = async (req, res) => {
     const memberIdStrings = Array.isArray(group.members)
       ? group.members.map(m => String(m))
       : [];
-    if (!memberIdStrings.includes(String(userId))) {
+    if (!memberIdStrings.includes(String(userId)) || group.blocked.some((id) => id.equals(userId))) {
       return res.status(403).json({ error: "You are not a member of this group" });
     }
 
@@ -1124,20 +651,21 @@ export const getGroupMessages = async (req, res) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    const messages = await Message.find({ conversationId: conversation._id })
-      .sort({ createdAt: 1 })
+    const pageRows = await Message.find({ conversationId: conversation._id, deletedFor: { $ne: userId },
+      ...beforeCursor(req.query.before),
+    }).sort({ createdAt: -1, _id: -1 }).limit(51).maxTimeMS(3000)
       .populate({
         path: 'sender',
         select: 'username profileImg'
       })
       .populate({
         path: 'replyTo',
-        select: 'text iv sender video img audio',
+        select: 'text iv sender video img audio file',
         populate: { path: 'sender', select: 'username profileImg' }
       })
       .populate({
         path: 'postReference',
-        select: 'postedBy images',
+        select: 'postedBy caption images media kind',
         populate: { path: 'postedBy', select: 'username profileImg' }
       })
       .populate({
@@ -1147,6 +675,7 @@ export const getGroupMessages = async (req, res) => {
       })
       .lean();
 
+    const messages = sendCursor(res, pageRows, 50).reverse();
     // Helper to safely get a sender id (works if sender is populated object or raw ObjectId)
     const senderIdOf = (senderField) => {
       if (!senderField) return null;
@@ -1177,53 +706,25 @@ export const getGroupMessages = async (req, res) => {
         : String(conversation.lastMessage.sender || ""))
       : null;
 
-    if (lastMsgSenderId && String(lastMsgSenderId) !== String(userId)) {
+    if (!req.query.before && lastMsgSenderId && String(lastMsgSenderId) !== String(userId)) {
       await Conversation.updateOne(
-        { _id: conversation._id },
+        { _id: conversation._id, "lastMessage.messageId": conversation.lastMessage.messageId ?? null },
         { 'lastMessage.seen': true }
       );
     }
 
-    // decrypt helper remains same but safe
-    const decryptSafely = ({ iv, encryptedData }) => {
-      try {
-        return decrypt({ iv, encryptedData });
-      } catch (error) {
-        return 'Bad message';
-      }
-    };
-
-    const decryptedMessages = await Promise.all(messages.map(async (msg) => {
-      const sender = msg.sender || null;
-      const replyTo = msg.replyTo || null;
-
-      const safeText = msg.iv ? decryptSafely({ iv: msg.iv, encryptedData: msg.text }) : msg.text;
-
-      const signedReply = replyTo ? await signMessagePayload({
-        ...replyTo,
-        replyTo: null,
-      }) : null;
-
-      return {
-        ...msg,
-        text: safeText,
-        iv: undefined,
-        img: await signKey(msg.img),
-        video: await signKey(msg.video),
-        audio: await signKey(msg.audio),
-        file: await signKey(msg.file),
-        replyTo: signedReply,
-        isGroupMessage: true,
-        groupId: groupId,
-      };
-    }));
+    const decryptedMessages = await Promise.all(messages.map((msg) => signMessagePayload({
+      ...msg, text: readMessageText(msg), iv: undefined,
+      replyTo: msg.replyTo ? { ...msg.replyTo, text: readMessageText(msg.replyTo), iv: undefined } : null,
+      isGroupMessage: true, groupId,
+    })));
 
     // Notify other group members that messages have been seen
     const io = getIO();
     const memberIds = memberIdStrings.filter(idStr => idStr !== String(userId));
 
     memberIds.forEach(memberId => {
-      const memberSocketId = getRecipientSocketId(memberId);
+      const memberSocketId = getRecipientRoom(memberId);
       if (memberSocketId) {
         io.to(memberSocketId).emit("messagesSeen", {
           conversationId: conversation._id,
@@ -1235,108 +736,24 @@ export const getGroupMessages = async (req, res) => {
     // await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
     res.status(200).json(decryptedMessages);
   } catch (error) {
-    console.error("Error in getGroupMessages:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
 
-export const deleteMessage = async (req, res) => {
-  // Fix: get messageId from req.body or req.query or req.params
-  let messageId = req.body.messageId || req.query.messageId || req.params.messageId;
-  if (!messageId) {
-    // Try to get messageId from nested body (for some clients)
-    if (req.body && typeof req.body === 'object') {
-      messageId = req.body["messageId"];
-    }
-  }
+export const deleteMessage = async (req, res, next) => {
+  const messageId = req.body?.messageId ?? req.query.messageId;
   const userId = req.user._id;
-
-  console.log('typeof messageId:', typeof messageId);
-  console.log('messageId:', messageId);
-
+  if (!mongoose.isObjectIdOrHexString(messageId)) return res.status(400).json({ error: "Invalid message." });
   try {
-    if (!messageId) {
-      return res.status(400).json({ error: "Message ID is required" });
+    const message = await Message.findById(messageId).select("conversationId").lean();
+    if (!message || !(await belongsToConversation(message.conversationId, userId))) {
+      return res.status(404).json({ error: "Message not found." });
     }
-
-    const message = await Message.findById(messageId);
-    console.log('message:', message);
-    if (!message) {
-      return res.status(404).json({ error: "Message not found" });
-    }
-
-    // Get conversation to determine if it's a group message
-    const conversation = await Conversation.findById(message.conversationId).lean();
-    let isGroupMessage = false;
-    let groupId = null;
-    let recipientIds = [];
-
-    if (conversation && conversation.participants.length > 2) {
-      // This is likely a group conversation
-      isGroupMessage = true;
-
-      // Find the group that has this conversation
-      const group = await Group.findOne({ conversation: conversation._id });
-      if (group) {
-        groupId = group._id;
-        recipientIds = group.members
-          .filter(member => member.toString() !== userId.toString())
-          .map(member => member.toString());
-      }
-    } else {
-      // One-on-one conversation
-      let recipientId = null;
-      if (conversation && conversation.participants) {
-        recipientId = conversation.participants.find(
-          (id) => id.toString() !== userId.toString()
-        );
-      }
-      if (recipientId) {
-        recipientIds = [recipientId.toString()];
-      }
-    }
-
-    if (message.sender.toString() !== userId.toString()) {
-      return res.status(403).json({ error: "Not authorized to delete this message" });
-    }
-
-    message.deletedFor.push(userId);
-    await message.save();
-
-    const io = getIO();
-
-    if (isGroupMessage) {
-      // For group messages, notify all group members
-      recipientIds.forEach(recipientId => {
-        const recipientSocketId = getRecipientSocketId(recipientId);
-        if (recipientSocketId) {
-          io.to(recipientSocketId).emit("messageDeleted", {
-            messageId,
-            groupId: groupId
-          });
-        }
-      });
-    } else {
-      // For one-on-one messages
-      if (recipientIds.length > 0) {
-        const recipientSocketId = getRecipientSocketId(recipientIds[0]);
-        if (recipientSocketId) {
-          io.to(recipientSocketId).emit("messageDeleted", { messageId });
-        }
-      }
-    }
-
-    res.status(200).json({
-      success: true,
-      message,
-      isGroupMessage,
-      groupId
-    });
+    await Message.updateOne({ _id: messageId }, { $addToSet: { deletedFor: userId } });
+    getIO()?.to(getRecipientRoom(userId)).emit("messageDeleted", { messageId });
+    return res.json({ success: true });
   } catch (error) {
-    console.error("Error in deleteMessage:", error.message);
-    res.status(500).json({ error: error.message });
+    return next(error);
   }
 };
-
-

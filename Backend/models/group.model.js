@@ -19,4 +19,7 @@ const groupSchema = new mongoose.Schema({
   messages: [{ type: mongoose.Schema.Types.ObjectId, ref: "Message" }]
 }, { timestamps: true });
 
+groupSchema.index({ conversation: 1 });
+groupSchema.index({ members: 1 });
+
 export default mongoose.model("Group", groupSchema);

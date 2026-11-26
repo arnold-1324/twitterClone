@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import userAtom from "../atom/userAtom";
 import { useSetRecoilState } from "recoil";
 import useShowToast from "./useShowToast";
@@ -8,13 +9,13 @@ const useLogout = () => {
 
 	const logout = async () => {
 		try {
-            const res =await fetch("/api/auth/logout",{
+            const res =await apiFetch("/api/auth/logout",{
                 method:"POST",
                 headers:{
                     "Content-Type":"application/json",
                 },
             })
-            const data = await res.json();
+            const data = await readApiJson(res);
             console.log(data);
             if(data.error){
                 showToast("Error",data.error,"error");

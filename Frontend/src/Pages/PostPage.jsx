@@ -1,156 +1,49 @@
-import { Avatar, Box, Button, Divider, Flex, Image, Spinner, Text ,AvatarGroup} from "@chakra-ui/react";
-import Actions from "../components/Actions";
 import { useEffect, useState } from "react";
-import Comment from "../components/Comment";
-import useGetUserProfile from "../hooks/useGetUserprofile";
-import useShowToast from "../hooks/useShowToast";
-import { useNavigate, useParams } from "react-router-dom";
-import { formatDistanceToNow } from "date-fns";
-import { useRecoilState, useRecoilValue } from "recoil";
-import userAtom from "../atom/userAtom";
-import { DeleteIcon } from "@chakra-ui/icons";
+import { Button, Spinner } from "@chakra-ui/react";
+import { FiArrowLeft, FiMessageCircle } from "react-icons/fi";
+import { Link, useParams } from "react-router-dom";
+import { useRecoilState } from "recoil";
+import { apiFetch, readApiJson } from "../lib/apiFetch";
 import postsAtom from "../atom/postsAtom";
+import Post from "../components/Post";
+import Comment from "../components/Comment";
 
-const PostPage = () => {
-  const { user, loading } = useGetUserProfile();
-  const [posts, setPosts] = useRecoilState(postsAtom);
-  const showToast = useShowToast();
+export default function PostPage() {
   const { pid } = useParams();
-  const currentUser = useRecoilValue(userAtom);
-  const navigate = useNavigate();
-  
-  const [postLoading, setPostLoading] = useState(true);
-  const currentPost = posts[0];
-
+  const [posts, setPosts] = useRecoilState(postsAtom);
+  const [status, setStatus] = useState("loading");
+  const post = posts.find((item) => item._id === pid);
   useEffect(() => {
-    const getPost = async () => {
-      setPosts([]);
-      setPostLoading(true);
-      try {
-        const res = await fetch(`/api/posts/${pid}`);
-        const data = await res.json();
-        console.log(data);
-        if (data.error) {
-          showToast("Error", data.error, "error");
-          return;
+    const request = new AbortController();
+    setStatus("loading");
+    apiFetch(`/api/posts/${encodeURIComponent(pid)}`, { signal: request.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        const item = await readApiJson(response);
+        if (!request.signal.aborted) {
+          setPosts([item]);
+          setStatus("ready");
         }
-        setPosts([data]);
-      } catch (error) {
-        showToast("Error", error.message, "error");
-      } finally {
-        setPostLoading(false);
-      }
-    };
-    getPost();
+      })
+      .catch(() => { if (!request.signal.aborted) setStatus("error"); });
+    return () => request.abort();
   }, [pid, setPosts]);
-
-  const handleDeletePost = async () => {
-    try {
-      if (!window.confirm("Are you sure you want to delete this post?")) return;
-
-      const res = await fetch(`/api/posts/${currentPost._id}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (data.error) {
-        showToast("Error", data.error, "error");
-        return;
-      }
-      showToast("Success", "Post deleted", "success");
-      navigate(`/${user.username}`);
-    } catch (error) {
-      showToast("Error", error.message, "error");
-    }
-  };
-
-  if (!user && loading) {
-    return (
-      <Flex justifyContent={"center"}>
-        <Spinner size={"xl"} />
-      </Flex>
-    );
-  }
-
-  if (postLoading) {
-    return (
-      <Flex justifyContent={"center"}>
-        <Spinner size={"xl"} />
-      </Flex>
-    );
-  }
-
-  if (!currentPost) {
-    return <Text>No post found.</Text>;
-  }
-
-  return (
-    <>
-      <Flex>
-        <Flex w={"full"} alignItems={"center"} gap={3}>
-          <Avatar src={user.profileImg} size={"md"} name={user.fullName} />
-          <Flex alignItems={"center"}>
-            <Text fontSize={"sm"} fontWeight={"bold"}>
-              {user.username}
-            </Text>
-            {user.isVerified && <Image src="/verified.png" w="4" h={4} ml={4} />}
-          </Flex>
-        </Flex>
-        <Flex gap={4} alignItems={"center"}>
-          <Text fontSize={"xs"} width={36} textAlign={"right"} color={"gray.500"}>
-            {formatDistanceToNow(new Date(currentPost.createdAt))} ago
-          </Text>
-
-          {currentUser?._id === user._id && (
-            <DeleteIcon size={20} cursor={"pointer"} onClick={handleDeletePost} />
-          )}
-        </Flex>
-      </Flex>
-
-      <Text my={3}>{currentPost.caption || "No caption provided."}</Text>
-
-      {currentPost.images && (
-        <Box borderRadius={6} overflow={"hidden"} border={"1px solid"} borderColor={"gray.300"}>
-          <Image src={currentPost.images} w={"full"} />
-        </Box>
-      )}
-
-      <AvatarGroup size="sm" stacking="last-on-top"
-        style={{ marginLeft: "-41px", marginTop: "22px" }}>
-        {currentPost.likes.slice(-5).reverse().map((item) => (
-          <Avatar key={item._id} src={item.profileImg} name={item.username} size="xs" />
-        ))}
-      </AvatarGroup>
-
-
-      <Flex gap={3} my={3}>
-        <Actions post={currentPost} />
-      </Flex>
-
-      <Divider my={4} />
-
-      <Flex justifyContent={"space-between"}>
-        <Flex gap={2} alignItems={"center"}>
-          <Text fontSize={"2xl"}>👋</Text>
-          <Text color={"gray.500"}>Get the app to like, reply, and post.</Text>
-        </Flex>
-        <Button>Get</Button>
-      </Flex>
-
-      <Divider my={4} />
-
-      {currentPost.replies.length > 0 ? (
-        currentPost.replies.map((reply) => (
-          <Comment
-            key={reply._id}
-            reply={reply}
-            lastReply={reply._id === currentPost.replies[currentPost.replies.length - 1]._id}
-          />
-        ))
-      ) : (
-        <Text color={"gray.500"}>No replies yet.</Text>
-      )}
-    </>
-  );
-};
-
-export default PostPage;
+  return <main className="dayline-tool-page stream-page">
+    <div className="stream-heading">
+      <Button as={Link} to="/" size="sm" variant="ghost" leftIcon={<FiArrowLeft />}>Feed</Button>
+      <h1>{post?.kind === "reel" ? "Reel" : "Post"}</h1>
+    </div>
+    {status === "loading" ? <Spinner aria-label="Loading post" /> : status === "error" || !post
+      ? <p role="status">This post is unavailable.</p>
+      : <>
+        <Post post={post} postedBy={post.postedBy} showPermalink={false} />
+        <section className="social-panel dayline-tool-panel post-replies" aria-labelledby="replies-heading">
+          <h2 id="replies-heading"><FiMessageCircle /> Replies</h2>
+          {!post.replies.length && <p>No replies yet.</p>}
+          {post.replies.map((reply, index) => (
+            <Comment key={reply._id} reply={reply} lastReply={index === post.replies.length - 1} />
+          ))}
+        </section>
+      </>}
+  </main>;
+}

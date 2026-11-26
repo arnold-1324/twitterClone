@@ -1,98 +1,89 @@
+import { recordAccountChanges } from "./accountHistory.controller.js";
+import { getIO, getRecipientRoom } from "../socket/socket.js";
+import { presentProfile } from "../lib/utils/presentProfile.js";
+import { peopleCache } from "../lib/readCache.js";
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { s3 } from '../lib/utils/uploader.js'
-import { generateTokenAndCookies } from "../lib/utils/generateToken.js";
-import { sendResetPasswordEmail, sendVerificationEmail,sendWelcomeEmail,sendPasswordResetSuccessEmail } from "../lib/utils/Mailtrap/email.js"
-//import { profile } from "console";
+import { clearSessionCookies, generateTokenAndCookies, revokeSession, rotateRefresh } from "../lib/utils/generateToken.js";
+import { sendResetPasswordEmail, sendVerificationEmail, sendWelcomeEmail, sendPasswordResetSuccessEmail } from "../lib/utils/Mailtrap/email.js";
 
+async function accountData(user) {
+  const { password, verificationToken, verificationTokenExpiresAt, resetPasswordToken, sessionVersion,
+    resetPasswordExpires, ...account } = user.toObject();
+  return presentProfile(account);
+}
 
-export const signUp=async(req,res)=>{
+export async function signUp(req, res) {
   try {
-    const {fullName,username,email,password,confirmPassword}=req.body;
- 
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-
-    if(password!=confirmPassword)return res.status(400).json({ Error:"Password doest match"});
-
-    if(!emailRegex.test(email)){
-        return res.status(400).json({ Error:"Invalid email format"});
+    const fullName = typeof req.body.fullName === "string" ? req.body.fullName.trim() : "";
+    const username = typeof req.body.username === "string" ? req.body.username.trim() : "";
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const { password, confirmPassword } = req.body;
+    if (!fullName || fullName.length > 80 || !/^[a-zA-Z0-9_]{3,24}$/.test(username)
+      || ["auth", "chat", "settings", "notifications", "update", "api", "search", "create", "reels", "discover", "saved", "activity"].includes(username.toLowerCase())
+      || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+      || typeof password !== "string" || password.length < 6 || Buffer.byteLength(password) > 72
+      || password !== confirmPassword) {
+      return res.status(400).json({ error: "Enter a name, a valid email, a username of 3–24 letters, digits or underscores, and matching passwords of at least six characters." });
     }
 
-    const existingUser= await User.findOne({username});
-    if(existingUser){
-        return res.status(400).json({ Error:"Username is already taken"});
+    const localSignup = process.env.NODE_ENV === "development" && process.env.LOCAL_SIGNUP === "true";
+    if (!localSignup && !process.env.TOKEN) {
+      return res.status(503).json({ error: "Email delivery is unavailable." });
     }
-
-    const existingEmail= await User.findOne({email});
-    if(existingEmail){
-        return res.status(400).json({Error:"Email is already taken "})
+    const verificationCode = localSignup ? undefined : String(crypto.randomInt(100000, 1000000));
+    const user = await User.create({
+      fullName, username, email,
+      password: await bcrypt.hash(password, 10),
+      isVerified: localSignup,
+      verificationToken: verificationCode,
+      verificationTokenExpiresAt: localSignup ? undefined : new Date(Date.now() + 15 * 60 * 1000),
+    });
+    if (localSignup) {
+      await generateTokenAndCookies(user, res);
+    } else {
+      try {
+        await sendVerificationEmail(email, verificationCode);
+      } catch {
+        await User.deleteOne({ _id: user._id, isVerified: false });
+        return res.status(502).json({ error: "Verification email could not be sent. Please try again." });
+      }
     }
-
-
-    const salt= await bcrypt.genSalt(10);
-    const hashedPassword= await bcrypt.hash(password,salt);
-    const verificationToken = Math.floor(100000+ Math.random()*900000).toString();
-    const newUser= new User({
-        fullName,
-        username,
-        email,
-        password:hashedPassword,
-        verificationToken,
-        verificationTokenExpiresAt:Date.now()+24*60*60*1000
-    })
-
-    if(newUser){
-      generateTokenAndCookies(newUser._id,res);
-      await newUser.save();  
-      await sendVerificationEmail(newUser.email,verificationToken);  
-
-      res.status(201).json({
-        sucess:true,
-        message: "User created sucessfully",
-        user: {
-          ...newUser._doc,
-          password: undefined,
-          verificationToken: undefined,
-          verificationTokenExpiresAt: undefined,
-        },
-      })
-    }else{
-        res.status(400).json({ error:"Invalid user data"});
-    }
-
-
-  } catch (Error) {
-    console.log("Error in Signup controller",error.message);
-    res.status(500).json({Error:"Internal Server Error"});
-
+    peopleCache.clear();
+    return res.status(201).json({
+      success: true,
+      verificationRequired: !localSignup,
+      ...(localSignup && { user: await accountData(user) }),
+    });
+  } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ error: "Username or email is already in use." });
+    console.error("Could not create account:", error.message);
+    return res.status(500).json({ error: "Could not create account." });
   }
 }
 
 export const Login= async(req,res)=>{
   
 try{
-  const {username,password} =req.body;
-  const user=await User.findOne({username});
-  const isPassword=await bcrypt.compare(password,user?.password || "");
+  const { username, password } = req.body;
+  if (typeof username !== "string" || typeof password !== "string" || Buffer.byteLength(password) > 72) {
+    return res.status(400).json({ error: "A username and valid password are required." });
+  }
+  const user = await User.findOne({ username: username.trim() });
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(401).json({ error: "Invalid username or password" });
+  }
+  if (user.isVerified === false && user.verificationToken) {
+    return res.status(403).json({ error: "Verify your email to sign in." });
+  }
 
-  if(!user || !isPassword) return res.json({error:"Invalid username or password"})
-
-
-    generateTokenAndCookies(user._id,res);
+    await generateTokenAndCookies(user,res);
 
     res.status(201).json({
       sucess:true,
       message: "login  sucessfully",
-      user: {
-        ...user._doc,
-        password: undefined,
-        verificationToken: undefined,
-        verificationTokenExpiresAt: undefined,
-      },
-
+      user: await accountData(user),
     })
 
 }catch(error){
@@ -101,83 +92,70 @@ try{
 }
 }
 
-export const Logout= async(req,res)=>{
-
-  try{
-
-     res.cookie("jwt","",{maxAge:0})
-     res.status(200).json({message:"Logged out successfully"})
-
-  }catch(error){
-     console.log("Error in logout controller",error.message);
-    res.status(500).json({error:"Internal Server Error"});
-
+export async function Logout(req, res, next) {
+  try {
+    const id = await revokeSession(req.cookies.jwt, req.cookies.refresh);
+    if (id) getIO()?.in(`session:${id}`).disconnectSockets(true);
+    clearSessionCookies(res);
+    return res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    return next(error);
   }
 }
 
-
-export const verifyEmail = async(req,res)=>{
- const { verificationCode } = req.body;
- try{
-const user = await User.findOne({
-  verificationToken:verificationCode,
-  verificationTokenExpiresAt: { $gt:Date.now()}
-})
-
-if(!user){
-  return res.status(400).json({sucess:false,message:"Invalid or expired verification code"})
-}
-user.isVerified = true;
-user.verificationToken=undefined;
-user.verificationTokenExpiresAt=undefined;
-await user.save();
-
-await sendWelcomeEmail(user.email,user.fullName);
-res.status(200).json({
-  success:true,
-  message:"Email verified successfully",
-  user: {
-    ...user._doc,
-    password: undefined,
-    verificationToken: undefined,
-    verificationTokenExpiresAt: undefined,
-  },
-})
- }catch(error){
-  console.log("Error in verifyEmail controller",error.message);
-  res.status(500).json({error:"Internal Server Error"});
- } 
+export async function refreshSession(req, res, next) {
+  try {
+    const result = await rotateRefresh(req.cookies.refresh, res);
+    if (result.ok) return res.sendStatus(204);
+    if (result.revoked) getIO()?.in(`session:${result.revoked}`).disconnectSockets(true);
+    clearSessionCookies(res);
+    return res.status(401).json({ error: "Sign in again to continue" });
+  } catch (error) {
+    return next(error);
+  }
 }
 
-export const forgotPassword = async(req,res)=>{
-  const { Femail } = req.body;
-  try{
-    const user = await User.findOne({Femail});
-    if(!user){
-      return res.status(400).json({ success:true, message:"User not found"});
+export async function verifyEmail(req, res) {
+  try {
+    const { email, verificationCode } = req.body;
+    if (typeof email !== "string" || typeof verificationCode !== "string" || !/^\d{6}$/.test(verificationCode)) {
+      return res.status(400).json({ error: "A valid email and verification code are required." });
     }
+    const user = await User.findOneAndUpdate({
+      email: email.trim().toLowerCase(), verificationToken: verificationCode,
+      verificationTokenExpiresAt: { $gt: new Date() }, isVerified: false,
+    }, {
+      $set: { isVerified: true },
+      $unset: { verificationToken: "", verificationTokenExpiresAt: "" },
+    }, { new: true });
+    if (!user) return res.status(400).json({ error: "Invalid or expired verification code." });
 
-    const resetToken = crypto.randomBytes(20).toString("hex");
-    const resetTokenExpiresAt=Date.now() + 1*60*60*1000;
+    await generateTokenAndCookies(user, res);
+    void sendWelcomeEmail(user.email, user.username).catch(() => {});
+    return res.json({ success: true, user: await accountData(user) });
+  } catch (error) {
+    console.error("Could not verify email:", error.message);
+    return res.status(500).json({ error: "Could not verify email." });
+  }
+}
 
-    user.resetPasswordToken=resetToken;
-    user.resetPasswordExpires=resetTokenExpiresAt;
-
-    await user.save();
-    await sendResetPasswordEmail(user.email,`${process.env.CLIENT_URL}reset-password/${resetToken}`);
-
-    res.status(200).json({ sucess:true,message:"Password reset link send to your email",
-      // user: {
-      //   ...newUser._doc,
-      //   password: undefined,
-      //   verificationToken: undefined,
-      //   verificationTokenExpiresAt: undefined,
-      // },
-  });
-
-  }catch(error){
-    console.log("Error in forgotPassword controller",error.message);
-  res.status(500).json({error:"Internal Server Error"});
+export async function forgotPassword(req, res) {
+  const email = typeof req.body.Femail === "string" ? req.body.Femail.trim().toLowerCase() : "";
+  const response = { success: true, message: "If the email is registered, a reset link will be sent." };
+  if (!email) return res.json(response);
+  try {
+    const user = await User.findOne({ email });
+    if (user && process.env.TOKEN) {
+      const token = crypto.randomBytes(20).toString("hex");
+      user.resetPasswordToken = crypto.createHash("sha256").update(token).digest("hex");
+      user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
+      await user.save();
+      await sendResetPasswordEmail(user.email, token).catch(() => {});
+    }
+    return res.json(response);
+  } catch (error) {
+    console.error("Could not request password reset:", error.message);
+    return res.status(500).json({ error: "Could not request password reset." });
   }
 }
 
@@ -187,37 +165,27 @@ export const ResetPassword = async (req, res) => {
 
   try {
     
-    if (password !== confirmPassword) {
-      return res.status(400).json({ success: false, error: "Passwords do not match" });
+    if (typeof password !== "string" || password.length < 6
+      || Buffer.byteLength(password) > 72 || password !== confirmPassword
+      || !/^[a-f0-9]{40}$/.test(resetToken)) {
+      return res.status(400).json({ success: false, error: "Invalid reset token or password." });
     }
-
-
-    const user = await User.findOne({
-      resetPasswordToken: resetToken,
-      resetPasswordExpires: { $gt: Date.now() }
+    const hash = crypto.createHash("sha256").update(resetToken).digest("hex");
+    const user = await User.findOneAndUpdate({
+      resetPasswordToken: { $in: [hash, resetToken] },
+      resetPasswordExpires: { $gt: new Date() },
+    }, {
+      $set: { password: await bcrypt.hash(password, 10) },
+      $inc: { sessionVersion: 1 },
+      $unset: { resetPasswordToken: "", resetPasswordExpires: "" },
     });
-
-
     if (!user) {
       return res.status(400).json({ success: false, message: "Invalid or expired reset token" });
     }
+    await recordAccountChanges(user._id, [{ kind: "password" }]);
+    getIO()?.in(getRecipientRoom(user._id)).disconnectSockets(true);
+    await sendPasswordResetSuccessEmail(user.email).catch(() => {});
 
-
-    const salt = await bcrypt.genSalt(10);
-    const NewhashedPassword = await bcrypt.hash(password, salt);
-
-  
-    user.password = NewhashedPassword;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
-
-
-    await user.save();
-
-
-    await sendPasswordResetSuccessEmail(user.email);
-
-   
     return res.status(200).json({ success: true, message: "Password has been reset successfully" });
 
   } catch (error) {

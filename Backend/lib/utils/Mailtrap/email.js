@@ -11,11 +11,9 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "https://frontend-gamma-opal-34
 
 export const sendVerificationEmail = async (email, verificationToken) => {
   const recipient = [{ email }];
-  // Link to verify email on frontend
-  const verificationURL = `${FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
   try {
-    const htmlContent = VERIFICATION_EMAIL_TEMPLATE.replace("{verificationURL}", verificationURL);
+    const htmlContent = VERIFICATION_EMAIL_TEMPLATE.replace("{verificationCode}", verificationToken);
     const response = await mailtrapclient.send({
       from: sender,
       to: recipient,
@@ -33,7 +31,7 @@ export const sendVerificationEmail = async (email, verificationToken) => {
 export const sendWelcomeEmail = async (email, username) => {
   const recipient = [{ email }];
   // Direct user to their dashboard or profile page
-  const dashboardURL = `${FRONTEND_URL}/users/${encodeURIComponent(username)}`;
+  const dashboardURL = `${FRONTEND_URL}/${encodeURIComponent(username)}`;
 
   try {
     let emailContent = WELCOME_EMAIL_TEMPLATE
@@ -57,7 +55,7 @@ export const sendWelcomeEmail = async (email, username) => {
 export const sendResetPasswordEmail = async (email, resetToken) => {
   const recipient = [{ email }];
   // Link to reset password on frontend
-  const resetPasswordURL = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
+  const resetPasswordURL = `${FRONTEND_URL}/auth/reset-password/${encodeURIComponent(resetToken)}`;
 
   try {
     const htmlContent = PASSWORD_RESET_REQUEST_TEMPLATE.replace("{resetURL}", resetPasswordURL);

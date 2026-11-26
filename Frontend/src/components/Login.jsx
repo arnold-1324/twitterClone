@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 'use client';
 
 import {
@@ -6,7 +7,6 @@ import {
   FormControl,
   FormLabel,
   Input,
-  Checkbox,
   Stack,
   Button,
   Heading,
@@ -33,17 +33,17 @@ export default function SimpleCard() {
 
   const handlesignIn = async () => {
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await apiFetch("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(inputs)
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
 
        if(!res.ok){
-        showToast("Error", data.message || "Login failed", "error");
+        showToast("Error", data.error || data.message || "Login failed", "error");
         return;
        }
 
@@ -63,14 +63,14 @@ export default function SimpleCard() {
 
   const handleForgotPassword = async () => {
     try {
-      const res = await fetch("/api/auth/forgot-password", {
+      const res = await apiFetch("/api/auth/forgot-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ Femail })
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (!res.ok) {
         showToast("Error", data.message || "Request failed", "error");
         return;
@@ -100,17 +100,21 @@ export default function SimpleCard() {
 
   return (
     <Flex align={'center'} justify={'center'}>
-      <Stack spacing={8} mx={'auto'} maxW={'md'} py={8} px={6}>
+      <Stack spacing={5} mx="auto" maxW="md" w="full" py={5} px={4}>
         <Stack align={'center'}>
           <Heading fontSize={'3xl'}>{forgot ? 'Forgot your password?' : 'Login'}</Heading>
           {forgot && (
-            <Text fontSize={{ base: 'sm', sm: 'md' }} color={useColorModeValue('gray.800', 'gray.400')}>
+            <Text fontSize={{ base: 'sm', sm: 'md' }} color={"gray.500"}>
               You&apos;ll get an email with a reset link.
             </Text>
           )}
         </Stack>
 
-        <Box {...commonBoxStyles}>
+        <Box {...commonBoxStyles} as="form" onSubmit={(event) => {
+          event.preventDefault();
+          if (forgot) handleForgotPassword();
+          else handlesignIn();
+        }}>
           <Stack spacing={4}>
             {forgot ? (
               <>
@@ -131,7 +135,7 @@ export default function SimpleCard() {
                     _hover={{
                       bg: 'blue.500',
                     }}
-                    onClick={handleForgotPassword}
+                    type="submit"
                   >
                     Request Reset
                   </Button>
@@ -149,7 +153,7 @@ export default function SimpleCard() {
                 <FormControl id="username" isRequired>
                   <FormLabel>Username</FormLabel>
                   <Input
-                    type="text"
+                    type="text" autoComplete="username"
                     onChange={(e) => setInputs({ ...inputs, username: e.target.value })}
                     value={inputs.username}
                   />
@@ -157,23 +161,22 @@ export default function SimpleCard() {
                 <FormControl id="password" isRequired>
                   <FormLabel>Password</FormLabel>
                   <Input
-                    type="password"
+                    type="password" autoComplete="current-password"
                     onChange={(e) => setInputs({ ...inputs, password: e.target.value })}
                     value={inputs.password}
                   />
                 </FormControl>
                 <Stack spacing={6}>
                   <Stack direction={{ base: 'column', sm: 'row' }} align={'start'} justify={'space-between'}>
-                    <Checkbox>Remember me</Checkbox>
-                    <Link color={'#1DA1F2'} onClick={() => setForgot(true)}>Forgot password?</Link>
+                    <Link as="button" type="button" color='var(--dayline-accent)' onClick={() => setForgot(true)}>Forgot password?</Link>
                   </Stack>
                   <Button
-                    bg={'#1DA1F2'}
+                    className="dayline-primary"
                     color={'white'}
                     _hover={{
-                      bg: '#1A91DA',
+                      bg: '#5b2a40',
                     }}
-                    onClick={handlesignIn}
+                    type="submit"
                   >
                     Sign in
                   </Button>
@@ -181,7 +184,7 @@ export default function SimpleCard() {
                 <Stack pt={6}>
                   <Text align={"center"}>
                     Don&apos;t have an account?{" "}
-                    <Link color={"blue.400"} onClick={() => setAuthScreen("signup")}>
+                    <Link color="var(--dayline-accent)" as="button" type="button" onClick={() => setAuthScreen("signup")}>
                       Sign up
                     </Link>
                   </Text>

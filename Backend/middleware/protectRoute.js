@@ -1,30 +1,16 @@
 import User from "../models/user.model.js";
-import jwt from "jsonwebtoken";
+import { readAccessSession } from "../lib/utils/generateToken.js";
 
-
-export const protectRoute = async(req,res,next)=>{
-
-    try{
-        const token=req.cookies.jwt;
-        if(!token) {
-            return res.status(401).json({error:"Unauthorized: No Token Provider"})
-        }
-
-        const decode=jwt.verify(token,process.env.JWT_SECRET);
-        if(!decode) {
-            return re.status(400).json({error:"Unauthorized : Invalid Token"})
-        }
-        const user = await User.findById(decode.userId).select("-password");
-
-        if(!user){
-            return res.status(404).json({error:"User is not Found"})
-        }
-        req.user=user;
-        next();
-
-    }catch(error){
-
-        console.log("Error in protected controller",error.message);
-        res.status(500).json({error:"Internal Server Error"});
+export async function protectRoute(req, res, next) {
+  try {
+    const claims = await readAccessSession(req.cookies.jwt);
+    const user = claims && await User.findById(claims.userId).select("-password");
+    if (!user || (user.sessionVersion ?? 0) !== claims.sessionVersion) {
+      return res.status(401).json({ error: "Authentication required" });
     }
+    req.user = user;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
 }

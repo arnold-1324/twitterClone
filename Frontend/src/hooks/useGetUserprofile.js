@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import useShowToast from "./useShowToast";
@@ -13,8 +14,8 @@ const useGetUserProfile = () => {
 	useEffect(() => {
 		const getUser = async () => {
 			try {
-				const res = await fetch(`/api/users/profile/${username}`);
-				const data = await res.json();
+				const res = await apiFetch(`/api/users/profile/${username}`);
+				const data = await readApiJson(res);
 				if (data.error) {
 					showToast("Error", data.error, "error");
 					return;

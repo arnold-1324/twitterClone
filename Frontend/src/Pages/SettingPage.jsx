@@ -1,179 +1,110 @@
-import React, { useState } from "react";
-import {
-  Box,
-  Flex,
-  Text,
-  VStack,
-  HStack,
-  Avatar,
-  IconButton,
-  Divider,
-  useColorModeValue,
-  useToast,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalCloseButton,
-  ModalBody,
-  ModalFooter,
-  Button,
-  Input,
-  Stack,
-  Heading,
-  FormLabel,
-  FormControl,
-} from "@chakra-ui/react";
-import { Link, useNavigate } from "react-router-dom";
-import { FaChevronRight, FaUserEdit, FaLock, FaSignOutAlt, FaShieldAlt, FaHistory, FaEnvelope, FaQuestionCircle, FaExclamationTriangle } from "react-icons/fa";
-import { useRecoilValue, useSetRecoilState } from "recoil";
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
+import { Avatar, Button, FormControl, FormLabel, Input, Stack, Switch, useColorMode } from "@chakra-ui/react";
+import { Link } from "react-router-dom";
+import { useRecoilState } from "recoil";
+import { useState } from "react";
 import userAtom from "../atom/userAtom";
-import NotifyAtom from "../atom/notifyAtom";
-import { motion } from "framer-motion";
 import useLogout from "../hooks/useLogout";
-import UpdateProfile from "../Pages/UpdateProfile";
+import useShowToast from "../hooks/useShowToast";
 
-const MotionBox = motion(Box);
-
-const SettingPage = () => {
-  const user = useRecoilValue(userAtom);
-  const setNotify = useSetRecoilState(NotifyAtom);
-  const bgColor = useColorModeValue("white", "gray.800");
-  const textColor = useColorModeValue("gray.800", "white");
-  const toast = useToast();
-  const navigate = useNavigate();
+export default function SettingPage() {
+  const [user, setUser] = useRecoilState(userAtom);
   const logout = useLogout();
+  const showToast = useShowToast();
+  const { colorMode, toggleColorMode } = useColorMode();
+  const [privacyPending, setPrivacyPending] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalContent, setModalContent] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const menuItems = [
-    { label: "Edit Profile", path: "/update", icon: FaUserEdit },
-    { label: "Change Password", path: "/change-password", icon: FaLock },
-    { label: "Privacy and Security", path: "/privacy-security", icon: FaShieldAlt },
-    { label: "Login Activity", path: "/login-activity", icon: FaHistory },
-    { label: "Help", path: "/help", icon: FaQuestionCircle },
-    { label: "Log Out", path: "/logout", icon: FaSignOutAlt },
-  ];
-
-  const handleMenuClick = (item) => {
-    if (item.path === "/logout") {
-      // Handle logout
-      logout();
-      toast({
-        title: "Logged out",
-        description: "You have been logged out successfully.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
+  async function changeBioVisibility(hideBio) {
+    setPrivacyPending(true);
+    try {
+      const response = await apiFetch("/api/users/profile-privacy", {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hideBio }),
       });
-      setNotify({ notifications: [], unreadCount: 0 });
-      navigate("/auth");
-    } else if (item.path === "/edit-profile") {
-      setModalContent("Edit Profile");
-      setIsModalOpen(true);
-    } else {
-      setModalContent(item.label);
-      setIsModalOpen(true);
+      if (!response.ok) throw new Error("Could not update bio visibility.");
+      const result = await readApiJson(response);
+      setUser((account) => account && ({ ...account, hideBio: result.hideBio }));
+    } catch (error) {
+      showToast("Privacy setting unavailable", error.message, "error");
+    } finally {
+      setPrivacyPending(false);
     }
-  };
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+    if (saving) return;
+    const fields = new FormData(event.currentTarget);
+    const currentPassword = fields.get("current");
+    const newPassword = fields.get("next");
+    if (newPassword !== fields.get("confirm")) {
+      setError("The new passwords do not match.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const response = await apiFetch(`/api/users/update/${user._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const result = await readApiJson(response);
+      if (!response.ok || !result.reauthenticate) throw new Error(result.error || "Could not change your password.");
+      localStorage.removeItem("user-threads");
+      setUser(null);
+      showToast("Password changed", "Sign in again with your new password.", "success");
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <Flex direction={{ base: "column", md: "row" }}>
-      <Box
-        bg={bgColor}
-        color={textColor}
-        minHeight="100vh"
-        p={4}
-        width={{ base: "full", md: isSidebarOpen ? "250px" : "90px" }}
-        transition="width 0.3s ease"
-        onMouseEnter={() => setIsSidebarOpen(true)}
-        onMouseLeave={() => setIsSidebarOpen(false)}
-      >
-        <VStack spacing={4} align="stretch">
-          {menuItems.map((item, index) => (
-            <MotionBox
-              key={index}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <HStack
-                borderRadius={isSidebarOpen ? "md" : "full"}
-                justifyContent="space-between"
-                p={4}
-                bg={useColorModeValue("gray.100", "gray.700")}
-                _hover={{ bg: useColorModeValue("gray.200", "gray.600") }}
-                onClick={() => handleMenuClick(item)}
-                cursor="pointer"
-              >
-                <item.icon />
-                {isSidebarOpen && <Text>{item.label}</Text>}
-                <IconButton
-                  icon={<FaChevronRight />}
-                  variant="ghost"
-                  aria-label="Navigate"
-                  display={isSidebarOpen ? "block" : "none"}
-                />
-              </HStack>
-              {index < menuItems.length - 1 && <Divider />}
-            </MotionBox>
-          ))}
-        </VStack>
-      </Box>
-
-      <Box flex="1" p={4}>
-        <Flex justifyContent="center" mb={8}>
-          <Avatar size="xl" name={user.fullName} src={user.profileImg} />
-        </Flex>
-
-        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-          <ModalOverlay />
-          <ModalContent>
-            <ModalHeader>{modalContent}</ModalHeader>
-            <ModalCloseButton />
-            <ModalBody>
-              {modalContent === "Edit Profile" && <UpdateProfile />}
-              {modalContent === "Change Password" && (
-                <Box>
-                  <Flex align={"center"} justify={"center"}>
-                    <Stack spacing={4} w={"full"} maxW={"md"} bg={useColorModeValue("white", "gray.800")} rounded={"xl"} boxShadow={"lg"} p={6} my={12}>
-                      <Heading lineHeight={1.1} fontSize={{ base: "2xl", md: "3xl" }}>
-                        Change Password
-                      </Heading>
-                      <FormControl id="currentPassword" isRequired>
-                        <FormLabel>Current Password</FormLabel>
-                        <Input type="password" />
-                      </FormControl>
-                      <FormControl id="newPassword" isRequired>
-                        <FormLabel>New Password</FormLabel>
-                        <Input type="password" />
-                      </FormControl>
-                      <FormControl id="confirmNewPassword" isRequired>
-                        <FormLabel>Confirm New Password</FormLabel>
-                        <Input type="password" />
-                      </FormControl>
-                      <Stack spacing={6}>
-                        <Button bg={"blue.400"} color={"white"} _hover={{ bg: "blue.500" }}>
-                          Save
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  </Flex>
-                </Box>
-              )}
-              {/* Add more conditions for other menu items as needed */}
-            </ModalBody>
-            <ModalFooter>
-              <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
-                Cancel
-              </Button>
-            </ModalFooter>
-          </ModalContent>
-        </Modal>
-      </Box>
-    </Flex>
+    <main className="dayline-tool-page">
+      <h1>Settings</h1>
+      <Stack className="social-panel dayline-tool-panel" spacing={5}>
+        <div className="settings-account">
+          <Avatar name={user.fullName} src={user.profileImg} />
+          <Link to={`/${user.username}`}>{user.fullName}<small>@{user.username}</small></Link>
+          <Button as={Link} to="/update" size="sm" variant="outline">Edit profile</Button>
+        </div>
+        <div className="settings-row">
+          <span><strong>Account activity</strong><small>Review account changes, media and likes.</small></span>
+          <Button as={Link} to="/activity" size="sm" variant="outline">View activity</Button>
+        </div>
+        <label className="settings-row">
+          <span><strong>Hide my bio</strong><small>Keep your bio visible only to you. Your posts remain public.</small></span>
+          <Switch aria-label="Hide my bio" colorScheme="purple" isChecked={Boolean(user.hideBio)} isDisabled={privacyPending}
+            onChange={(event) => changeBioVisibility(event.target.checked)} />
+        </label>
+        <label className="settings-row">
+          <span><strong>Dark mode</strong><small>Change the theme on this device.</small></span>
+          <Switch aria-label="Dark mode" colorScheme="purple" isChecked={colorMode === "dark"} onChange={toggleColorMode} />
+        </label>
+        <form className="settings-password" onSubmit={changePassword}>
+          <Stack spacing={4}>
+            <h2>Change password</h2>
+            <FormControl isRequired>
+              <FormLabel>Current password</FormLabel>
+              <Input name="current" autoComplete="current-password" type="password" />
+            </FormControl>
+            <FormControl isRequired>
+              <FormLabel>New password</FormLabel>
+              <Input name="next" autoComplete="new-password" type="password" minLength={6} />
+            </FormControl>
+            <FormControl isRequired>
+              <FormLabel>Confirm new password</FormLabel>
+              <Input name="confirm" autoComplete="new-password" type="password" minLength={6} />
+            </FormControl>
+            {error && <p role="alert">{error}</p>}
+            <Button type="submit" className="dayline-primary" alignSelf="start" isLoading={saving}>Save password</Button>
+          </Stack>
+        </form>
+        <Button variant="outline" alignSelf="start" onClick={logout}>Log out</Button>
+      </Stack>
+    </main>
   );
-};
-
-export default SettingPage;
+}

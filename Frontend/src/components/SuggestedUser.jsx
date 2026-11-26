@@ -1,82 +1,22 @@
-import { Avatar, Box, Button, Flex, Text, Tooltip, Badge, useColorModeValue } from "@chakra-ui/react";
+import { Avatar, Button, Flex, Text } from "@chakra-ui/react";
 import { Link } from "react-router-dom";
-import { FiCheckCircle } from "react-icons/fi";
 import useFollowUnfollow from "../hooks/useFollowUnfollow";
 
-const SuggestedUser = ({ user }) => {
-	const { handleFollowUnfollow, following, updating } = useFollowUnfollow(user);
-	const mutualText = user.MutualFriends?.map((mf) => mf.username).join(', ');
-
-	return (
-		<Flex
-			p={4}
-			bg={useColorModeValue('white', 'gray.800')}
-			borderRadius="md"
-			boxShadow="md"
-			justifyContent="space-between"
-			alignItems="center"
-			_hover={{ boxShadow: "lg" }}
-			width="100%"
-			maxW="350px"
-		>
-			{/* Left Side */}
-			<Flex gap={3} alignItems="center" as={Link} to={`/${user.username}`}>
-				<Avatar
-					src={user.profileImg}
-					size="md"
-					border="2px solid"
-					borderColor="blue.500"
-					alt={user.username}
-				/>
-				<Box>
-					<Flex alignItems="center">
-						<Text fontSize="md" fontWeight="bold" color={useColorModeValue("gray.700", "whiteAlpha.900")} mr={1}>
-							{user.username}
-						</Text>
-						{user.isVerified && (
-							<Tooltip label="Verified" aria-label="Verified user">
-								<Badge colorScheme="blue">
-									<FiCheckCircle />
-								</Badge>
-							</Tooltip>
-						)}
-					</Flex>
-					<Text fontSize="sm" color="gray.500">
-						{user.fullName}
-					</Text>
-					{user.bio && (
-						<Text fontSize="xs" color="gray.400" mt={1} noOfLines={1}>
-							{user.bio}
-						</Text>
-					)}
-					{mutualText && (
-						<Text fontSize="xs" color="gray.400" mt={1} noOfLines={1}>
-							Followed by {mutualText}
-						</Text>
-					)}
-				</Box>
-			</Flex>
-
-			{/* Follow/Unfollow Button */}
-			<Button
-				size="sm"
-				variant="solid"
-				colorScheme={following ? "gray" : "blue"}
-				onClick={handleFollowUnfollow}
-				isLoading={updating}
-				_hover={{
-					bg: following ? "gray.200" : "blue.500",
-					transform: "scale(1.05)",
-				}}
-				_disabled={{
-					opacity: 0.6,
-					cursor: "not-allowed",
-				}}
-			>
-				{following ? "Unfollow" : "Follow"}
-			</Button>
-		</Flex>
-	);
-};
-
-export default SuggestedUser;
+export default function SuggestedUser({ user }) {
+  const { handleFollowUnfollow, following, updating } = useFollowUnfollow(user);
+  return (
+    <Flex align="center" justify="space-between" gap={3}>
+      <Flex as={Link} to={`/${user.username}`} align="center" gap={2} minW={0}>
+        <Avatar size="sm" name={user.fullName} src={user.profileImg} />
+        <Flex direction="column" minW={0}>
+          <Text noOfLines={1} fontSize="sm" fontWeight="bold">{user.fullName || user.username}</Text>
+          <Text noOfLines={1} fontSize="xs" color="var(--dayline-dim)">@{user.username}</Text>
+        </Flex>
+      </Flex>
+      <Button size="xs" flexShrink={0} variant="outline" color="var(--dayline-accent)"
+        isLoading={updating} onClick={handleFollowUnfollow}>
+        {following ? "Unfollow" : "Follow"}
+      </Button>
+    </Flex>
+  );
+}

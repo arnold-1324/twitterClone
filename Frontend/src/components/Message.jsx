@@ -1,3 +1,4 @@
+import AdaptiveVideo from "./AdaptiveVideo";
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Box,
@@ -63,6 +64,16 @@ const Message = ({
   // const [playingAudioId, setPlayingAudioId] = useState(null);
 
   // move color tokens to component scope (hooks must be top-level)
+  const subtleBorder = useColorModeValue("gray.200", "gray.600");
+  const subtleText = useColorModeValue("gray.500", "gray.400");
+  const menuText = useColorModeValue("black", "white");
+  const secondaryText = useColorModeValue("gray.600", "gray.400");
+  const senderText = useColorModeValue("gray.200", "gray.300");
+  const replySurface = useColorModeValue("gray.100", "gray.700");
+  const replyBorder = useColorModeValue("teal.500", "teal.300");
+  const replyAuthor = useColorModeValue("teal.600", "teal.200");
+  const replyColor = useColorModeValue("gray.800", "gray.100");
+  const menuSurface = useColorModeValue("white", "gray.800");
   const bgCard = useColorModeValue("gray.50", "gray.700");
   const textCard = useColorModeValue("gray.900", "gray.100");
   const muted = useColorModeValue("gray.600", "gray.300");
@@ -156,7 +167,7 @@ const Message = ({
           color={textCard}
           boxShadow="sm"
           border="1px solid"
-          borderColor={useColorModeValue("gray.200", "gray.600")}
+          borderColor={subtleBorder}
           width="100%"
           alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
         >
@@ -174,7 +185,7 @@ const Message = ({
             </Box>
 
             <Flex direction="column" align="flex-end" gap={2}>
-              <Text fontSize="xs" color={useColorModeValue("gray.500", "gray.400")}>
+              <Text fontSize="xs" color={subtleText}>
                 Shared
               </Text>
             </Flex>
@@ -193,7 +204,7 @@ const Message = ({
             p={2}
             borderRadius="10px"
             bg={bgCard}
-            color={useColorModeValue("black", "white")}
+            color={menuText}
             cursor="pointer"
             _hover={{ transform: "translateY(-2px)", transition: "150ms" }}
             alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
@@ -211,6 +222,8 @@ const Message = ({
               <Box borderRadius="8px" overflow="hidden" mb={2}>
                 <Image src={post.images} alt="Post image" objectFit="cover" w="100%" />
               </Box>
+            ) : post.media?.[0]?.type === "video" ? (
+              <AdaptiveVideo src={post.media[0].url} streamUrl={post.media[0].streamUrl} width="100%" aria-label="Shared reel" />
             ) : null}
 
             {post.caption && (
@@ -224,6 +237,10 @@ const Message = ({
     }
 
     // regular img / video / audio
+    if (message.file) {
+      return <a href={message.file} target="_blank" rel="noreferrer">Open attachment</a>;
+    }
+
     if (message.img) {
       return <Image src={message.img} borderRadius="10px" maxW="100%" w="100%" alt="Shared content" />;
     }
@@ -231,10 +248,8 @@ const Message = ({
     if (message.video) {
       return (
         <Box w="100%" maxW="100%">
-          <video controls width="100%" style={{ borderRadius: 8, background: "#222" }} poster={message.thumbnail}>
-            <source src={message.video} type="video/mp4" />
-            Your browser does not support the video tag.
-          </video>
+          <AdaptiveVideo src={message.video} streamUrl={message.videoStreamUrl} width="100%"
+            style={{ borderRadius: 8, background: "#222" }} poster={message.thumbnail} aria-label="Shared video" />
         </Box>
       );
     }
@@ -248,14 +263,14 @@ const Message = ({
   const content = useMemo(() => {
     if (isDeletedForMe) {
       return (
-        <Text fontStyle="italic" fontSize="sm" color={useColorModeValue("gray.600", "gray.400")}>
+        <Text fontStyle="italic" fontSize="sm" color={secondaryText}>
           You deleted this message
         </Text>
       );
     }
     if (isDeletedForAll) {
       return (
-        <Text fontStyle="italic" fontSize="sm" color={useColorModeValue("gray.600", "gray.400")}>
+        <Text fontStyle="italic" fontSize="sm" color={secondaryText}>
           This message was deleted
         </Text>
       );
@@ -281,26 +296,23 @@ const Message = ({
       );
     }
 
-    return message.text ? <Text color="white" fontSize="sm" wordBreak="break-word">{message.text}</Text> : null;
-  }, [message.text, isEditing, isDeletedForMe, isDeletedForAll, isOwnMessage, message.type]);
+    return message.text ? <Text color="inherit" fontSize="sm" wordBreak="break-word">{message.text}</Text> : null;
+  }, [message.text, isEditing, isDeletedForMe, isDeletedForAll, isOwnMessage, message.type, secondaryText]);
 
   return (
     <MotionFlex
       direction="column"
       alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
-      minW="120px"
-      width={message.video || message.postReference || message.img || message.type === "poll" ? "100%" : "60%"}
-      maxWidth={message.video || message.postReference || message.img || message.type === "poll" ? "100%" : "80%"}
-      p={2}
-      mt={2}
+      minW="110px"
+      width={message.video || message.postReference || message.img || message.type === "poll" ? "min(100%, 440px)" : "fit-content"}
+      maxW="100%"
+      py={2}
+      pl={3}
+      pr={8}
       borderRadius="15px"
-      color="white"
-      boxShadow="md"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
+      boxShadow="none"
       position="relative"
-      bg={isOwnMessage ? "blue.500" : "gray.600"}
+      className={`thread-bubble ${isOwnMessage ? "thread-bubble-own" : ""}`}
       borderBottomRightRadius={isOwnMessage ? "5px" : "15px"}
       borderBottomLeftRadius={isOwnMessage ? "15px" : "5px"}
     >
@@ -308,7 +320,7 @@ const Message = ({
       {isGroupMessage && !isOwnMessage && (
         <Flex alignItems="center" mb={1}>
           <Avatar size="xs" src={message.sender?.profileImg} name={message.sender?.username} mr={2} />
-          <Text fontSize="xs" fontWeight="bold" color={useColorModeValue("gray.200", "gray.300")}>
+          <Text fontSize="xs" fontWeight="bold" color={senderText}>
             {message.sender?.username}
           </Text>
         </Flex>
@@ -318,26 +330,26 @@ const Message = ({
       {message.replyTo && (
         <Box
           p={2}
-          bg={useColorModeValue("gray.100", "gray.700")}
+          bg={replySurface}
           borderLeft="4px solid"
-          borderColor={useColorModeValue("teal.500", "teal.300")}
+          borderColor={replyBorder}
           borderRadius="md"
           mb={1}
           onClick={() => handleHighlightMessage(message.replyTo._id || message.replyTo.id)}
           cursor="pointer"
-          _hover={{ bg: useColorModeValue("gray.200", "gray.600") }}
+          _hover={{ bg: subtleBorder }}
         >
           <Flex direction="row" alignItems="center">
             <Box flex="1">
               { /* safe replyTo sender check */}
-              <Text fontSize="sm" fontWeight="bold" color={useColorModeValue("teal.600", "teal.200")} mb={1}>
+              <Text fontSize="sm" fontWeight="bold" color={replyAuthor} mb={1}>
                 {(() => {
                   const replySenderId = message.replyTo?.sender?._id || message.replyTo?.sender;
                   if (replySenderId && String(replySenderId) === String(currentUser._id)) return "You";
                   return message.replyTo?.sender?.username || "Someone";
                 })()}
               </Text>
-              <Text fontSize="sm" color={useColorModeValue("gray.800", "gray.100")} noOfLines={2}>
+              <Text fontSize="sm" color={replyColor} noOfLines={2}>
                 {message.replyTo?.text}
               </Text>
             </Box>
@@ -375,7 +387,7 @@ const Message = ({
 
       {/* Edited indicator */}
       {!isEditing && message.edited && !isDeletedForMe && !isDeletedForAll && (
-        <Text fontSize="xx-small" align="right" mt={1} color={isOwnMessage ? "blue.100" : "gray.300"}>
+        <Text fontSize="xx-small" align="right" mt={1} color="inherit" opacity={0.72}>
           (edited)
         </Text>
       )}
@@ -392,7 +404,7 @@ const Message = ({
         <Flex position="absolute" top={2} right={2}>
           <Menu>
             <MenuButton as={IconButton} icon={<BsThreeDotsVertical />} variant="ghost" size="xs" aria-label="Message options" />
-            <MenuList borderRadius="md" boxShadow="lg" p={2} bg={useColorModeValue("white", "gray.800")} color={useColorModeValue("black", "white")}>
+            <MenuList borderRadius="md" boxShadow="lg" p={2} bg={menuSurface} color={menuText}>
               {isOwnMessage && <MenuItem onClick={() => setEditingMessageId(message._id)}>Edit</MenuItem>}
               <MenuItem
                 onClick={() =>
@@ -419,7 +431,7 @@ const Message = ({
       )}
 
       {/* Timestamp */}
-      <Text fontSize="xs" align="right" mt={1} color={isOwnMessage ? "blue.100" : "gray.300"}>
+      <Text fontSize="xs" align="right" mt={1} color="inherit" opacity={0.72}>
         {formatMessageTime(message.createdAt)}
       </Text>
     </MotionFlex>

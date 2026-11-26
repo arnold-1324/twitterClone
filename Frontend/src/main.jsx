@@ -6,21 +6,21 @@ import { ChakraProvider, ColorModeScript, extendTheme } from "@chakra-ui/react";
 import { mode } from "@chakra-ui/theme-tools";
 import { BrowserRouter } from 'react-router-dom';
 import { RecoilRoot } from "recoil";
+import { CallProvider } from "./context/CallContext.jsx";
 import { SocketContextProvider } from "./context/SocketContext.jsx";
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
 const styles = {
   global:(props)=>({
     body:{
       color:mode('gray.800','whiteAlpha.900')(props),
-      bg:mode('gray.100','#101010')(props),
+      bg:mode('#f7f5f2','#131217')(props),
     }
   })
 };
 
 const config = {
   initialColorMode: "dark",
-  useSystemColorMode: true,
+  useSystemColorMode: false,
 };
 
 const colors = {
@@ -39,15 +39,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <ChakraProvider theme={theme}>
           <ColorModeScript initialColorMode={theme.config.initialColorMode} />
           <SocketContextProvider>
-            <App />
+            <CallProvider><App /></CallProvider>
           </SocketContextProvider>
         </ChakraProvider>
       </BrowserRouter>
     </RecoilRoot>
   </React.StrictMode>,
 )
-
-// If you want your app to work offline and load faster, you can change
-// unregister() to register() below. Note this comes with some pitfalls.
-// Learn more about service workers: https://cra.link/PWA
-serviceWorkerRegistration.register();

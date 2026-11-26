@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -43,9 +44,9 @@ const SharePost = ({ postId }) => {
     const getConversations = async () => {
       setLoadingConversations(true);
       try {
-        const res = await fetch("/api/messages/getConvo/user");
+        const res = await apiFetch("/api/messages/getConvo/user");
         if (!res.ok) throw new Error(`Network error: ${res.status}`);
-        const data = await res.json();
+        const data = await readApiJson(res);
         console.log("fetched conversations:", data);
         if (!mounted) return;
         setConversations(Array.isArray(data) ? data : []);
@@ -80,7 +81,7 @@ const SharePost = ({ postId }) => {
       // Post to backend for every selected conversation
       const responses = await Promise.all(
         selectedUsers.map((conversationId) =>
-          fetch("/api/posts/sharepost", {
+          apiFetch("/api/posts/sharepost", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -98,7 +99,7 @@ const SharePost = ({ postId }) => {
           console.error("Share request failed:", res.status, await res.text());
           throw new Error("One of the share requests failed.");
         }
-        const data = await res.json();
+        const data = await readApiJson(res);
         // Update shareCount from backend response if provided
         if (data?.post?._id) {
           setPosts((prev) =>

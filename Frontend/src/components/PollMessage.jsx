@@ -1,14 +1,15 @@
-import React, { useState } from "react";
-import axios from "axios";
+import { useState } from "react";
+import { apiFetch, readApiJson } from "../lib/apiFetch";
 
 const PollMessage = ({ message, currentUserId }) => {
   const [poll, setPoll] = useState(message.poll);
   const [selectedOptions, setSelectedOptions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [showVoters, setShowVoters] = useState(false);
 
   const handleVoteClick = (index) => {
-    if (poll.closed) return;
+    if (poll.closed || loading) return;
     if (hasVoted(poll, currentUserId)) return; // lock options once voted (WhatsApp behavior)
 
     if (poll.multiSelect) {
@@ -24,39 +25,24 @@ const PollMessage = ({ message, currentUserId }) => {
     }
   };
 
-  const optimisticApplyVote = (draft, indexes) => {
-    // Add current user id to each selected option if not already present
-    const added = new Set();
-    const target = Array.isArray(indexes) && indexes.length ? indexes : selectedOptions;
-    const nextOptions = draft.options.map((opt, idx) => {
-      if (!target.includes(idx)) return opt;
-      if (opt.votes.includes(currentUserId)) return opt;
-      added.add(idx);
-      return { ...opt, votes: [...opt.votes, currentUserId] };
-    });
-    const addedCount = added.size;
-    const nextTotal = (draft.totalVotes ?? draft.options.reduce((a, o) => a + (o.votes?.length || 0), 0)) + addedCount;
-    return { ...draft, options: nextOptions, totalVotes: nextTotal };
-  };
-
   const submitVote = async (indexesOverride) => {
     const indexes = Array.isArray(indexesOverride) ? indexesOverride : selectedOptions;
-    if (!indexes || indexes.length === 0) return;
+    if (!indexes || indexes.length === 0 || loading) return;
     setLoading(true);
+    setError("");
     try {
-      // Optimistic update first
-      setPoll((prev) => optimisticApplyVote(prev, indexes));
-
-      const res = await axios.post(`/api/polls/${message._id}/vote`, {
-        selectedOptions: indexes,
+      const res = await apiFetch(`/api/polls/${message._id}/vote`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedOptions: indexes }),
       });
-      const nextPoll = res.data?.poll?.poll || res.data?.poll || res.data;
+      const data = await readApiJson(res);
+      if (!res.ok) throw new Error(data.message || "Could not record your vote.");
+      const nextPoll = data.poll?.poll || data.poll;
       if (nextPoll) {
         setPoll(nextPoll);
       }
     } catch (err) {
-      // Keep optimistic state; backend will re-sync on next fetch
-      console.error(err);
+      setError(err.message || "Could not record your vote. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -72,6 +58,7 @@ const PollMessage = ({ message, currentUserId }) => {
           {poll.question}
         </h3>
 
+        {error && <p role="alert" className="mb-2 text-sm text-red-800">{error}</p>}
         <div className="space-y-3">
           {poll.options.map((opt, index) => {
             const userVotedHere = opt.votes.includes(currentUserId);

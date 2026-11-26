@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import {
   Flex,
   Input,
@@ -19,7 +20,6 @@ import { selectedConversationAtom, selectedMsg } from "../atom/messagesAtom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import useUploadWithProgress from "../hooks/useUploadWithProgress";
 import { useSocket } from "../context/SocketContext";
-import PollMessage from "./PollMessage";
 import { MdPoll } from "react-icons/md";
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader,
@@ -31,6 +31,7 @@ import {
 const MotionFlex = motion(Flex);
 
 const MessageInput = ({
+  onConversationReady,
   setMessages,
   editingMessageId,
   setEditingMessageId,
@@ -88,23 +89,16 @@ const handleOptionChange = (index, value) => {
     };
 
     try {
-      const res = await fetch("api/polls/create", {
+      const res = await apiFetch("/api/polls/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(pollPayload),
       });
 
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (!res.ok) throw new Error(data.message || "Failed to create poll");
 
-      // Update frontend immediately
-      setMessages(prev => [...prev, { type: "poll", poll: data.poll }]);
-
-      // Emit socket event so others get it in real-time
-      socket.emit("newMessage", {
-        conversationId: recipient._id,
-        message: { type: "poll", poll: data.poll },
-      });
+      setMessages(prev => [...prev, data.poll]);
 
       setIsPollModalOpen(false);
       setPollQuestion("");
@@ -124,10 +118,15 @@ const handleOptionChange = (index, value) => {
 
   // Join socket room
   useEffect(() => {
-    if (!socket || !recipient._id) return;
-    socket.emit("joinRoom", recipient._id);
-    return () => socket.emit("leaveRoom", recipient._id);
-  }, [socket, recipient._id]);
+    if (!socket || !recipient._id || recipient.mock) return;
+    const join = () => socket.emit("joinRoom", recipient._id);
+    if (socket.connected) join();
+    socket.on("connect", join);
+    return () => {
+      socket.off("connect", join);
+      if (socket.connected) socket.emit("leaveRoom", recipient._id);
+    };
+  }, [socket, recipient._id, recipient.mock]);
 
   // Handle upload progress
   useEffect(() => {
@@ -144,16 +143,19 @@ const handleOptionChange = (index, value) => {
   const bgColor = useColorModeValue("white", "gray.800");
   const iconHoverColor = useColorModeValue("gray.200", "gray.600");
   const borderColor = useColorModeValue("gray.300", "gray.600");
+  const replySurface = useColorModeValue("gray.100", "gray.700");
+  const replyAccent = useColorModeValue("green.600", "green.200");
+  const replyText = useColorModeValue("gray.800", "gray.100");
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!messageText && !audioBlob && !mediaFile) return;
+    if (isSending || (!messageText.trim() && !audioBlob && !mediaFile)) return;
     setIsSending(true);
 
     try {
       // Handle message editing
       if (editingMessageId) {
-        const res = await fetch("/api/messages/edit", {
+        const res = await apiFetch("/api/messages/edit", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -162,7 +164,9 @@ const handleOptionChange = (index, value) => {
             groupId: groupId
           })
         });
-        if (!res.ok) throw new Error("Failed to edit message");
+        const updated = await readApiJson(res);
+        if (!res.ok) throw new Error(updated.error || "Failed to edit message");
+        setMessages((items) => items.map((item) => item._id === updated._id ? { ...item, ...updated } : item));
         resetInputs();
         return;
       }
@@ -179,7 +183,7 @@ const handleOptionChange = (index, value) => {
 
       if (replyMsg.id) {
         formData.append("messageId", replyMsg.id);
-        if (isGroupConversation) formData.append("groupId", recipient.groupId);
+
       }
 
       if (audioBlob) formData.append("media", audioBlob, "voice-message.webm");
@@ -192,18 +196,20 @@ const handleOptionChange = (index, value) => {
           url,
           formData,
           (data) => {
+            clearTimeout(typingTimeout.current);
+            if (socket?.connected && !recipient.mock) socket.emit("typing", { conversationId: recipient._id, isTyping: false });
             if (data.error) {
               toast({ title: "Error", description: data.error, status: "error", duration: 5000 });
-              reject();
+              reject(new Error(data.error));
               return;
             }
-            setMessages(messages => [...messages, data]);
+            setMessages(messages => messages.some((item) => item._id === data._id) ? messages : [...messages, data]);
+            onConversationReady?.(data);
             resetInputs();
             resolve();
           },
           (err) => {
-            toast({ title: "Error", description: err, status: "error", duration: 5000 });
-            reject();
+            reject(new Error(err));
           }
         );
       });
@@ -230,26 +236,29 @@ const handleOptionChange = (index, value) => {
     setEditingText("");
   };
 
+  useEffect(() => () => {
+    clearTimeout(typingTimeout.current);
+  }, [socket, recipient._id]);
+
   const handleTyping = (e) => {
     setMessageText(e.target.value);
-    if (!socket || !recipient._id) return;
+    if (!socket?.connected || !recipient._id || recipient.mock) return;
 
     const now = Date.now();
-    if (now - lastTyping.current > 300) {
+    if (now - lastTyping.current > 900) {
       socket.emit("typing", {
         conversationId: recipient._id,
         isTyping: true,
-        isGroup: isGroupConversation,
       });
       lastTyping.current = now;
     }
 
     if (typingTimeout.current) clearTimeout(typingTimeout.current);
     typingTimeout.current = setTimeout(() => {
+      if (!socket.connected) return;
       socket.emit("typing", {
         conversationId: recipient._id,
         isTyping: false,
-        isGroup: isGroupConversation,
       });
     }, 1500);
   };
@@ -321,7 +330,7 @@ const handleOptionChange = (index, value) => {
             border="1px solid"
             borderColor={borderColor}
             borderRadius="md"
-            bg={useColorModeValue("gray.100", "gray.700")}
+            bg={replySurface}
           >
             📄 {file.name}
           </Box>
@@ -343,7 +352,7 @@ const handleOptionChange = (index, value) => {
   };
 
   return (
-    <Box w="full">
+    <Box w="full" className="thread-compose">
       {/* Upload Progress */}
       {uploadProgress > 0 && uploadProgress < 100 && (
         <UploadProgressBar progress={uploadProgress} fileName={mediaFile?.name || audioBlob ? "Audio" : ""} />
@@ -353,24 +362,24 @@ const handleOptionChange = (index, value) => {
       {isValidReply && (
         <Box
           p={2}
-          bg={useColorModeValue("gray.100", "gray.700")}
+          bg={replySurface}
           borderLeft="4px solid"
-          borderColor={useColorModeValue("green.500", "green.300")}
+          borderColor={replyAccent}
           borderRadius="md"
           position="relative"
-          boxShadow={useColorModeValue("sm", "md")}
+          boxShadow="sm"
         >
           <Flex direction="row" alignItems="center">
             <Box flex="1">
-              <Text fontSize="sm" fontWeight="bold" color={useColorModeValue("green.600", "green.200")} mb={1}>
+              <Text fontSize="sm" fontWeight="bold" color={replyAccent} mb={1}>
                 {replyMsg.sender || "You"}
               </Text>
-              <Text fontSize="sm" color={useColorModeValue("gray.800", "gray.100")} noOfLines={2}>
+              <Text fontSize="sm" color={replyText} noOfLines={2}>
                 {replyMsg.text}
               </Text>
             </Box>
             {replyMsg.media && (
-              <Box w="50px" h="50px" ml={2} borderRadius="md" overflow="hidden" boxShadow={useColorModeValue("md", "lg")}>
+              <Box w="50px" h="50px" ml={2} borderRadius="md" overflow="hidden" boxShadow="md">
                 {replyMsg.mediaType === "img" ? (
                   <Image src={replyMsg.media} alt="Thumbnail" objectFit="cover" w="full" h="full" />
                 ) : replyMsg.mediaType === "video" ? (
@@ -400,7 +409,7 @@ const handleOptionChange = (index, value) => {
             position="absolute"
             top={2}
             right={2}
-            size="lg"
+            size="sm"
             color="white"
             bg="gray.500"
             _hover={{ bg: "gray.600", transform: "scale(1.1)" }}
@@ -413,7 +422,7 @@ const handleOptionChange = (index, value) => {
       )}
 
       {/* Input Area */}
-      <MotionFlex
+      <MotionFlex as="form" onSubmit={handleSendMessage} className="message-editor"
         w="full"
         bg={bgColor}
         borderRadius="full"
@@ -439,24 +448,27 @@ const handleOptionChange = (index, value) => {
           icon={<BsFillImageFill />}
           aria-label="Upload Media"
           variant="ghost"
-          size="lg"
+          size="sm"
           _hover={{ bg: iconHoverColor }}
         />
 
-        <IconButton
+        {isGroupConversation && <IconButton type="button"
           icon={<MdPoll />}
           aria-label="Create Poll"
           variant="ghost"
-          size="lg"
+          size="sm"
           _hover={{ bg: iconHoverColor }}
           onClick={() => setIsPollModalOpen(true)}
-        />
+        />}
 
 
         <Input
           placeholder={editingMessageId
             ? "Edit your message..."
             : (isGroupConversation ? "Type a message to group..." : "Type a message")}
+          aria-label="Message"
+          maxLength={4000}
+          minW={0}
           value={messageText}
           onChange={handleTyping}
           flex={1}
@@ -466,10 +478,11 @@ const handleOptionChange = (index, value) => {
 
         <IconButton
           icon={isRecording ? <IoPause /> : <IoMic />}
+          type="button"
           onClick={handleAudioRecording}
           aria-label="Record"
           variant="ghost"
-          size="lg"
+          size="sm"
           colorScheme={isRecording ? "red" : "gray"}
           _hover={{ bg: iconHoverColor }}
         />
@@ -477,9 +490,10 @@ const handleOptionChange = (index, value) => {
         <IconButton
           icon={isSending ? <Spinner size="sm" /> : <IoSendSharp />}
           aria-label="Send"
-          onClick={handleSendMessage}
+          type="submit"
+          isDisabled={isSending || (!messageText.trim() && !audioBlob && !mediaFile)}
           variant="ghost"
-          size="lg"
+          size="sm"
           _hover={{ bg: iconHoverColor }}
         />
       </MotionFlex>

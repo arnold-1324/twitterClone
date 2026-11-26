@@ -1,8 +1,9 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
+import { FiPhone, FiVideo } from "react-icons/fi";
+import { CallContext } from "../context/call.js";
 import {
   Avatar,
-  Divider,
   Flex,
-  Image,
   Text,
   useColorModeValue,
   Skeleton,
@@ -14,7 +15,7 @@ import {
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import MessageInput from "./MessageInput";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import useShowToast from "../hooks/useShowToast";
 import {
   selectedConversationAtom,
@@ -27,7 +28,6 @@ import userAtom from "../atom/userAtom";
 import { useSocket } from "../context/SocketContext";
 import messageSound from "../assets/sounds/message.mp3";
 import { BiArrowBack } from "react-icons/bi";
-import { FaAnglesDown } from "react-icons/fa6";
 import { FaUsers, FaInfoCircle } from "react-icons/fa";
 import Message from "./Message";
 import TypingIndicator from "./TypingIndicator";
@@ -59,6 +59,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   const showToast = useShowToast();
 
   const selectedConversation = useRecoilValue(selectedConversationAtom);
+  const { _id: conversationId, mock, isGroup, groupId, userId } = selectedConversation;
   const [loadingMessages, setLoadingMessages] = useState(true);
   const setMessages = useSetRecoilState(messagesAtom);
   const messages = useRecoilValue(messagesAtom);
@@ -66,6 +67,11 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   const { socket } = useSocket();
   const setConversations = useSetRecoilState(conversationsAtom);
   const messageEndRef = useRef(null);
+  const historyRef = useRef(null);
+  const heightBefore = useRef(null);
+  const loadOlder = useRef(null);
+  const [older, setOlder] = useState("");
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [Msg, setSelectedMsg] = useRecoilState(selectedMsg);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [typingUsers, setTypingUsers] = useState([]);
@@ -89,10 +95,6 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     });
   };
 
-  const scrollToBottom = () => {
-    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   const updateMessageReactions = (messageId, updatedReactions) => {
     setMessages((prevMessages) =>
       prevMessages.map((message) => {
@@ -105,7 +107,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   };
 
   const handleDelete = async (messageId) => {
-    const response = await fetch("/api/messages/deleteforme", {
+    const response = await apiFetch("/api/messages/deleteforme", {
       method: "PUT",
       body: JSON.stringify({ messageId }),
       headers: { "Content-Type": "application/json" },
@@ -117,10 +119,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     }
 
     setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
-    showToast({
-      type: "success",
-      title: "Message deleted successfully",
-    });
+    showToast("Message deleted", undefined, "success");
   };
 
   const handleHighlightMessage = (messageId) => {
@@ -131,10 +130,10 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
   useEffect(() => {
     const handleNewMessage = (message) => {
       if (selectedConversation?._id === message.conversationId) {
-        setMessages((prev) => [...prev, message]);
+        setMessages((prev) => prev.some((item) => item._id === message._id) ? prev : [...prev, message]);
       }
       if (!document.hasFocus()) {
-        new Audio(messageSound).play();
+        void new Audio(messageSound).play().catch(() => {});
       }
       setConversations((prev) =>
         prev.map((conversation) =>
@@ -150,10 +149,10 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
     const handleNewGroupMessage = ({ message, groupId, conversationId }) => {
       if (selectedConversation?._id === conversationId) {
-        setMessages((prev) => [...prev, message]);
+        setMessages((prev) => prev.some((item) => item._id === message._id) ? prev : [...prev, message]);
       }
       if (!document.hasFocus()) {
-        new Audio(messageSound).play();
+        void new Audio(messageSound).play().catch(() => {});
       }
       setConversations((prev) =>
         prev.map((conversation) =>
@@ -187,95 +186,122 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
     socket.on("newGroupMessage", handleNewGroupMessage);
     socket.on("messageReactionUpdated", handleMessageReactionUpdated);
     socket.on("messageEdited", handleMessageEdited);
+    const handleMessageDeleted = ({ messageId }) => setMessages((items) => items.filter((item) => item._id !== messageId));
+    socket.on("messageDeleted", handleMessageDeleted);
 
     return () => {
       socket.off("newMessage", handleNewMessage);
       socket.off("newGroupMessage", handleNewGroupMessage);
       socket.off("messageReactionUpdated", handleMessageReactionUpdated);
       socket.off("messageEdited", handleMessageEdited);
+      socket.off("messageDeleted", handleMessageDeleted);
     };
   }, [socket, selectedConversation?._id]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    });
-    return () => clearTimeout(timer);
-  }, [setMessages]);
+  useLayoutEffect(() => {
+    const history = historyRef.current;
+    if (heightBefore.current && history) {
+      const { height, offset } = heightBefore.current;
+      history.scrollTop = offset + history.scrollHeight - height;
+      heightBefore.current = null;
+    } else messageEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages.length]);
 
   useEffect(() => {
-    const getMessages = async () => {
-      setLoadingMessages(true);
-      setMessages([]);
+    const controller = new AbortController();
+    const url = isGroup ? `/api/messages/group/${groupId}` : `/api/messages/${userId}`;
+    let currentRequest = 0;
+    let olderPending = false;
+    loadOlder.current = async (before) => {
+      if (!before || olderPending) return;
+      olderPending = true;
+      setLoadingOlder(true);
       try {
-        if (selectedConversation?.mock) return;
-
-        let url;
-        if (selectedConversation?.isGroup && selectedConversation?.groupId) {
-          url = `/api/messages/group/${selectedConversation.groupId}`;
-        } else {
-          url = `/api/messages/${selectedConversation.userId}`;
-        }
-
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.error) {
-          showToast("Error", data.error, "error");
-          return;
-        }
-        setMessages(data);
+        const response = await apiFetch(`${url}?before=${encodeURIComponent(before)}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("Could not load earlier messages.");
+        const data = await readApiJson(response);
+        if (controller.signal.aborted) return;
+        setOlder(response.headers.get("X-Next-Cursor") || "");
+        const history = historyRef.current;
+        if (history) heightBefore.current = { height: history.scrollHeight, offset: history.scrollTop };
+        setMessages((items) => [...data.filter((item) => !items.some(({ _id }) => _id === item._id)), ...items]);
       } catch (error) {
-        showToast("Error", error.message, "error");
+        if (!controller.signal.aborted) showToast("Error", error.message, "error");
       } finally {
-        setLoadingMessages(false);
+        olderPending = false;
+        if (!controller.signal.aborted) setLoadingOlder(false);
       }
     };
-    getMessages();
-  }, [
-    selectedConversation?.userId,
-    selectedConversation?.groupId,
-    selectedConversation?.isGroup,
-    selectedConversation?.mock,
-    setMessages,
-  ]);
+    async function load() {
+      const version = ++currentRequest;
+      try {
+        if (mock) return;
+        const response = await apiFetch(url, { signal: controller.signal });
+        const data = await readApiJson(response);
+        if (!response.ok) throw new Error(data.error || "Could not load messages.");
+        if (!controller.signal.aborted && version === currentRequest) {
+          if (version === 1) setOlder(response.headers.get("X-Next-Cursor") || "");
+          setMessages((current) => {
+            const history = new Map(data.map((message) => [message._id, message]));
+            for (const message of current) if (!history.has(message._id)) history.set(message._id, message);
+            return [...history.values()].sort((first, second) => new Date(first.createdAt) - new Date(second.createdAt));
+          });
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) showToast("Error", error.message, "error");
+      } finally {
+        if (!controller.signal.aborted && version === currentRequest) setLoadingMessages(false);
+      }
+    }
+    setMessages([]);
+    setOlder("");
+    setLoadingOlder(false);
+    heightBefore.current = null;
+    setLoadingMessages(true);
+    load();
+    socket?.on("connect", load);
+    return () => {
+      controller.abort();
+      socket?.off("connect", load);
+    };
+  }, [conversationId, mock, isGroup, groupId, userId, setMessages, showToast, socket]);
 
   useEffect(() => {
     if (!socket || !selectedConversation?._id) return;
-
-    const handleTypingStatus = ({ conversationId, typingUsers }) => {
-      if (conversationId === selectedConversation._id) {
-        const otherTypingUsers = (typingUsers || []).filter(
-          (id) => String(id) !== String(currentUser._id)
-        );
-        setTypingUsers(otherTypingUsers);
+    const expiry = new Map();
+    setTypingUsers([]);
+    function handleTypingStatus({ conversationId, userId, isTyping }) {
+      if (conversationId !== selectedConversation._id || userId === currentUser._id) return;
+      clearTimeout(expiry.get(userId));
+      expiry.delete(userId);
+      if (!isTyping) {
+        setTypingUsers((users) => users.filter((id) => id !== userId));
+        return;
       }
-    };
-
+      setTypingUsers((users) => users.includes(userId) ? users : [...users, userId]);
+      expiry.set(userId, setTimeout(() => {
+        expiry.delete(userId);
+        setTypingUsers((users) => users.filter((id) => id !== userId));
+      }, 2600));
+    }
     socket.on("typingStatus", handleTypingStatus);
-    return () => socket.off("typingStatus", handleTypingStatus);
+    return () => {
+      expiry.forEach(clearTimeout);
+      socket.off("typingStatus", handleTypingStatus);
+    };
   }, [socket, selectedConversation?._id, currentUser?._id]);
 
   const isGroupConversation = Boolean(selectedConversation?.isGroup);
+  const call = useContext(CallContext);
 
   return (
-    <Flex
-      flex="70"
-      bg={useColorModeValue("gray.900", "black")}
-      borderRadius="md"
-      p={4}
-      flexDirection="column"
-      maxW="496.22px"
-      maxH="537.05px"
-      overflow="hidden"
-      minWidth="340px"
-      width="100%"
-    >
-      {/* Header */}
-      <Flex w="full" h={12} alignItems="center" gap={2} mb={2}>
+    <Flex className="thread-container" direction="column" minW={0} minH={0} w="full">
+      <Flex className="thread-heading" alignItems="center" gap={3}>
         {isMobileView && (
           <IconButton
             icon={<BiArrowBack />}
             aria-label="Back to conversations"
+            className="thread-back"
             onClick={clearSelectedConversation}
             alignSelf="flex-start"
           />
@@ -295,9 +321,6 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                 Group
               </Badge>
             )}
-            {!isGroupConversation && (
-              <Image src="/verified.png" w={4} h={4} ml={1} />
-            )}
           </Text>
           {isGroupConversation &&
             Array.isArray(selectedConversation?.participants) && (
@@ -306,6 +329,12 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
               </Text>
             )}
         </Flex>
+        {!isGroupConversation && !selectedConversation.mock && call && <>
+          <IconButton icon={<FiPhone />} aria-label="Start voice call" variant="ghost" size="sm"
+            isDisabled={call.busy} onClick={() => call.start(selectedConversation, "audio")} />
+          <IconButton icon={<FiVideo />} aria-label="Start video call" variant="ghost" size="sm"
+            isDisabled={call.busy} onClick={() => call.start(selectedConversation, "video")} />
+        </>}
         {isGroupConversation && (
           <IconButton
             icon={<FaInfoCircle />}
@@ -317,32 +346,9 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
         )}
       </Flex>
 
-      <Divider />
-
-      {/* Messages List */}
-      <Flex
-        flexDir="column"
-        gap={14}
-        my={4}
-        p={2}
-        height="calc(400px - 2rem)"
-        overflowY="auto"
-        overflowX="hidden"
-        borderRadius="md"
-        bg={useColorModeValue("gray.800", "black")}
-        boxShadow="md"
-        width="100%"
-        minWidth="0"
-        sx={{
-          "::-webkit-scrollbar": { width: "8px" },
-          "::-webkit-scrollbar-track": { background: "#f1f1f1" },
-          "::-webkit-scrollbar-thumb": {
-            background: "#888",
-            borderRadius: "50%",
-          },
-          "::-webkit-scrollbar-thumb:hover": { background: "#555" },
-        }}
-      >
+      <Flex ref={historyRef} role="log" aria-label="Messages" className="thread-history" direction="column" gap={4} minH={0} overflowY="auto">
+        {older && <Button size="sm" alignSelf="center" flexShrink={0} isLoading={loadingOlder}
+          variant="outline" onClick={() => loadOlder.current?.(older)}>Load earlier messages</Button>}
         {loadingMessages
           ? [...Array(5)].map((_, i) => (
               <MotionFlex
@@ -387,7 +393,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
                     return (
                       <Flex
-                        id="message-box"
+                        id={`message-${message._id}`}
                         key={
                           message?._id ||
                           message?.messageId ||
@@ -401,14 +407,13 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                       >
                         <Box
                           bg={isHighlighted ? "green.900" : "transparent"}
-                          minW="120px"
+                          minW={0}
                           maxW={
                             message?.audio ? "100%" : { base: "90%", md: "75%" }
                           }
                           width={message?.audio ? "100%" : undefined}
                           borderRadius="lg"
                           wordBreak="break-word"
-                          boxShadow="sm"
                           px={1}
                           py={1}
                           display="inline-block"
@@ -428,7 +433,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                             setEditingText={setEditingText}
                             onEditSubmit={async (msgId, newText) => {
                               try {
-                                const res = await fetch("/api/messages/edit", {
+                                const res = await apiFetch("/api/messages/edit", {
                                   method: "PUT",
                                   headers: {
                                     "Content-Type": "application/json",
@@ -444,7 +449,7 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
                                 if (!res.ok)
                                   throw new Error("Failed to edit message");
 
-                                const updated = await res.json();
+                                const updated = await readApiJson(res);
                                 setMessages((prev) =>
                                   prev.map((m) =>
                                     String(m?._id) === String(updated?._id)
@@ -488,22 +493,11 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
             )}
 
         <div ref={messageEndRef} />
-        <IconButton
-          onClick={scrollToBottom}
-          aria-label="Scroll to bottom"
-          position="absolute"
-          alignSelf={"flex-end"}
-          top={"430px"}
-          rounded={"full"}
-          bg={useColorModeValue("gray.800", "gray.700")}
-        >
-          <FaAnglesDown size={24} />
-        </IconButton>
       </Flex>
 
       {/* Typing Indicator */}
       {typingUsers.length > 0 && (
-        <Box w="100%" px={2} pb={1} position="relative">
+        <Box className="thread-typing" role="status">
           <TypingIndicator
             usernames={
               isGroupConversation
@@ -522,6 +516,15 @@ const MessageContainer = ({ isMobileView, setSelectedConversation }) => {
 
       {/* Input */}
       <MessageInput
+        onConversationReady={(message) => {
+          if (selectedConversation.mock) {
+            const chat = { ...selectedConversation, _id: message.conversationId, mock: false, lastMessage: message };
+            setSelectedConversation(chat);
+            setConversations((current) => [chat, ...current.filter(({ _id }) => _id !== chat._id)]);
+          } else {
+            setConversations((current) => current.map((chat) => chat._id === message.conversationId ? { ...chat, lastMessage: message } : chat));
+          }
+        }}
         setMessages={setMessages}
         editingMessageId={editingMessageId}
         setEditingMessageId={setEditingMessageId}

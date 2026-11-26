@@ -27,3 +27,6 @@ redis-data/dump.rdb
 
 .env
 .vercel
+
+# Uploaded media in the default local store
+.dayline-media/

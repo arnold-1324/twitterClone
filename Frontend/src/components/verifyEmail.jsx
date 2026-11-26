@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 'use client'
 
 import {
@@ -25,7 +26,7 @@ export default function VerifyEmail() {
 
   const handleVerifyEmail = async () => {
     try {
-      const res = await fetch("/api/auth/verify-email", {
+      const res = await apiFetch("/api/auth/verify-email", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -33,7 +34,7 @@ export default function VerifyEmail() {
         body: JSON.stringify({ verificationCode })
       });
 
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (data.error) {
         showToast("Error", data.error, "error");
         return;

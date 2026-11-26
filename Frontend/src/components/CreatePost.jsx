@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { AddIcon } from "@chakra-ui/icons";
 import {
     Button,
@@ -5,209 +6,156 @@ import {
     Flex,
     FormControl,
     Image,
+    IconButton,
     Input,
     Modal,
-    ModalBody,
     ModalCloseButton,
     ModalContent,
-    ModalFooter,
     ModalHeader,
     ModalOverlay,
-    Spinner,
     Text,
     Textarea,
     useColorModeValue,
     useDisclosure,
 } from "@chakra-ui/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BsFillImageFill } from "react-icons/bs";
 import { useRecoilState, useRecoilValue } from "recoil";
 import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
 import postsAtom from "../atom/postsAtom";
-import { useParams } from "react-router-dom";
+import { matchPath, useLocation, useNavigate } from "react-router-dom";
 
-const MAX_CHAR = 500;
+const MAX_CHAR = 280;
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
-const CreatePost = () => {
-    const [mediaUrl, setMediaUrl] = useState("");
+const CreatePost = ({ inline = false, page = false, onCreated }) => {
+    const [files, setFiles] = useState([]);
+    const [previews, setPreviews] = useState([]);
     const { isOpen, onOpen, onClose } = useDisclosure();
     const fileRef = useRef(null);
     const [postText, setPostText] = useState("");
-    const [remainingChar, setRemainingChar] = useState(MAX_CHAR);
     const user = useRecoilValue(userAtom);
     const showToast = useShowToast();
     const [loading, setLoading] = useState(false);
-    const [posts, setPosts] = useRecoilState(postsAtom);
-    const { username } = useParams();
+    const [, setPosts] = useRecoilState(postsAtom);
+    const { pathname, search } = useLocation();
+    const [kind, setKind] = useState(() => new URLSearchParams(search).get("type") === "reel" ? "reel" : "post");
+    const reel = kind === "reel";
 
-    const handleMediaChange = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => setMediaUrl(reader.result);
-            reader.readAsDataURL(file);
+    useEffect(() => {
+        const urls = files.map((file) => URL.createObjectURL(file));
+        setPreviews(urls);
+        return () => urls.forEach((url) => URL.revokeObjectURL(url));
+    }, [files]);
+    const navigate = useNavigate();
+    const panelColor = useColorModeValue("white", "gray.800");
+    const profile = matchPath("/:username", pathname);
+
+    function handleMediaChange(event) {
+        const added = Array.from(event.target.files);
+        event.target.value = "";
+        if (!added.length) return;
+        const allowed = reel ? ["video/mp4", "video/webm"] : ["image/jpeg", "image/png", "image/gif", "image/webp"];
+        const max = reel ? 20 * 1024 * 1024 : MAX_IMAGE_BYTES;
+        if (added.some((file) => !allowed.includes(file.type) || file.size > max) || (!reel && files.length + added.length > 6)) {
+            showToast("Invalid media", reel ? "Choose one MP4 or WebM up to 20 MB." : "Choose up to six JPEG, PNG, GIF or WebP photos up to 4 MB each.", "error");
+            return;
         }
-    };
+        setFiles((current) => reel ? added.slice(0, 1) : [...current, ...added].slice(0, 6));
+    }
 
-    const handleCloseMedia = () => {
-        setMediaUrl("");
-        fileRef.current.value = null; // Reset the file input
-    };
-
-    const handleTextChange = (e) => {
-        const inputText = e.target.value;
-        if (inputText.length > MAX_CHAR) {
-            setPostText(inputText.slice(0, MAX_CHAR));
-            setRemainingChar(0);
-        } else {
-            setPostText(inputText);
-            setRemainingChar(MAX_CHAR - inputText.length);
-        }
-    };
+    function changeKind(event) {
+        setKind(event.target.value);
+        setFiles([]);
+    }
 
     const handleCreatePost = async (e) => {
         e.preventDefault();
-        if (loading) return;
+        if (loading || (!files.length && (reel || !postText.trim()))) return;
         setLoading(true);
 
         try {
             const formData = new FormData();
             formData.append("caption", postText);
-            const fileInput = fileRef.current.files[0];
-            if (fileInput) formData.append("image", fileInput);
+            files.forEach((file) => formData.append(reel ? "video" : "media", file));
 
-            const res = await fetch("/api/posts/create", {
+            const res = await apiFetch(reel ? "/api/posts/reels" : "/api/posts/create", {
                 method: "POST",
                 body: formData,
             });
 
-            const data = await res.json();
-            if (data.error) {
-                showToast("Error", data.error, "error");
+            const data = await readApiJson(res);
+            if (!res.ok) {
+                showToast("Error", data.error || "Could not publish your post.", "error");
                 return;
             }
             showToast("Success", "Post created successfully", "success");
-            if (username === user.username) setPosts([data, ...posts]);
+            if (!reel && (pathname === "/" || profile?.params.username === user.username)) {
+                setPosts((current) => [{ ...data, postedBy: user }, ...current]);
+            }
+            onCreated?.();
             setPostText("");
-            setMediaUrl("");
-            onClose();
+            setFiles([]);
+            if (page || reel) navigate(reel ? "/reels" : "/");
+            else onClose();
         } catch (error) {
-            showToast("Error creating post", "error");
+            showToast("Error creating post", "Please try again.", "error");
         } finally {
             setLoading(false);
         }
     };
 
+    const composer = (
+        <form className="post-form" onSubmit={handleCreatePost}>
+            <label className="post-kind">
+                <span>Publish as</span>
+                <select value={kind} onChange={changeKind} disabled={loading}>
+                    <option value="post">Post</option><option value="reel">Reel</option>
+                </select>
+            </label>
+            <FormControl>
+                <Textarea placeholder="What would you like to share? Add #topics to help people find it." aria-label="Post caption"
+                    maxLength={MAX_CHAR} onChange={(event) => setPostText(event.target.value)}
+                    value={postText} rows={page ? 6 : 4} />
+                <Text fontSize="xs" textAlign="right" mt={2}>{postText.length}/{MAX_CHAR}</Text>
+                <Input type="file" multiple={!reel} accept={reel ? "video/mp4,video/webm" : "image/jpeg,image/png,image/gif,image/webp"}
+                    hidden ref={fileRef} onChange={handleMediaChange} />
+                <Button type="button" variant="ghost" leftIcon={<BsFillImageFill />}
+                    onClick={() => fileRef.current.click()}>{reel ? "Attach video" : "Add photos"}</Button>
+            </FormControl>
+            {previews.length > 0 && <div className="composer-media">
+                {previews.map((url, index) => <div key={url}>
+                    {reel ? <video src={url} controls playsInline preload="metadata" />
+                        : <Image src={url} alt={`Selected photo ${index + 1}`} />}
+                    <CloseButton type="button" aria-label={`Remove attachment ${index + 1}`}
+                        onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} />
+                </div>)}
+            </div>}
+            <Flex mt={5} gap={2} justify="flex-end">
+                <Button type="button" onClick={page ? () => navigate("/") : onClose} variant="ghost">Cancel</Button>
+                <Button type="submit" className="dayline-primary" isDisabled={!files.length && (reel || !postText.trim())} isLoading={loading}>Post</Button>
+            </Flex>
+        </form>
+    );
+
+    if (page) {
+        return <main className="dayline-tool-page"><h1>Create a post</h1><div className="social-panel">{composer}</div></main>;
+    }
     return (
         <>
-            <Button
-                position="fixed"
-                bottom={10}
-                right={5}
-                bg={useColorModeValue("gray.300", "gray.dark")}
-                onClick={onOpen}
-                size={{ base: "sm", sm: "md" }}
-                transition="transform 0.3s ease, box-shadow 0.3s ease"
-                _hover={{
-                    transform: "scale(1.15)",
-                    boxShadow: "0px 5px 15px rgba(0, 0, 0, 0.2)",
-                }}
-            >
-                <AddIcon />
-            </Button>
-
+            {inline ? (
+                <Button className="feed-compose-button" onClick={onOpen} leftIcon={<AddIcon />}>Create post</Button>
+            ) : (
+                <IconButton className="feed-compose-button floating-compose" aria-label="Create post"
+                    onClick={onOpen} icon={<AddIcon />} />
+            )}
             <Modal isOpen={isOpen} onClose={onClose}>
                 <ModalOverlay />
-                <ModalContent
-                    animation="fadeIn 0.4s ease-out"
-                    bg={useColorModeValue("white", "gray.800")}
-                    transform="scale(1)"
-                    transition="transform 0.3s ease"
-                    _hover={{
-                        transform: "scale(1.02)",
-                    }}
-                >
-                    <ModalHeader>Create Post</ModalHeader>
+                <ModalContent bg={panelColor}>
+                    <ModalHeader>Create a post</ModalHeader>
                     <ModalCloseButton />
-                    <ModalBody pb={6}>
-                        <FormControl>
-                            <Textarea
-                                placeholder="Post content goes here.."
-                                onChange={handleTextChange}
-                                value={postText}
-                                bg={useColorModeValue("gray.50", "gray.700")}
-                                borderRadius="md"
-                                _hover={{ borderColor: "blue.400" }}
-                                _focus={{ boxShadow: "0 0 8px blue" }}
-                                transition="box-shadow 0.2s ease"
-                            />
-                            <Text
-                                fontSize="xs"
-                                fontWeight="bold"
-                                textAlign="right"
-                                mt="1"
-                                color="gray.800"
-                            >
-                                {remainingChar}/{MAX_CHAR}
-                            </Text>
-
-                            <Input
-                                type="file"
-                                hidden
-                                ref={fileRef}
-                                onChange={handleMediaChange}
-                            />
-
-                            <BsFillImageFill
-                                style={{ marginLeft: "5px", cursor: "pointer" }}
-                                size={16}
-                                onClick={() => fileRef.current.click()}
-                            />
-                        </FormControl>
-
-                        {mediaUrl && (
-                            <Flex mt={5} w="full" position="relative">
-                                <Image
-                                    src={mediaUrl}
-                                    alt="Selected"
-                                    borderRadius="md"
-                                    boxShadow="md"
-                                    animation="fadeIn 0.4s ease-out"
-                                />
-                                <CloseButton
-                                    onClick={handleCloseMedia}
-                                    bg="gray.800"
-                                    position="absolute"
-                                    top={2}
-                                    right={2}
-                                />
-                            </Flex>
-                        )}
-                    </ModalBody>
-
-                    <ModalFooter>
-                        <Button
-                            colorScheme="blue"
-                            mr={3}
-                            onClick={handleCreatePost}
-                            isLoading={loading}
-                            spinner={<Spinner color="white" />}
-                            _hover={{
-                                bg: "blue.600",
-                                transform: "scale(1.05)",
-                            }}
-                            _loading={{
-                                animation: "pulse 1s infinite",
-                                bg: "blue.400",
-                            }}
-                        >
-                            Post
-                        </Button>
-                        <Button onClick={onClose} variant="ghost">
-                            Cancel
-                        </Button>
-                    </ModalFooter>
+                    {composer}
                 </ModalContent>
             </Modal>
         </>

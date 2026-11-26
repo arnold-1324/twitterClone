@@ -1,77 +1,40 @@
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import multer from 'multer';
-import dotenv from "dotenv";
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const envPath = path.resolve(__dirname, '../../../.env');
-if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-} else {
-  dotenv.config();
-}
+import multer from "multer";
 
 const storage = multer.memoryStorage();
-export const upload = multer({ storage: storage });
-
-const Region = process.env.REGION;
-const accessKey = process.env.ACCESS_KEY;
-const secretAccessKey = process.env.SECRET_KEY;
-const endpoint = process.env.S3_ENDPOINT || "https://t3.storageapi.dev";
-const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true" || endpoint !== `https://s3.${Region}.amazonaws.com`;
-
-export const s3 = new S3Client({
-  region: Region,
-  endpoint,
-  forcePathStyle,
-  credentials: {
-    accessKeyId: accessKey,
-    secretAccessKey: secretAccessKey,
+export const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024, files: 1, fields: 30 } });
+export const uploadPostImage = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 12, fieldSize: 16 * 1024, parts: 14 },
+  fileFilter(_req, file, callback) {
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.mimetype)) {
+      return callback(Object.assign(new Error("Choose a JPEG, PNG, GIF or WebP photo."), { status: 415 }));
+    }
+    return callback(null, true);
   },
 });
 
-export const getS3PublicUrl = (key) => {
-  const bucketName = process.env.BUCKET_NAME;
-  if (!bucketName) {
-    throw new Error("Missing BUCKET_NAME environment variable");
-  }
+export const uploadCarousel = multer({
+  storage, limits: { fileSize: 4 * 1024 * 1024, files: 6, fields: 2, parts: 8, fieldSize: 4096 },
+}).fields([{ name: "image", maxCount: 1 }, { name: "media", maxCount: 6 }]);
 
-  const normalizedEndpoint = endpoint.replace(/\/+$/, "");
+export const uploadReel = multer({
+  storage, limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 2, parts: 3, fieldSize: 4096 },
+}).single("video");
 
-  if (forcePathStyle) {
-    return `${normalizedEndpoint}/${bucketName}/${key}`;
-  }
+export function isImage({ buffer, mimetype }) {
+  const starts = (hex) => buffer.subarray(0, hex.length / 2).toString("hex") === hex;
+  return (mimetype === "image/jpeg" && starts("ffd8ff"))
+    || (mimetype === "image/png" && starts("89504e470d0a1a0a"))
+    || (mimetype === "image/gif" && /^GIF8[79]a$/.test(buffer.subarray(0, 6).toString("ascii")))
+    || (mimetype === "image/webp" && starts("52494646") && buffer.subarray(8, 12).toString("ascii") === "WEBP");
+}
 
-  const parsed = new URL(normalizedEndpoint);
-  return `https://${bucketName}.${parsed.host}/${key}`;
-};
+export function validateImageBytes(req, res, next) {
+  if (!req.file || isImage(req.file)) return next();
+  return res.status(415).json({ error: "The selected file does not match its image format." });
+}
 
-export const getPresignedUrl = async (key, expiresIn = 3600) => {
-  if (!key) return "";
-  const bucketName = process.env.BUCKET_NAME;
-  if (!bucketName) {
-    throw new Error("Missing BUCKET_NAME environment variable");
-  }
-
-  const command = new GetObjectCommand({
-    Bucket: bucketName,
-    Key: key,
-  });
-  return await getSignedUrl(s3, command, { expiresIn });
-};
-
-export const generateFileName = (bytes = 32) => crypto.randomBytes(bytes).toString("hex");
-
-
-
-
-
-
-
-
-
+export function isVideo({ buffer, mimetype }) {
+  return (mimetype === "video/mp4" && buffer.subarray(4, 8).toString("ascii") === "ftyp")
+    || (mimetype === "video/webm" && buffer.subarray(0, 4).toString("hex") === "1a45dfa3");
+}

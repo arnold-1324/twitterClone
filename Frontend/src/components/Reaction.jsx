@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import React, { useState, useEffect } from "react";
 import { Box, useColorModeValue } from "@chakra-ui/react";
 import { FaSmile } from "react-icons/fa";
@@ -28,7 +29,7 @@ const Reaction = ({ messageId, initialReactions = [], onUpdateReactions }) => {
     try {
      // console.log(`Sending reaction "${emoji}" for message ID: ${messageId}`); 
 
-      const response = await fetch("/api/messages/reaction", {
+      const response = await apiFetch("/api/messages/reaction", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messageId, emoji }),
@@ -36,7 +37,7 @@ const Reaction = ({ messageId, initialReactions = [], onUpdateReactions }) => {
 
       if (!response.ok) throw new Error("Error reacting to message");
 
-      const updatedMessage = await response.json();
+      const updatedMessage = await readApiJson(response);
 
      // console.log("API Response:", updatedMessage); 
       showToast("Success", "Reaction added", "success");

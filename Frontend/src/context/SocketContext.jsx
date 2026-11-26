@@ -1,3 +1,4 @@
+import { refreshSession } from "../lib/apiFetch.js";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRecoilValue } from "recoil";
 import io from "socket.io-client";
@@ -18,35 +19,38 @@ export const SocketContextProvider = ({ children }) => {
 	useEffect(() => {
 		if (!user?._id) return;
 
-		// Prefer explicit socket URL via env var `VITE_SOCKET_URL`,
-		// fallback to localhost:5000 when running locally.
-		const defaultLocal = `${window.location.protocol}//${window.location.hostname}:5000`;
-		const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === "localhost" ? defaultLocal : "/");
-
-		const socket = io(SOCKET_URL, {
-			query: { userId: user._id },
-			transports: ["websocket"],
+		const connection = io(import.meta.env.VITE_SOCKET_URL || "/", { withCredentials: true });
+		connection.on("getOnlineUsers", setOnlineUsers);
+		connection.on("presenceChanged", ({ online, offline }) => {
+			setOnlineUsers((current) => {
+				const members = new Set([...current, ...online]);
+				offline.forEach((id) => members.delete(id));
+				return [...members];
+			});
 		});
-
-		setSocket(socket);
-
-		socket.on("getOnlineUsers", (users) => {
-			setOnlineUsers(users);
+		let disposed = false;
+		let authRetry = false;
+		connection.on("connect", () => { authRetry = false; });
+		async function reconnect() {
+			if (authRetry || disposed) return;
+			authRetry = true;
+			if (!disposed && await refreshSession().catch(() => false) && !disposed) connection.connect();
+		}
+		connection.on("disconnect", (reason) => {
+			setOnlineUsers([]);
+			if (reason === "io server disconnect") void reconnect();
 		});
-
+		connection.on("connect_error", (error) => {
+			if (error.message === "Authentication required") void reconnect();
+		});
+		setSocket(connection);
 		return () => {
-			socket.disconnect();
+			disposed = true;
+			connection.disconnect();
+			setSocket(null);
+			setOnlineUsers([]);
 		};
 	}, [user?._id]);
-
-	useEffect(() => {
-		if (!socket || !user?._id) return;
-		const handleReconnect = () => {
-			socket.emit("setUserId", user._id);
-		};
-		socket.on("reconnect", handleReconnect);
-		return () => socket.off("reconnect", handleReconnect);
-	}, [socket, user?._id]);
 
 	return <SocketContext.Provider value={{ socket, onlineUsers }}>{children}</SocketContext.Provider>;
 };

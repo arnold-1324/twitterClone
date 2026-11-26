@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import React, { useState, useEffect } from "react";
 import {
   Modal,
@@ -49,6 +50,7 @@ const GroupManagement = ({ isOpen, onClose }) => {
   const showToast = useShowToast();
   const toast = useToast();
 
+  const rowSurface = useColorModeValue("gray.50", "gray.700");
   const bgColor = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.600");
 
@@ -65,8 +67,8 @@ const GroupManagement = ({ isOpen, onClose }) => {
 
   const fetchGroupDetails = async () => {
     try {
-      const res = await fetch(`/api/groups/${selectedConversation.groupId}`);
-      const data = await res.json();
+      const res = await apiFetch(`/api/groups/${selectedConversation.groupId}`);
+      const data = await readApiJson(res);
       
       if (data.error) {
         showToast("Error", data.error, "error");
@@ -109,12 +111,12 @@ const GroupManagement = ({ isOpen, onClose }) => {
         formData.append("profileImage", selectedImage);
       }
 
-      const res = await fetch(`/api/groups/${selectedConversation.groupId}`, {
+      const res = await apiFetch(`/api/groups/${selectedConversation.groupId}`, {
         method: "PUT",
         body: formData,
       });
 
-      const data = await res.json();
+      const data = await readApiJson(res);
       
       if (data.error) {
         showToast("Error", data.error, "error");
@@ -271,7 +273,7 @@ const GroupManagement = ({ isOpen, onClose }) => {
             {/* Group Stats */}
             <Box>
               <Text fontWeight="bold" mb={2}>Group Statistics</Text>
-              <HStack justify="space-between" p={3} bg={useColorModeValue("gray.50", "gray.700")} borderRadius="md">
+              <HStack justify="space-between" p={3} bg={rowSurface} borderRadius="md">
                 <Text>Members</Text>
                 <Badge colorScheme="teal">{groupData.members?.length || 0}</Badge>
               </HStack>
@@ -287,7 +289,7 @@ const GroupManagement = ({ isOpen, onClose }) => {
                   const role = getMemberRole(member._id);
                   return (
                     <ListItem key={member._id}>
-                      <HStack spacing={3} p={2} borderRadius="md" _hover={{ bg: useColorModeValue("gray.50", "gray.700") }}>
+                      <HStack spacing={3} p={2} borderRadius="md" _hover={{ bg: rowSurface }}>
                         <Avatar size="sm" src={member.profileImg} name={member.username} />
                         <Box flex="1">
                           <HStack>

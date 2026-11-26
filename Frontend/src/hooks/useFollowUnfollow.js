@@ -1,66 +1,37 @@
-import { useEffect, useState } from "react";
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
+import { useState } from "react";
+import { useRecoilState } from "recoil";
 import useShowToast from "./useShowToast";
 import userAtom from "../atom/userAtom";
-import { useRecoilValue } from "recoil";
 
-const useFollowUnfollow = (user) => {
-  const currentUser = useRecoilValue(userAtom);
-  const [following, setFollowing] = useState(user.followers.includes(currentUser?._id));
+export default function useFollowUnfollow(user) {
+  const [currentUser, setUser] = useRecoilState(userAtom);
+  const following = Boolean(currentUser?.following?.includes(user._id));
   const [updating, setUpdating] = useState(false);
   const showToast = useShowToast();
 
-  useEffect(() => {
-   
-    setFollowing(user.followers.includes(currentUser?._id));
-  }, [user, currentUser]);
-
-  const handleFollowUnfollow = async () => {
-    if (!currentUser) {
-      showToast("Error", "Please log in to follow", "error");
-      return;
-    }
-    if (updating) return;
-
+  async function handleFollowUnfollow() {
+    if (!currentUser || updating) return;
     setUpdating(true);
     try {
-      const res = await fetch(`/api/users/follow/${user._id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const response = await apiFetch(`/api/users/follow/${user._id}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ following: !following }),
       });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to update follow status");
-      }
-
-      const data = await res.json();
-
-      if (following) {
-        showToast("Success", `Unfollowed ${user.name}`, "success");
-        setFollowing(false);
-      } else {
-        showToast("Success", `Followed ${user.name}`, "success");
-        setFollowing(true);
-      }
-
-     
-      const updatedFollowers = following
-        ? user.followers.filter(follower => follower !== currentUser?._id)
-        : [...user.followers, currentUser?._id];
-
-      
-
-      console.log(data);
+      const result = await readApiJson(response);
+      if (!response.ok) throw new Error(result.error || "Failed to update follow status.");
+      setUser((account) => {
+        if (account?._id !== currentUser._id) return account;
+        const ids = new Set(account.following ?? []);
+        if (result.following) ids.add(user._id);
+        else ids.delete(user._id);
+        return { ...account, following: [...ids] };
+      });
     } catch (error) {
-      showToast("Error", error.message || "An unexpected error occurred", "error");
+      showToast("Could not update follow status", error.message, "error");
     } finally {
       setUpdating(false);
     }
-  };
+  }
 
   return { handleFollowUnfollow, updating, following };
-};
-
-export default useFollowUnfollow;
+}

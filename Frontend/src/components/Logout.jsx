@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { Button } from "@chakra-ui/react"
 import { useRecoilState } from "recoil";
 import userAtom from "../atom/userAtom";
@@ -11,13 +12,13 @@ const Logout = () => {
     const handleLogout = async()=>{
         //debugger
         try {
-            const res =await fetch("/api/auth/logout",{
+            const res =await apiFetch("/api/auth/logout",{
                 method:"POST",
                 headers:{
                     "Content-Type":"application/json",
                 },
             })
-            const data = await res.json();
+            const data = await readApiJson(res);
             console.log(data);
             if(data.error){
                 showToast("Error",data.error,"error");

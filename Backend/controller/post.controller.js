@@ -1,19 +1,15 @@
-import {
-    s3,
-    generateFileName
-} from "../lib/utils/uploader.js";
-
+import { isImage, isVideo } from "../lib/utils/uploader.js";
+import { extractTopics, recentInterests, scorePost } from "../lib/recommendations.js";
+import { presentProfile } from "../lib/utils/presentProfile.js";
+import { messageAudience, saveConversationPreview } from "./messageController.js";
+import { getIO, getRecipientRoom } from "../socket/socket.js";
+import { postCache } from "../lib/readCache.js";
+import { beforeCursor, sendCursor } from "../lib/cursorPage.js";
+import { presentPost } from "../lib/utils/presentPost.js";
+import { mediaUrl, removeMedia, saveMedia } from "../lib/mediaStore.js";
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
-
-import {
-    PutObjectCommand,
-    DeleteObjectCommand,
-    GetObjectCommand
-} from "@aws-sdk/client-s3";
-
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import mongoose from "mongoose";
 import Message from "../models/message.model.js";
@@ -23,63 +19,9 @@ import { encrypt } from "../lib/utils/Msg_encryption/encrypt.js";
 import { redisClient } from "../Redis.js";
 
 
-// ============================================================
-// S3 HELPERS
-// ============================================================
-
-/**
- * Generate a temporary pre-signed URL for an S3 object.
- *
- * @param {string} key - S3 object key
- * @param {number} expiresIn - URL expiry in seconds
- * @returns {Promise<string|null>}
- */
-const getPresignedUrl = async (key, expiresIn = 3600) => {
-    if (!key) {
-        return null;
-    }
-
-    const command = new GetObjectCommand({
-        Bucket: process.env.BUCKET_NAME,
-        Key: key
-    });
-
-    return await getSignedUrl(
-        s3,
-        command,
-        {
-            expiresIn
-        }
-    );
-};
-
-
-/**
- * Add a pre-signed URL to a post.
- */
-const addPresignedUrlToPost = async (post) => {
-    const postData = post.toObject
-        ? post.toObject()
-        : { ...post };
-
-    if (postData.images) {
-        postData.imageUrl = await getPresignedUrl(
-            postData.images
-        );
-    } else {
-        postData.imageUrl = null;
-    }
-
-    return postData;
-};
-
-
-/**
- * Add pre-signed URLs to multiple posts.
- */
-const addPresignedUrlsToPosts = async (posts) => {
+const presentPosts = async (posts) => {
     return await Promise.all(
-        posts.map(post => addPresignedUrlToPost(post))
+        posts.map(post => presentPost(post))
     );
 };
 
@@ -88,199 +30,129 @@ const addPresignedUrlsToPosts = async (posts) => {
 // CREATE NEW POST
 // ============================================================
 
-export const NewPost = async (req, res) => {
-    try {
-
-        const { caption } = req.body;
-        const userId = req.user._id;
-
-        let fileKey = "";
-
-        // ----------------------------------------------------
-        // Upload file/image to S3
-        // ----------------------------------------------------
-
-        if (req.file) {
-
-            const fileName = generateFileName();
-
-            const params = {
-                Bucket: process.env.BUCKET_NAME,
-
-                // This is the key stored in MongoDB
-                Key: fileName,
-
-                Body: req.file.buffer,
-
-                ContentType: req.file.mimetype
-
-                // IMPORTANT:
-                // Do NOT use ACL: "public-read"
-                //
-                // The S3 object should remain private.
-            };
-
-            const command = new PutObjectCommand(params);
-
-            await s3.send(command);
-
-            fileKey = fileName;
-        }
-
-
-        // ----------------------------------------------------
-        // Create Post
-        // ----------------------------------------------------
-
-        const newPost = new Post({
-            postedBy: userId,
-            caption,
-            images: fileKey
-        });
-
-
-        await newPost.save();
-
-
-        // ----------------------------------------------------
-        // Return post + temporary signed URL
-        // ----------------------------------------------------
-
-        const postData = await addPresignedUrlToPost(
-            newPost
-        );
-
-
-        return res.status(201).json(postData);
-
-    } catch (error) {
-
-        console.error(
-            "Error in NewPost:",
-            error
-        );
-
-        return res.status(500).json({
-            error: error.message
-        });
+async function publishPost(req, res, next, kind) {
+    const reel = kind === "reel";
+    const caption = typeof req.body.caption === "string" ? req.body.caption.trim() : "";
+    const files = reel ? (req.file ? [req.file] : []) : [...(req.files?.image ?? []), ...(req.files?.media ?? [])];
+    if (caption.length > 280 || (!files.length && (reel || !caption))) {
+        return res.status(400).json({ error: reel ? "Choose a video and use up to 280 caption characters." : "Add a caption or photos." });
     }
-};
+    if (!files.every(reel ? isVideo : isImage)) {
+        return res.status(415).json({ error: reel ? "Choose an MP4 or WebM video." : "Choose JPEG, PNG, GIF or WebP photos." });
+    }
+    const media = [];
+    let saved;
+    try {
+        for (const file of files) {
+            const { key, kind: type } = await saveMedia(file, { kind: reel ? "video" : "image" });
+            media.push({ key, type });
+        }
+        saved = await Post.create({
+            postedBy: req.user._id, caption, kind, topics: extractTopics(caption), media,
+            images: reel ? "" : media[0]?.key ?? "",
+        });
+        return res.status(201).json(await presentPost(saved));
+    } catch (error) {
+        if (!saved) await removeMedia(media.map(({ key }) => key));
+        return next(error);
+    }
+}
 
+export const NewPost = (req, res, next) => publishPost(req, res, next, "post");
+export const createReel = (req, res, next) => publishPost(req, res, next, "reel");
 
-// ============================================================
-// LIKE / UNLIKE POST
-// ============================================================
+export function recommendations(kind) {
+    return async (req, res, next) => {
+        try {
+            const filter = kind === "reel" ? { kind } : { postedBy: { $ne: req.user._id }, kind: { $ne: "reel" } };
+            const [interest, candidates] = await Promise.all([
+                recentInterests(req.user),
+                Post.find(filter).sort({ createdAt: -1, _id: -1 }).limit(120).maxTimeMS(3000).lean(),
+            ]);
+            const now = Date.now();
+            const chosen = candidates.map((post) => ({ post, score: scorePost(post, interest, now) }))
+                .sort((a, b) => b.score - a.score).slice(0, 24).map(({ post }) => post);
+            await Post.populate(chosen, [
+                { path: "postedBy", select: "username fullName profileImg" },
+                { path: "likes", select: "username profileImg" },
+            ]);
+            return res.json(await presentPosts(chosen));
+        } catch (error) {
+            return next(error);
+        }
+    };
+}
+
+export async function getSavedIds(req, res, next) {
+    try {
+        const user = await User.findById(req.user._id).select("savedPosts").lean();
+        return res.json(user?.savedPosts ?? []);
+    } catch (error) {
+        return next(error);
+    }
+}
+
+export async function listSaved(req, res, next) {
+    try {
+        const user = await User.findById(req.user._id).select("savedPosts").lean();
+        const ids = (user?.savedPosts ?? []).slice().reverse();
+        const before = req.query.before;
+        const offset = before === undefined ? 0 : ids.findIndex((id) => String(id) === before) + 1;
+        if (before !== undefined && offset === 0) return res.status(400).json({ error: "Invalid saved page cursor." });
+        const batch = ids.slice(offset, offset + 25);
+        if (offset + batch.length < ids.length) res.set("X-Next-Cursor", String(batch.at(-1)));
+        const posts = await Post.find({ _id: { $in: batch } }).maxTimeMS(3000)
+            .populate("postedBy", "username fullName profileImg").populate("likes", "username profileImg").lean();
+        const byId = new Map(posts.map((post) => [String(post._id), post]));
+        return res.json(await presentPosts(batch.map((id) => byId.get(String(id))).filter(Boolean)));
+    } catch (error) {
+        return next(error);
+    }
+}
+
+export async function savePost(req, res, next) {
+    const { id } = req.params;
+    const { saved } = req.body;
+    if (!mongoose.isObjectIdOrHexString(id) || typeof saved !== "boolean") {
+        return res.status(400).json({ error: "Invalid saved-post request." });
+    }
+    try {
+        if (saved && !(await Post.exists({ _id: id }))) return res.status(404).json({ error: "Post not found." });
+        const result = await User.updateOne({
+            _id: req.user._id,
+            ...(saved && { $or: [{ "savedPosts.499": { $exists: false } }, { savedPosts: id }] }),
+        }, { [saved ? "$addToSet" : "$pull"]: { savedPosts: id } });
+        if (!result.matchedCount) return res.status(409).json({ error: "Your saved list holds up to 500 posts." });
+        return res.json({ saved });
+    } catch (error) {
+        return next(error);
+    }
+}
 
 export const likePost = async (req, res) => {
-
+    const { id } = req.params;
+    const userId = req.user._id;
+    if (!mongoose.isObjectIdOrHexString(id)) return res.status(404).json({ error: "Post not found" });
     try {
+        const post = await Post.findById(id).select("postedBy likes");
+        if (!post) return res.status(404).json({ error: "Post not found" });
 
-        const { id: postId } = req.params;
-        const userId = req.user._id;
-
-
-        // ----------------------------------------------------
-        // Find post
-        // ----------------------------------------------------
-
-        const post = await Post.findById(postId);
-
-        if (!post) {
-            return res.status(404).json({
-                message: "Post not found"
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // Check whether already liked
-        // ----------------------------------------------------
-
-        const isLiked = post.likes.includes(userId);
-
-
-        if (isLiked) {
-
-            // ------------------------------------------------
-            // Unlike
-            // ------------------------------------------------
-
-            await Post.findByIdAndUpdate(
-                postId,
-                {
-                    $pull: {
-                        likes: userId
-                    }
-                },
-                {
-                    new: true
-                }
-            );
-
-
-            return res.status(200).json({
-                message: "Post unliked successfully"
-            });
-
-        } else {
-
-            // ------------------------------------------------
-            // Like
-            // ------------------------------------------------
-
-            await Post.findByIdAndUpdate(
-                postId,
-                {
-                    $push: {
-                        likes: userId
-                    }
-                },
-                {
-                    new: true
-                }
-            );
-
-
-            // ------------------------------------------------
-            // Notification
-            // ------------------------------------------------
-
-            const newNotification = new Notification({
-                type: "like",
-                from: userId,
-                to: post.postedBy,
-                postId: post._id
-            });
-
-
-            await newNotification.save();
-
-
-            // ------------------------------------------------
-            // Redis cache invalidation
-            // ------------------------------------------------
-
-            // Redis disabled currently.
-            //
-            // await redisClient.del(`post:${postId}`);
-            // await redisClient.del(`feed:${userId}`);
-
-
-            return res.status(200).json({
-                message: "Post liked successfully"
-            });
-        }
-
-    } catch (error) {
-
-        console.error(
-            "Error in likePost:",
-            error.message
+        const liked = typeof req.body?.liked === "boolean" ? req.body.liked : !post.likes.includes(userId);
+        const result = await Post.updateOne(
+            { _id: id },
+            liked ? { $addToSet: { likes: userId } } : { $pull: { likes: userId } },
         );
-
-        return res.status(500).json({
-            error: error.message
-        });
+        if (!result.matchedCount) return res.status(404).json({ error: "Post not found" });
+        postCache.invalidate(id.toLowerCase());
+        if (liked && result.modifiedCount && !post.postedBy.equals(userId)) {
+            await Notification.create({ type: "like", from: userId, to: post.postedBy, post: id })
+                .then(() => getIO()?.to(getRecipientRoom(post.postedBy)).emit("activityChanged"))
+                .catch((error) => console.error("Could not create like notification:", error.message));
+        }
+        return res.json({ liked });
+    } catch (error) {
+        console.error("Could not update like:", error.message);
+        return res.status(500).json({ error: "Could not update like" });
     }
 };
 
@@ -358,10 +230,11 @@ export const addReply = async (req, res) => {
         post.replies.push(reply);
 
         await post.save();
+        postCache.invalidate(String(post._id));
 
 
         return res.status(200).json(
-            reply
+            { ...reply, profileImg: await mediaUrl(reply.profileImg) }
         );
 
     } catch (error) {
@@ -382,112 +255,21 @@ export const addReply = async (req, res) => {
 // DELETE POST
 // ============================================================
 
-export const DeletePost = async (req, res) => {
-
+export const DeletePost = async (req, res, next) => {
     try {
-
-        const { id: postId } = req.params;
-        const userId = req.user._id;
-
-
-        // ----------------------------------------------------
-        // Find post
-        // ----------------------------------------------------
-
-        const post = await Post.findById(
-            postId
-        );
-
-
-        if (!post) {
-
-            return res.status(404).json({
-                message: "Post not found"
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // Verify ownership
-        // ----------------------------------------------------
-
-        if (
-            post.postedBy.toString() !==
-            userId.toString()
-        ) {
-
-            return res.status(403).json({
-                error: "You can't delete others' posts"
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // Delete S3 object
-        // ----------------------------------------------------
-
-        if (post.images) {
-
-            const deleteParams = {
-                Bucket: process.env.BUCKET_NAME,
-
-                // images contains the S3 object key
-                Key: post.images
-            };
-
-
-            const deleteCommand =
-                new DeleteObjectCommand(
-                    deleteParams
-                );
-
-
-            await s3.send(
-                deleteCommand
-            );
-        }
-
-
-        // ----------------------------------------------------
-        // Delete MongoDB post
-        // ----------------------------------------------------
-
-        await Post.findByIdAndDelete(
-            postId
-        );
-
-
-        // ----------------------------------------------------
-        // Redis cache invalidation
-        // ----------------------------------------------------
-
-        // Redis disabled currently.
-        //
-        // await redisClient.del(`post:${postId}`);
-        // await redisClient.del(`feed:${userId}`);
-
-
-        return res.status(200).json({
-            message: "Post deleted successfully"
+        const post = await Post.findOneAndDelete({ _id: req.params.id, postedBy: req.user._id });
+        if (!post) return res.status(404).json({ error: "Post not found" });
+        postCache.invalidate(String(post._id));
+        await User.updateMany({ savedPosts: post._id }, { $pull: { savedPosts: post._id } }).catch((error) => {
+            console.error("Saved list cleanup failed:", error.message);
         });
-
+        await removeMedia([post.images, ...(post.media ?? []).map(({ key }) => key)]);
+        return res.json({ message: "Post deleted successfully" });
     } catch (error) {
-
-        console.error(
-            "Error deleting post:",
-            error
-        );
-
-        return res.status(500).json({
-            error: "Internal server error"
-        });
+        return next(error);
     }
 };
 
-
-// ============================================================
-// DELETE MESSAGE / CONVERSATION COLLECTIONS
-// ============================================================
 
 export const deletePostsUsersCollection = async (req, res) => {
 
@@ -545,201 +327,47 @@ export const deletePostsUsersCollection = async (req, res) => {
 // SHARE POST
 // ============================================================
 
-export const sharepost = async (req, res) => {
-
-    const {
-        postId,
-        conversationId,
-        text
-    } = req.body;
-
-    const senderId = req.user._id;
-
-
-    // --------------------------------------------------------
-    // Validate request
-    // --------------------------------------------------------
-
-    if (
-        !postId ||
-        !senderId ||
-        !conversationId
-    ) {
-
-        return res.status(400).json({
-            error: "Missing required fields"
-        });
+export const sharepost = async (req, res, next) => {
+    const { postId, conversationId, text = "" } = req.body;
+    const sender = req.user._id;
+    if (!mongoose.isObjectIdOrHexString(postId) || !mongoose.isObjectIdOrHexString(conversationId)
+        || typeof text !== "string" || text.length > 4000) {
+        return res.status(400).json({ error: "Choose a valid post and conversation." });
     }
-
-
     try {
-
-        // ----------------------------------------------------
-        // Find post
-        // ----------------------------------------------------
-
-        const post = await Post.findById(
-            postId
-        );
-
-
-        if (!post) {
-
-            return res.status(404).json({
-                error: "Post not found"
-            });
+        const { members, group } = await messageAudience(conversationId);
+        if (!members.includes(String(sender))) return res.status(404).json({ error: "Conversation not found." });
+        if (group && !group.owner.equals(sender) && (group.permissions?.canMessage === "owner"
+            || (group.permissions?.canMessage === "admins" && !group.admins.some((admin) => admin.equals(sender))))) {
+            return res.status(403).json({ error: "Only group managers can send messages here." });
         }
-
-
-        // ----------------------------------------------------
-        // Ensure sharedBy is array
-        // ----------------------------------------------------
-
-        if (
-            !Array.isArray(
-                post.sharedBy
-            )
-        ) {
-
-            post.sharedBy = [];
-        }
-
-
-        // ----------------------------------------------------
-        // Update share count
-        // ----------------------------------------------------
-
-        post.shareCount =
-            (post.shareCount || 0) + 1;
-
-
-        post.sharedBy.push({
-            userId: senderId,
-            sharedAt: new Date()
+        const post = await Post.findById(postId).populate("postedBy", "username fullName profileImg");
+        if (!post) return res.status(404).json({ error: "Post not found." });
+        const postData = await presentPost(post);
+        const note = text.trim();
+        const encrypted = encrypt(note || "Shared a post");
+        const fields = { text: encrypted.encryptedData, iv: encrypted.iv };
+        const message = await Message.create({ conversationId, sender, type: "post", postReference: postId, ...fields });
+        await saveConversationPreview(message, fields).catch((error) => console.error("Share preview failed:", error.message));
+        const stats = await Post.findByIdAndUpdate(postId, {
+            $inc: { shareCount: 1 },
+            $push: { sharedBy: { $each: [{ userId: sender, sharedAt: new Date() }], $slice: -100 } },
+        }, { new: true }).select("shareCount sharedBy").catch((error) => {
+            console.error("Share count update failed:", error.message);
+            return null;
         });
-
-
-        await post.save();
-
-
-        // ----------------------------------------------------
-        // Encrypt message
-        // ----------------------------------------------------
-
-        let encryptedMessage = null;
-
-
-        if (
-            text &&
-            typeof text === "string" &&
-            text.trim() !== ""
-        ) {
-
-            encryptedMessage = encrypt(
-                text
-            );
-        }
-
-
-        // ----------------------------------------------------
-        // Build message payload
-        // ----------------------------------------------------
-
-        const messagePayload = {
-
-            conversationId,
-
-            sender: senderId,
-
-            text:
-                encryptedMessage
-                    ? encryptedMessage.encryptedData
-                    : "",
-
-            type: "post",
-
-            ...(encryptedMessage && {
-                iv: encryptedMessage.iv
-            }),
-
-            postReference: postId,
-
-            seen: false
+        postCache.invalidate(String(post._id));
+        const payload = {
+            ...message.toObject(), iv: undefined, text: note, postReference: { ...postData, images: postData.imageUrl },
+            sender: await presentProfile({ _id: sender, username: req.user.username, profileImg: req.user.profileImg }),
         };
-
-
-        // ----------------------------------------------------
-        // Save message
-        // ----------------------------------------------------
-
-        const newMessage =
-            new Message(
-                messagePayload
-            );
-
-
-        await newMessage.save();
-
-
-        // ----------------------------------------------------
-        // Fetch updated post
-        // ----------------------------------------------------
-
-        const updatedPost =
-            await Post.findById(
-                postId
-            );
-
-
-        // ----------------------------------------------------
-        // Redis cache invalidation
-        // ----------------------------------------------------
-
-        // Redis disabled currently.
-        //
-        // await redisClient.del(`post:${postId}`);
-        // await redisClient.del(`feed:${senderId}`);
-
-
-        // ----------------------------------------------------
-        // Generate signed URL
-        // ----------------------------------------------------
-
-        const postData =
-            await addPresignedUrlToPost(
-                updatedPost
-            );
-
-
-        return res.status(200).json({
-
-            message:
-                "Post shared successfully!",
-
-            post: postData,
-
-            postsharedBy:
-                updatedPost.sharedBy,
-
-            count:
-                updatedPost.shareCount,
-
-            postId,
-
-            messageId:
-                newMessage._id
-        });
-
+        const rooms = members.filter((id) => id !== String(sender)).map(getRecipientRoom);
+        if (rooms.length && group) getIO()?.to(rooms).emit("newGroupMessage", { message: payload, conversationId, groupId: group._id });
+        else if (rooms.length) getIO()?.to(rooms).emit("newMessage", payload);
+        return res.json({ message: "Post shared successfully!", post: postData, postsharedBy: stats?.sharedBy,
+            count: stats?.shareCount, postId, messageId: message._id });
     } catch (error) {
-
-        console.error(
-            "Error in sharepost controller:",
-            error
-        );
-
-        return res.status(500).json({
-            error: "Internal server error"
-        });
+        return next(error);
     }
 };
 
@@ -748,85 +376,16 @@ export const sharepost = async (req, res) => {
 // GET SINGLE POST
 // ============================================================
 
-export const getPost = async (req, res) => {
-
+export const getPost = async (req, res, next) => {
+    const id = req.params.id;
+    if (!mongoose.isObjectIdOrHexString(id)) return res.status(404).json({ error: "Post not found" });
     try {
-
-        const cacheKey =
-            `post:${req.params.id}`;
-
-
-        // ----------------------------------------------------
-        // Redis disabled currently
-        // ----------------------------------------------------
-
-        // const cachedPost =
-        //     await redisClient.get(cacheKey);
-
-        // if (cachedPost) {
-        //     return res.status(200).json(
-        //         JSON.parse(cachedPost)
-        //     );
-        // }
-
-
-        // ----------------------------------------------------
-        // Get post
-        // ----------------------------------------------------
-
-        const post =
-            await Post.findById(
-                req.params.id
-            )
-            .populate({
-                path: "likes",
-                select: "username profileImg"
-            });
-
-
-        if (!post) {
-
-            return res.status(404).json({
-                error: "Post not found"
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // Generate pre-signed URL
-        // ----------------------------------------------------
-
-        const postData =
-            await addPresignedUrlToPost(
-                post
-            );
-
-
-        // ----------------------------------------------------
-        // Redis disabled currently
-        // ----------------------------------------------------
-
-        // await redisClient.setEx(
-        //     cacheKey,
-        //     300,
-        //     JSON.stringify(postData)
-        // );
-
-
-        return res.status(200).json(
-            postData
-        );
-
-    } catch (err) {
-
-        console.error(
-            "Error in getPost:",
-            err
-        );
-
-        return res.status(500).json({
-            error: err.message
-        });
+        const post = await postCache.read(id.toLowerCase(), () => Post.findById(id)
+            .populate("postedBy", "username fullName profileImg").populate("likes", "username profileImg").maxTimeMS(3000).lean().exec());
+        if (!post) return res.status(404).json({ error: "Post not found" });
+        return res.json(await presentPost(post));
+    } catch (error) {
+        return next(error);
     }
 };
 
@@ -835,108 +394,18 @@ export const getPost = async (req, res) => {
 // GET FEED POSTS
 // ============================================================
 
-export const getFeedPosts = async (req, res) => {
-
+export const getFeedPosts = async (req, res, next) => {
     try {
-
-        const userId =
-            req.user._id;
-
-
-        // ----------------------------------------------------
-        // Get user
-        // ----------------------------------------------------
-
-        const user =
-            await User.findById(
-                userId
-            );
-
-
-        if (!user) {
-
-            return res.status(404).json({
-                error: "User not found"
-            });
-        }
-
-
-        const following =
-            user.following;
-
-
-        const cacheKey =
-            `feed:${userId}`;
-
-
-        // ----------------------------------------------------
-        // Redis disabled currently
-        // ----------------------------------------------------
-
-        // const cachedFeed =
-        //     await redisClient.get(cacheKey);
-
-        // if (cachedFeed) {
-        //     return res.status(200).json(
-        //         JSON.parse(cachedFeed)
-        //     );
-        // }
-
-
-        // ----------------------------------------------------
-        // Get feed posts
-        // ----------------------------------------------------
-
-        const feedPosts =
-            await Post.find({
-                postedBy: {
-                    $in: following
-                }
-            })
-            .sort({
-                createdAt: -1
-            })
-            .populate({
-                path: "likes",
-                select: "username profileImg"
-            });
-
-
-        // ----------------------------------------------------
-        // Generate signed URLs
-        // ----------------------------------------------------
-
-        const postsWithUrls =
-            await addPresignedUrlsToPosts(
-                feedPosts
-            );
-
-
-        // ----------------------------------------------------
-        // Redis disabled currently
-        // ----------------------------------------------------
-
-        // await redisClient.setEx(
-        //     cacheKey,
-        //     60,
-        //     JSON.stringify(postsWithUrls)
-        // );
-
-
-        return res.status(200).json(
-            postsWithUrls
-        );
-
-    } catch (err) {
-
-        console.error(
-            "Error in getFeedPosts:",
-            err
-        );
-
-        return res.status(500).json({
-            error: "Internal server error"
-        });
+        const feedPosts = await Post.find({
+            postedBy: { $in: [req.user._id, ...req.user.following] },
+            ...beforeCursor(req.query.before),
+        })
+            .sort({ createdAt: -1, _id: -1 }).limit(26).maxTimeMS(3000)
+            .populate("postedBy", "username fullName profileImg")
+            .populate("likes", "username profileImg");
+        return res.json(await presentPosts(sendCursor(res, feedPosts, 25)));
+    } catch (error) {
+        return next(error);
     }
 };
 
@@ -945,102 +414,31 @@ export const getFeedPosts = async (req, res) => {
 // GET USER POSTS
 // ============================================================
 
-export const getUserPosts = async (req, res) => {
-   debugger;
-    const {
-        username
-    } = req.params;
-
-
+export async function listAccountMedia(req, res, next) {
     try {
-
-        const cacheKey =
-            `posts:user:${username}`;
-
-
-        // ----------------------------------------------------
-        // Redis disabled currently
-        // ----------------------------------------------------
-
-        // const cachedPosts =
-        //     await redisClient.get(cacheKey);
-
-        // if (cachedPosts) {
-        //     return res.status(200).json(
-        //         JSON.parse(cachedPosts)
-        //     );
-        // }
-
-
-        // ----------------------------------------------------
-        // Find user
-        // ----------------------------------------------------
-
-        const user =
-            await User.findOne({
-                username
-            });
-
-
-        if (!user) {
-
-            return res.status(404).json({
-                error: "User not found"
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // Find posts
-        // ----------------------------------------------------
-
-        const posts =
-            await Post.find({
-                postedBy: user._id
-            })
-            .sort({
-                createdAt: -1
-            })
-            .populate({
-                path: "likes",
-                select: "username profileImg"
-            });
-
-
-        // ----------------------------------------------------
-        // Generate signed URLs
-        // ----------------------------------------------------
-
-        const postsWithUrls =
-            await addPresignedUrlsToPosts(
-                posts
-            );
-
-        console.log("Posts with URLs:", postsWithUrls);
-        // ----------------------------------------------------
-        // Redis disabled currently
-        // ----------------------------------------------------
-
-        // await redisClient.setEx(
-        //     cacheKey,
-        //     300,
-        //     JSON.stringify(postsWithUrls)
-        // );
-
-
-        return res.status(200).json(
-            postsWithUrls
-        );
-
+        const { view = "posts" } = req.query;
+        if (!["posts", "reels", "liked", "replied"].includes(view)) return res.status(400).json({ error: "Unknown collection." });
+        const userId = req.user._id;
+        const filter = view === "liked" ? { likes: userId } : view === "replied" ? { "replies.userId": userId }
+            : { postedBy: userId, kind: view === "reels" ? "reel" : { $ne: "reel" } };
+        const rows = await Post.find({ ...filter, ...beforeCursor(req.query.before) })
+            .sort({ createdAt: -1, _id: -1 }).limit(25).maxTimeMS(3000)
+            .select("caption media images kind postedBy createdAt").populate("postedBy", "username").lean();
+        return res.json(await presentPosts(sendCursor(res, rows, 24)));
     } catch (error) {
+        return next(error);
+    }
+}
 
-        console.error(
-            "Error in getUserPosts:",
-            error
-        );
-
-        return res.status(500).json({
-            error: error.message
-        });
+export const getUserPosts = async (req, res, next) => {
+    try {
+        const cursor = beforeCursor(req.query.before);
+        const user = await User.findOne({ username: req.params.username }).select("_id").lean();
+        if (!user) return res.status(404).json({ error: "User not found" });
+        const posts = await Post.find({ postedBy: user._id, ...cursor })
+            .sort({ createdAt: -1, _id: -1 }).limit(26).maxTimeMS(3000).populate("likes", "username profileImg");
+        return res.json(await presentPosts(sendCursor(res, posts, 25)));
+    } catch (error) {
+        return next(error);
     }
 };

@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
+import PeopleSearch from "./PeopleSearch";
+import { useEffect, useState } from "react";
 import {
   Modal,
   ModalOverlay,
@@ -27,12 +29,9 @@ import {
   TagCloseButton,
   RadioGroup,
   Radio,
-  FormControl,
-  FormLabel,
-  FormHelperText,
 } from "@chakra-ui/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaUsers, FaCrown, FaShieldAlt, FaEdit, FaCamera, FaPlus } from "react-icons/fa";
+import { FaUsers, FaCrown, FaShieldAlt, FaEdit, FaCamera } from "react-icons/fa";
 import { useRecoilValue, useSetRecoilState } from "recoil";
 import { selectedConversationAtom, conversationsAtom } from "../atom/messagesAtom";
 import userAtom from "../atom/userAtom";
@@ -57,7 +56,7 @@ const getRoleIcon = (role) => {
   }
 };
 
-const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
+const GroupUIComponents = ({ isOpen, onClose, mode = "edit", onCreated }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [groupData, setGroupData] = useState(null);
@@ -67,9 +66,6 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
 
   // Create flow states
   const [stage, setStage] = useState("select-members"); // select-members | group-info
-  const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
   const [selectedMembers, setSelectedMembers] = useState([]); // array of user objects
   const [permissions, setPermissions] = useState({ canMessage: "all" });
 
@@ -78,17 +74,12 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
   const setConversations = useSetRecoilState(conversationsAtom);
   const showToast = useShowToast();
 
+  const memberHover = useColorModeValue("gray.50", "gray.700");
   const bgColor = useColorModeValue("white", "gray.800");
 
   const isAdmin = groupData?.admins?.some((admin) => admin._id === currentUser._id);
   const isOwner = groupData?.owner?._id === currentUser._id;
   const canEdit = isAdmin || isOwner || mode === "create";
-
-  // Create ref for selectedMembers to avoid stale closures
-  const selectedMembersRef = useRef(selectedMembers);
-  useEffect(() => {
-    selectedMembersRef.current = selectedMembers;
-  }, [selectedMembers]);
 
   // Reset internal state when modal opens/closes or mode changes
   useEffect(() => {
@@ -101,8 +92,6 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
       setStage(mode === "create" ? "select-members" : "group-info");
       setSelectedMembers([]);
       setPermissions({ canMessage: "all" });
-      setSearchResults([]);
-      setQuery("");
     }
   }, [isOpen, mode]);
 
@@ -119,8 +108,8 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
 
   const fetchGroupDetails = async () => {
     try {
-      const res = await fetch(`/api/groups/${selectedConversation.groupId}`);
-      const data = await res.json();
+      const res = await apiFetch(`/api/groups/${selectedConversation.groupId}`);
+      const data = await readApiJson(res);
       if (data.error) return showToast("Error", data.error, "error");
 
       setGroupData(data);
@@ -132,53 +121,8 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
     }
   };
 
-  const debounce = (fn, wait = 350) => {
-    let t;
-    return (...args) => {
-      clearTimeout(t);
-      t = setTimeout(() => fn(...args), wait);
-    };
-  };
-
-  const doSearch = async (q) => {
-    if (!q.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    setSearching(true);
-    try {
-      // FIXED: Correct endpoint usage with query parameter
-      const res = await fetch(`/api/users/profile/${q}`);
-      if (!res.ok) throw new Error("User not found");
-      
-      const user = await res.json();
-      if (user.error) throw new Error(user.error);
-      
-      // Filter out already selected users using ref
-      if (!selectedMembersRef.current.some(m => m._id === user._id)) {
-        setSearchResults([user]);
-      } else {
-        setSearchResults([]);
-      }
-    } catch (error) {
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedSearch = useCallback(debounce(doSearch, 300), []);
-
-  useEffect(() => {
-    if (mode !== "create") return;
-    debouncedSearch(query);
-  }, [query, debouncedSearch, mode]);
-
   const handleAddMember = (user) => {
-    setSelectedMembers(prev => [...prev, user]);
-    setSearchResults([]);
-    setQuery("");
+    setSelectedMembers((current) => current.some(({ _id }) => _id === user._id) ? current : [...current, user]);
   };
 
   const handleRemoveMember = (id) => {
@@ -195,7 +139,9 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
   };
 
   const createGroup = async () => {
+    if (loading) return;
     if (!editForm.name.trim()) return showToast("Error", "Group name is required", "error");
+    if (!selectedMembers.length) return showToast("Error", "Choose at least one member", "error");
     setLoading(true);
     try {
       const formData = new FormData();
@@ -209,15 +155,19 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
 
       // admins default to owner - backend will ensure owner is admin
 
-      const res = await fetch(`/api/groups/create`, {
+      const res = await apiFetch(`/api/groups/create`, {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (data.error) return showToast("Error", data.error, "error");
 
-      // Add to conversations list (server returns populated group)
-      setConversations(prev => [ ...prev, data ]);
+      const chat = {
+        _id: data.conversation, groupId: data._id, groupInfo: data, isGroup: true,
+        participants: data.members, lastMessage: {}, updatedAt: data.updatedAt,
+      };
+      setConversations((current) => [chat, ...current.filter(({ _id }) => _id !== chat._id)]);
+      onCreated?.(chat);
       showToast("Success", "Group created successfully", "success");
       onClose();
     } catch (err) {
@@ -236,11 +186,11 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
       formData.append("description", editForm.description || "");
       if (selectedImage) formData.append("profileImage", selectedImage);
 
-      const res = await fetch(`/api/groups/${selectedConversation.groupId}`, {
+      const res = await apiFetch(`/api/groups/${selectedConversation.groupId}`, {
         method: "PUT",
         body: formData,
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (data.error) return showToast("Error", data.error, "error");
 
       // Update conversations
@@ -280,7 +230,7 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
         const role = getMemberRole(member._id);
         return (
           <ListItem key={member._id}>
-            <HStack spacing={3} p={2} borderRadius="md" _hover={{ bg: useColorModeValue("gray.50", "gray.700") }}>
+            <HStack spacing={3} p={2} borderRadius="md" _hover={{ bg: memberHover }}>
               <Avatar size="sm" src={member.profileImg} name={member.username} />
               <Box flex="1">
                 <HStack>
@@ -337,18 +287,8 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
               >
-                <FormControl>
-                  <FormLabel>Search users to add</FormLabel>
-                  <HStack>
-                    <Input
-                      placeholder="Search by username..."
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                    />
-                    <Button onClick={() => setQuery("")}>Clear</Button>
-                  </HStack>
-                  <FormHelperText>Type a username and press enter to search</FormHelperText>
-                </FormControl>
+                <PeopleSearch label="Find group members" exclude={selectedMembers.map(({ _id }) => _id)}
+                  onSelect={handleAddMember} />
 
                 <Box mt={4}>
                   <Text fontWeight="semibold">Selected Members</Text>
@@ -366,51 +306,10 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
                     )}
                   </HStack>
                 </Box>
-
-                <Divider my={4} />
-
-                <Box>
-                  <Text fontWeight="semibold">Search Results</Text>
-                  <VStack spacing={2} align="stretch" mt={2}>
-                    {searching && <Flex justify="center"><Spinner size="sm" /></Flex>}
-                    {!searching && searchResults.length === 0 && query.trim() !== "" && (
-                      <Text color="gray.500">No users found</Text>
-                    )}
-                    {searchResults.map(u => (
-                      <HStack 
-                        key={u._id} 
-                        p={2} 
-                        borderRadius="md" 
-                        _hover={{ bg: useColorModeValue("gray.50", "gray.700") }}
-                      >
-                        <Avatar size="sm" src={u.profileImg} name={u.username} />
-                        <Box flex="1">
-                          <Text fontWeight="medium">{u.username}</Text>
-                          {u.email && <Text fontSize="sm" color="gray.500">{u.email}</Text>}
-                        </Box>
-                        <Button 
-                          size="sm" 
-                          leftIcon={<FaPlus />} 
-                          onClick={() => handleAddMember(u)}
-                          isDisabled={selectedMembers.some(m => m._id === u._id)}
-                        >
-                          Add
-                        </Button>
-                      </HStack>
-                    ))}
-                  </VStack>
-                </Box>
-
-                <HStack spacing={3} pt={4} justify="flex-end">
-                  <Button variant="outline" onClick={onClose}>Cancel</Button>
-                  <Button 
-                    colorScheme="teal" 
-                    onClick={() => setStage("group-info")} 
-                    isDisabled={selectedMembers.length === 0}
-                  >
-                    Next
-                  </Button>
-                </HStack>
+                <Flex justify="flex-end" mt={4}>
+                  <Button className="dayline-primary" isDisabled={!selectedMembers.length}
+                    onClick={() => setStage("group-info")}>Continue</Button>
+                </Flex>
               </MotionBox>
             )}
 
@@ -500,7 +399,7 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit" }) => {
                         <List spacing={2}>
                           {selectedMembers.map(m => (
                             <ListItem key={m._id}>
-                              <HStack spacing={3} p={2} borderRadius="md" _hover={{ bg: useColorModeValue("gray.50", "gray.700") }}>
+                              <HStack spacing={3} p={2} borderRadius="md" _hover={{ bg: memberHover }}>
                                 <Avatar size="sm" src={m.profileImg} name={m.username} />
                                 <Text fontWeight="medium">{m.username}</Text>
                                 <Button size="sm" variant="ghost" onClick={() => handleRemoveMember(m._id)}>Remove</Button>

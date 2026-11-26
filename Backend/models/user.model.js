@@ -15,6 +15,9 @@ const userSchema = new mongoose.Schema({
         required: true,
         minLength: 6,
     },
+    savedPosts: { type: [mongoose.Schema.Types.ObjectId], default: [], select: false },
+    hideBio: { type: Boolean, default: false },
+    sessionVersion: { type: Number, default: 0 },
     lastLogin: {
         type: Date,
         default: Date.now,
@@ -23,8 +26,8 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
-    resetPasswordToken: String,
-    resetPasswordExpires: Date,
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpires: { type: Date, select: false },
     verificationToken: String,
     verificationTokenExpiresAt: Date,
 
@@ -70,6 +73,8 @@ const userSchema = new mongoose.Schema({
   
 
 }, { timestamps: true });
+
+userSchema.index({ savedPosts: 1 }, { sparse: true });
 
 const User = mongoose.model("User", userSchema);
 

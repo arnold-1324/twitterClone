@@ -1,61 +1,68 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import manifest from "./public/manifest.json";
 
-export default defineConfig(({ command, mode }) => {
-  const isDev = mode === "development"; // this works inside config function
+// A production PWA may already control the origin when Vite starts on the
+// same host and port. Replace that worker so it cannot serve old build assets.
+function retireDevelopmentServiceWorker() {
+  return {
+    name: "dayline-retire-development-worker",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = req.url?.split("?")[0];
+        if (path !== "/sw.js" && path !== "/dev-sw.js") return next();
+        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.end(`
+          self.addEventListener("install", () => self.skipWaiting());
+          self.addEventListener("activate", (event) => {
+            event.waitUntil((async () => {
+              await self.clients.claim();
+              await self.registration.unregister();
+              const tabs = await self.clients.matchAll({ type: "window" });
+              await Promise.allSettled(tabs.map((tab) => tab.navigate(tab.url)));
+            })());
+          });
+        `);
+      });
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  const target = process.env.DAYLINE_API_TARGET || (mode === "development"
+    ? "http://127.0.0.1:5000" : "https://twitterclone-backend-681i.onrender.com");
 
   return {
     build: { outDir: "dist" },
     plugins: [
       react(),
+      retireDevelopmentServiceWorker(),
       VitePWA({
-        registerType: "prompt",
+        registerType: "autoUpdate",
         devOptions: {
-          enabled: true,
+          enabled: false,
           type: "module",
         },
         includeAssets: ["favicon.png", "dark-logo-192.png", "dark-logo-512.png"],
-        manifest: {
-          name: "Twitter Clone - React PWA",
-          short_name: "TwitterClone",
-          description: "A Twitter clone built with React",
-          theme_color: "#1DA1F2",
-          background_color: "#ffffff",
-          display: "standalone",
-          scope: ".",
-          start_url: "./index.html",
-          icons: [
-            { src: "dark-logo-192.png", sizes: "192x192", type: "image/png" },
-            { src: "dark-logo-512.png", sizes: "512x512", type: "image/png" },
-          ],
-        },
+        manifest,
         strategies: "generateSW",
         injectRegister: "auto",
         workbox: {
           cleanupOutdatedCaches: true,
           sourcemap: true,
-          globPatterns: ["**/*.{js,css,html,png,jpg,jpeg,svg,gif,woff,woff2,ttf,eot}"],
+          globPatterns: ["index.html", "assets/**/*.{js,css,woff,woff2,ttf,eot}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/socket\.io(?:\/|$)/],
           runtimeCaching: [
             {
-              urlPattern: ({ url }) =>
-                url.origin === "https://twitterclone-backend-681i.onrender.com" &&
-                url.pathname.startsWith("/api"),
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "api-cache",
-                networkTimeoutSeconds: 5,
-                expiration: { maxEntries: 50, maxAgeSeconds: 86400 },
-                cacheableResponse: { statuses: [0, 200] },
-              },
-            },
-            {
-              urlPattern: ({ url }) => url.pathname.startsWith("/socket.io"),
+              urlPattern: ({ sameOrigin, url }) => sameOrigin && /^\/(api|socket\.io)(\/|$)/.test(url.pathname),
               handler: "NetworkOnly",
             },
             {
-              urlPattern: /\.(png|jpg|jpeg|svg|gif)$/,
+              urlPattern: ({ url, sameOrigin }) => sameOrigin && /\.(png|jpg|jpeg|svg|gif)$/.test(url.pathname),
               handler: "CacheFirst",
               options: {
                 cacheName: "images",
@@ -70,12 +77,19 @@ export default defineConfig(({ command, mode }) => {
       port: 3000,
       proxy: {
         "/api": {
-          target: isDev ? "http://localhost:5000" : "https://twitterclone-backend-681i.onrender.com",
+          target,
           changeOrigin: true,
           secure: false,
+          configure(proxy) {
+            proxy.on("error", (_error, _request, response) => {
+              if (!response?.writeHead || response.headersSent || response.writableEnded) return;
+              response.writeHead(503, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+              response.end(JSON.stringify({ error: "The app is temporarily unavailable. Try again in a moment." }));
+            });
+          },
         },
         "/socket.io": {
-          target: isDev ? "http://localhost:5000" : "https://twitterclone-backend-681i.onrender.com",
+          target,
           changeOrigin: true,
           secure: false,
           ws: true,

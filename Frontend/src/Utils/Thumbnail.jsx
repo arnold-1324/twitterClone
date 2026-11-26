@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/apiFetch.js";
 import React, { useState, useEffect } from "react";
 import { Box, Image, Text } from "@chakra-ui/react";
 
@@ -8,7 +9,7 @@ const MediaThumbnail = ({ url }) => {
   useEffect(() => {
     const fetchMediaType = async () => {
       try {
-        const response = await fetch(url, { method: "HEAD" });
+        const response = await apiFetch(url, { method: "HEAD" });
         const contentType = response.headers.get("Content-Type");
 
         if (contentType.includes("image")) {

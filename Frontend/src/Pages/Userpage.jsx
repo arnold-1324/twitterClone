@@ -1,12 +1,10 @@
 import UserHeader from "../components/UserHeader";
-import UserPost from "../components/UserPost";
 import useGetUserProfile from "../hooks/useGetUserprofile";
 import { useParams } from "react-router-dom";
 import { useRecoilState } from "recoil";
 import postsAtom from "../atom/postsAtom";
-import { Flex, Spinner, Text } from "@chakra-ui/react";
-import { useEffect, useState } from "react";
-import useShowToast from "../hooks/useShowToast";
+import { Button, Flex, Spinner, Text } from "@chakra-ui/react";
+import usePostPages from "../hooks/usePostPages";
 import Post from "../components/Post";
 import { motion } from "framer-motion";
 
@@ -15,29 +13,9 @@ const MotionFlex = motion(Flex); // Wrapping Chakra's Flex with motion for anima
 const UserPage = () => {
   const { user, loading } = useGetUserProfile();
   const { username } = useParams();
-  const showToast = useShowToast();
   const [posts, setPosts] = useRecoilState(postsAtom);
-  const [fetchingPosts, setFetchingPosts] = useState(false);
-
-  useEffect(() => {
-    const getPosts = async () => {
-      if (!user) return;
-      setFetchingPosts(true);
-      try {
-        const res = await fetch(`/api/posts/user/${username}`);
-        const data = await res.json();
-        //console.log(data);
-        setPosts(data);
-      } catch (error) {
-        showToast("Error", error.message, "error");
-        setPosts([]);
-      } finally {
-        setFetchingPosts(false);
-      }
-    };
-
-    getPosts();
-  }, [username, setPosts, user]);
+  const url = user?.username === username ? `/api/posts/user/${encodeURIComponent(username)}` : null;
+  const { loading: fetchingPosts, error, cursor, retry, loadMore } = usePostPages(url, setPosts);
 
   if (loading) {
     return (
@@ -64,7 +42,8 @@ const UserPage = () => {
       transition={{ duration: 0.6 }}
     >
       <UserHeader user={user} />
-      {!fetchingPosts && posts.length === 0 && <Text>User has no posts.</Text>}
+      {error && <Text role="alert">{error} <Button size="xs" onClick={retry}>Retry</Button></Text>}
+      {!error && !fetchingPosts && posts.length === 0 && <Text>User has no posts.</Text>}
       {fetchingPosts && (
         <MotionFlex justifyContent="center" my={12} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <Spinner size="xl" />
@@ -73,6 +52,7 @@ const UserPage = () => {
       {posts.map((post) => (
         <Post key={post._id} post={post} postedBy={post.postedBy} />
       ))}
+      {cursor && <Button onClick={loadMore} isLoading={fetchingPosts} variant="outline">Load older posts</Button>}
     </motion.div>
   );
 };

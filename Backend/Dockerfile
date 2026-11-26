@@ -1,12 +1,14 @@
-FROM node:18-alpine
+FROM node:22-alpine
 
 WORKDIR /usr/src/app
+RUN apk add --no-cache ffmpeg
+ENV MEDIA_DIR=/usr/src/app/.dayline-media
 
 # Copy package files first for caching
 COPY package*.json ./
 
 # Install production dependencies
-RUN npm install --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts
 
 # Copy application code
 COPY . .

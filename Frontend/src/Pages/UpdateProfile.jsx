@@ -1,3 +1,4 @@
+import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { Button, Flex, FormControl, FormLabel, Heading, Input, Stack, useColorModeValue, Avatar, Center } from "@chakra-ui/react";
 import { useRef, useState, useEffect,useNavi } from "react";
 import { useNavigate } from 'react-router-dom';
@@ -72,17 +73,23 @@ const handlecancle=()=>{
         formData.append("image", fileInput);
       }
 
-      const res = await fetch(`/api/users/update/${inputs._id}`, {
+      const res = await apiFetch(`/api/users/update/${inputs._id}`, {
         method: "PUT",
         body: formData,
       });
 
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (data.error) {
         showToast("Error", data.error, "error");
         return;
       }
 
+      if (data.reauthenticate) {
+        localStorage.removeItem("user-threads");
+        setUser(null);
+        showToast("Password changed", "Sign in again to continue.", "success");
+        return;
+      }
       showToast("Success", "Profile updated successfully", "success");
       setUser(data);
       localStorage.setItem("user-threads", JSON.stringify(data));
@@ -127,6 +134,7 @@ const handlecancle=()=>{
                   onChange={(e) => setInputs({ ...inputs, [field]: e.target.value })}
                   _placeholder={{ color: "gray.500" }}
                   type={field === "email" ? "email" : "text"}
+                  isReadOnly={field === "email"}
                 />
               </FormControl>
             ))}
