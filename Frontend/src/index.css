@@ -281,10 +281,11 @@ body {
   background: var(--dayline-surface);
 }
 .people-search-field input, .inbox-filter input { width: 100%; color: var(--dayline-text); background: transparent; padding: 10px 0; outline: none; }
-.people-search-field:focus-within, .inbox-filter input:focus { border-color: var(--dayline-accent); }
+.people-search-field:focus-within, .inbox-filter input:focus { border-color: var(--search-focus); }
 .people-results { margin-top: 6px; border: 1px solid var(--dayline-line); border-radius: 12px; padding: 8px; background: var(--dayline-surface); }
 .people-results button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 7px; border-radius: 8px; }
-.people-results button:hover, .people-results button:focus-visible { background: var(--dayline-soft); }
+.people-results button:hover, .people-results button:focus-visible { background: var(--search-highlight); }
+.dayline-shell .people-results button:focus-visible { outline-color: var(--search-focus); }
 .people-results button span:last-child { min-width: 0; }
 .people-results strong, .people-results small { display: block; overflow-wrap: anywhere; }
 .people-results p, .people-results small { color: var(--dayline-dim); font-size: .82rem; }
@@ -404,12 +405,18 @@ body {
 :root {
   --dayline-focus: #835176;
   --dayline-elevated: #f5eef4;
+  --search-focus: #6b737d;
+  --search-highlight: #eef0f3;
 }
 .chakra-ui-dark {
   --dayline-focus: #e7a3ce;
   --dayline-elevated: #2c2436;
+  --search-focus: #7d8997;
+  --search-highlight: #29323d;
 }
-.dayline-shell :is(button, a, input):focus-visible { outline: 2px solid var(--dayline-focus); outline-offset: 2px; }
+.dayline-shell :is(button, a, input:not([type="search"])):focus-visible { outline: 2px solid var(--dayline-focus); outline-offset: 2px; }
+input[type="search"]:focus-visible { outline: 0; border-color: var(--search-focus); box-shadow: inset 0 0 0 1px var(--search-focus); }
+.people-search-field input[type="search"]:focus-visible { box-shadow: none; }
 .social-nav-link:hover, .social-nav-link.active, .activity-toggle[aria-expanded="true"] { background: var(--dayline-soft); color: var(--dayline-accent); }
 .auth-form .chakra-stack { width: 100%; }
 .auth-form .chakra-stack > .chakra-stack { align-items: stretch; }
@@ -452,8 +459,72 @@ body {
 .share-destinations label { padding: 8px 4px; border-bottom: 1px solid var(--dayline-line); }
 .share-destination { display: flex; align-items: center; gap: 8px; }
 .thread-heading { border-radius: 0; }
-.thread-history { background: var(--chakra-colors-chakra-body-bg); }
-.message-editor { background: var(--dayline-surface) !important; border-color: var(--dayline-line) !important; }
+.chat-shell {
+  --chat-canvas: #f7f8fa;
+  --chat-panel: #eceff3;
+  --chat-line: #cbd2dc;
+  --chat-voice: #dce7f7;
+  --chat-wave: #4976bc;
+  --chat-tint: #345f9c;
+}
+.chakra-ui-dark .chat-shell {
+  --chat-canvas: #12161b;
+  --chat-panel: #20262e;
+  --chat-line: #343c47;
+  --chat-voice: #202f45;
+  --chat-wave: #91b4ef;
+  --chat-tint: #8fb3ef;
+  --dayline-surface: var(--chat-canvas);
+  --dayline-line: var(--chat-line);
+  --dayline-soft: #252e3a;
+  --dayline-text: #edf1f5;
+  --dayline-dim: #abb5c1;
+  --dayline-accent: var(--chat-tint);
+  --dayline-focus: var(--search-focus);
+}
+.chat-shell, .chat-shell .social-header,
+.chat-shell :is(.inbox-sidebar, .inbox-thread, .thread-heading, .thread-history, .thread-compose) { background: var(--chat-canvas); }
+.chat-shell :is(.people-search-field, .people-results, .message-editor, .thread-attachment, .thread-bubble) { background: var(--chat-panel); }
+.chat-shell .thread-bubble.thread-bubble-own { background: #294566; }
+.thread-container { overflow: hidden; }
+.chat-poll { background: var(--chat-canvas); color: var(--dayline-text); border: 1px solid var(--chat-line); }
+.chat-poll-option { border: 1px solid var(--chat-line); background: var(--chat-panel); }
+.chat-poll-option:hover { border-color: var(--search-focus); }
+.chat-poll-check { border: 1px solid var(--search-focus); flex-shrink: 0; }
+.chat-poll-check[data-checked="true"], .chat-poll-submit { background: #365c99; color: white; }
+.chat-poll-submit:disabled { opacity: .55; }
+.chat-poll-meta { color: var(--chat-tint); }
+.chat-poll-track { background: var(--chat-line); }
+.chat-poll-fill { background: var(--chat-wave); }
+.chat-poll-error { color: #e87980; }
+.chat-audio { background: var(--chat-voice); color: var(--dayline-text); }
+.chat-audio-button { background: var(--chat-panel); flex-shrink: 0; }
+.thread-history { overflow-x: hidden; overflow-wrap: anywhere; }
+.thread-attachment { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+  margin: 0 0 8px; border: 1px solid var(--chat-line); border-radius: 16px; padding: 8px; }
+.thread-attachment > :first-child { min-width: 0; max-width: 100%; }
+.message-editor input { background: transparent; }
+.voice-composer { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 24px;
+  border: 1px solid var(--chat-line); color: var(--dayline-text); }
+.voice-composer > audio { display: none; }
+.voice-track { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 5px 9px;
+  background: var(--chat-voice); border-radius: 18px; min-height: 46px; }
+.voice-details { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.voice-status { font-size: .72rem; font-weight: 650; line-height: 1.2; white-space: nowrap; }
+.voice-status i { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #ed777e; }
+.voice-wave { display: flex; align-items: center; gap: 2px; height: 14px; overflow: hidden; }
+.voice-wave i { display: block; width: 3px; min-width: 1px; background: var(--chat-wave); border-radius: 2px;
+  height: calc(2px + var(--level) * 10px); }
+.voice-time { font: 600 .82rem/1 ui-monospace, monospace; color: var(--chat-tint); }
+.voice-control { border-radius: 50%; width: 40px; height: 40px; flex-shrink: 0; display: grid; place-items: center; font-size: 18px; }
+.voice-control:hover { background: var(--chat-panel); }
+.voice-track .voice-control { background: var(--chat-panel); width: 34px; height: 34px; }
+.voice-send, .voice-send:hover { background: #365c99; color: #fff; }
+.voice-control:disabled { opacity: .48; }
+@media (max-width: 480px) {
+  .voice-composer, .voice-track { gap: 4px; }
+  .voice-control { width: 36px; height: 36px; }
+}
 @media (max-width: 740px) {
   .auth-intro { padding: 22px; gap: 13px; }
   .auth-symbol { width: 37px; height: 37px; border-radius: 9px; }

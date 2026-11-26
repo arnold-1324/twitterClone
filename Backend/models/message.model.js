@@ -3,7 +3,16 @@ import mongoose from "mongoose";
 const pollOptionSchema = new mongoose.Schema({
     optionText: { type: String, required: true },
     votes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-})
+});
+
+const pollSchema = new mongoose.Schema({
+    question: { type: String, required: true },
+    options: [pollOptionSchema],
+    totalVotes: { type: Number, default: 0 },
+    multiSelect: { type: Boolean, default: false },
+    expiresAt: { type: Date, default: null },
+    closed: { type: Boolean, default: false },
+}, { _id: false });
 
 
 const messageSchema = new mongoose.Schema(
@@ -25,19 +34,10 @@ const messageSchema = new mongoose.Schema(
         return this.text && typeof this.text === "string" && this.text.trim().length > 0;
       },
     },
-    poll:{
-     question: {
-    type: String,
-    required: function () {
-      return this.type === "poll";
-    },
-  },
-     options: [pollOptionSchema],
-     totalVotes: { type: Number, default: 0 },
-     multiSelect: { type: Boolean, default: false },
-     expiresAt: { type: Date, default: null },
-     closed:{type:Boolean,default:false}
-    },
+        poll: {
+            type: pollSchema,
+            required: function () { return this.type === "poll"; },
+        },
         seen: {
             type: Boolean,
             default: false,
@@ -73,6 +73,11 @@ const messageSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+messageSchema.pre("validate", function () {
+  // Older ordinary messages could have an empty poll object from nested defaults.
+  if (this.type !== "poll" && this.poll) this.poll = undefined;
+});
 
 messageSchema.pre("save", function (next) {
   if (this.type === "poll" && this.poll?.options) {

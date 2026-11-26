@@ -290,7 +290,7 @@ const Actions = ({ post }) => {
                             </Box>
                         ) : (
                             <Stack>
-                                <Input aria-label="Filter conversations" placeholder="Find a conversation" value={shareQuery}
+                                <Input type="search" aria-label="Filter conversations" placeholder="Find a conversation" value={shareQuery}
                                   onChange={(event) => setShareQuery(event.target.value)} />
                                 <div className="share-destinations">
                                     {conversations.map((chat) => {

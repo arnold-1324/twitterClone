@@ -7,18 +7,20 @@ import {
   useToast,
   useColorModeValue,
   Spinner,
+  Progress,
   Image,
   Text,
   Checkbox,
   CloseButton,
 } from "@chakra-ui/react";
 import { useState, useRef, useEffect } from "react";
-import { IoSendSharp, IoMic, IoPause } from "react-icons/io5";
-import { BsFillImageFill } from "react-icons/bs";
-import { motion } from "framer-motion";
+import { IoSendSharp } from "react-icons/io5";
+import { FiMic, FiPaperclip } from "react-icons/fi";
 import { selectedConversationAtom, selectedMsg } from "../atom/messagesAtom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import useUploadWithProgress from "../hooks/useUploadWithProgress";
+import useVoiceRecorder from "../hooks/useVoiceRecorder";
+import VoiceComposer from "./VoiceComposer";
 import { useSocket } from "../context/SocketContext";
 import { MdPoll } from "react-icons/md";
 import {
@@ -27,8 +29,6 @@ import {
   VStack, Input as ChakraInput
 } from "@chakra-ui/react";
 
-
-const MotionFlex = motion(Flex);
 
 const MessageInput = ({
   onConversationReady,
@@ -42,23 +42,18 @@ const MessageInput = ({
 }) => {
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState(null);
-  const [audioPreview, setAudioPreview] = useState(null);
-  const [mediaFile, setMediaFile] = useState(null);
-  const [mediaPreview, setMediaPreview] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [attachment, setAttachment] = useState(null);
   const [isPollModalOpen, setIsPollModalOpen] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState(["", ""]);
    const [multiSelect, setMultiSelect] = useState(false);
    const [expiresAt, setExpiresAt] = useState("");
-  const { upload } = useUploadWithProgress();
-  const mediaRecorderRef = useRef(null);
+  const { upload, progress, isUploading } = useUploadWithProgress();
   const recipient = useRecoilValue(selectedConversationAtom);
   const toast = useToast();
-  const replyMsg = useRecoilValue(selectedMsg);
-  const [reply, setReply] = useRecoilState(selectedMsg);
+  const voice = useVoiceRecorder((description) =>
+    toast({ title: "Voice recording", description, status: "error" }));
+  const [replyMsg, setReply] = useRecoilState(selectedMsg);
   const { socket } = useSocket();
   const lastTyping = useRef(0);
   const typingTimeout = useRef(null);
@@ -128,28 +123,22 @@ const handleOptionChange = (index, value) => {
     };
   }, [socket, recipient._id, recipient.mock]);
 
-  // Handle upload progress
   useEffect(() => {
-    if (!socket) return;
-    const handleProgress = ({ percent }) => setUploadProgress(Number(percent));
-    socket.on("uploadProgress", handleProgress);
-    return () => socket.off("uploadProgress", handleProgress);
-  }, [socket]);
+    const url = attachment?.url;
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [attachment?.url]);
 
   const isValidReply = (replyMsg.text || replyMsg.media) &&
     (!replyMsg.media || ['img', 'video', 'audio'].includes(replyMsg.mediaType));
 
   // Theme-aware styles
-  const bgColor = useColorModeValue("white", "gray.800");
   const iconHoverColor = useColorModeValue("gray.200", "gray.600");
-  const borderColor = useColorModeValue("gray.300", "gray.600");
   const replySurface = useColorModeValue("gray.100", "gray.700");
   const replyAccent = useColorModeValue("green.600", "green.200");
   const replyText = useColorModeValue("gray.800", "gray.100");
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (isSending || (!messageText.trim() && !audioBlob && !mediaFile)) return;
+  const sendMessage = async (file = attachment?.file) => {
+    if (isSending || (!messageText.trim() && !file)) return;
     setIsSending(true);
 
     try {
@@ -176,7 +165,7 @@ const handleOptionChange = (index, value) => {
       formData.append("message", messageText);
 
       if (isGroupConversation) {
-        formData.append("groupId", recipient.groupId);
+        formData.append("groupId", groupId);
       } else {
         formData.append("recipientId", recipient.userId);
       }
@@ -186,8 +175,7 @@ const handleOptionChange = (index, value) => {
 
       }
 
-      if (audioBlob) formData.append("media", audioBlob, "voice-message.webm");
-      if (mediaFile) formData.append("media", mediaFile);
+      if (file) formData.append("media", file);
 
       const url = replyMsg.id ? "/api/messages/reply" : "/api/messages/send";
 
@@ -198,11 +186,6 @@ const handleOptionChange = (index, value) => {
           (data) => {
             clearTimeout(typingTimeout.current);
             if (socket?.connected && !recipient.mock) socket.emit("typing", { conversationId: recipient._id, isTyping: false });
-            if (data.error) {
-              toast({ title: "Error", description: data.error, status: "error", duration: 5000 });
-              reject(new Error(data.error));
-              return;
-            }
             setMessages(messages => messages.some((item) => item._id === data._id) ? messages : [...messages, data]);
             onConversationReady?.(data);
             resetInputs();
@@ -222,10 +205,8 @@ const handleOptionChange = (index, value) => {
 
   const resetInputs = () => {
     setMessageText("");
-    setAudioBlob(null);
-    setAudioPreview(null);
-    setMediaFile(null);
-    setMediaPreview(null);
+    voice.discard();
+    setAttachment(null);
     setReply({
       id: "",
       text: '',
@@ -263,99 +244,22 @@ const handleOptionChange = (index, value) => {
     }, 1500);
   };
 
-  const handleAudioRecording = () => {
-    if (isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      return;
-    }
+  async function sendVoice() {
+    if (isSending) return;
+    const file = voice.file || await voice.stop();
+    if (file) await sendMessage(file);
+  }
 
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then((stream) => {
-        mediaRecorderRef.current = new MediaRecorder(stream);
-        const audioChunks = [];
-
-        mediaRecorderRef.current.ondataavailable = (event) => {
-          audioChunks.push(event.data);
-        };
-
-        mediaRecorderRef.current.onstop = () => {
-          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-          setAudioBlob(audioBlob);
-          const audioUrl = URL.createObjectURL(audioBlob);
-          setAudioPreview(audioUrl);
-          setMediaPreview(<audio controls src={audioUrl} />);
-        };
-
-        mediaRecorderRef.current.start();
-        setIsRecording(true);
-      })
-      .catch(() => {
-        toast({
-          title: "Permission denied",
-          description: "Cannot access the microphone.",
-          status: "error",
-          duration: 2000,
-        });
-      });
-  };
-
-  const handleMediaUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    // Clean up previous preview
-    if (mediaPreview && typeof mediaPreview === "string") {
-      URL.revokeObjectURL(mediaPreview);
-    }
-
-    setMediaFile(file);
-    const url = URL.createObjectURL(file);
-
-    if (file.type.startsWith("image/")) {
-      setMediaPreview(<Image src={url} alt="Preview" maxH="150px" borderRadius="md" />);
-    } else if (file.type.startsWith("video/")) {
-      setMediaPreview(<video src={url} controls style={{ maxHeight: "150px" }} />);
-    } else if (file.type.startsWith("audio/")) {
-      setMediaPreview(<audio src={url} controls style={{ maxHeight: "150px" }} />);
-    } else if (file.type === "application/pdf") {
-      setMediaPreview(
-        <iframe src={url} title="PDF Preview" style={{ width: "100%", height: "170px" }} />
-      );
-    } else {
-      setMediaPreview(
-        <Flex align="center" gap={2}>
-          <Box
-            p={2}
-            border="1px solid"
-            borderColor={borderColor}
-            borderRadius="md"
-            bg={replySurface}
-          >
-            📄 {file.name}
-          </Box>
-        </Flex>
-      );
-    }
-    e.target.value = null;
-  };
-
-  const handleCancelMedia = () => {
-    if (mediaPreview && typeof mediaPreview === "string") {
-      URL.revokeObjectURL(mediaPreview);
-    }
-    setMediaFile(null);
-    setAudioBlob(null);
-    setAudioPreview(null);
-    setMediaPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = null;
-  };
+  function handleMediaUpload(event) {
+    const file = event.target.files[0];
+    if (file) setAttachment({ file, url: URL.createObjectURL(file) });
+    event.target.value = "";
+  }
 
   return (
     <Box w="full" className="thread-compose">
-      {/* Upload Progress */}
-      {uploadProgress > 0 && uploadProgress < 100 && (
-        <UploadProgressBar progress={uploadProgress} fileName={mediaFile?.name || audioBlob ? "Audio" : ""} />
+      {isUploading && progress > 0 && progress < 100 && (
+        <Progress aria-label="Uploading attachment" size="xs" value={progress} colorScheme="blue" />
       )}
 
       {/* Reply Preview */}
@@ -383,11 +287,11 @@ const handleOptionChange = (index, value) => {
                 {replyMsg.mediaType === "img" ? (
                   <Image src={replyMsg.media} alt="Thumbnail" objectFit="cover" w="full" h="full" />
                 ) : replyMsg.mediaType === "video" ? (
-                  <video w="full" h="full" objectFit="cover" controls={false}>
+                  <video style={{ width: "100%", height: "100%", objectFit: "cover" }}>
                     <source src={replyMsg.media} />
                   </video>
                 ) : replyMsg.mediaType === "audio" ? (
-                  <Image src="../public/audio.png" alt="Audio Thumbnail" objectFit="cover" w="full" h="full" />
+                  <Image src="/audio.png" alt="Audio Thumbnail" objectFit="cover" w="full" h="full" />
                 ) : null}
               </Box>
             )}
@@ -401,56 +305,30 @@ const handleOptionChange = (index, value) => {
         </Box>
       )}
 
-      {/* Media Preview */}
-      {mediaPreview && (
-        <Box mb={4} p={2} bg={bgColor} border="1px solid" borderColor={borderColor} borderRadius="md" position="relative">
-          {mediaPreview}
-          <CloseButton
-            position="absolute"
-            top={2}
-            right={2}
-            size="sm"
-            color="white"
-            bg="gray.500"
-            _hover={{ bg: "gray.600", transform: "scale(1.1)" }}
-            borderRadius="full"
-            boxShadow="md"
-            onClick={handleCancelMedia}
-            aria-label="Cancel"
-          />
+      {attachment && (
+        <Box className="thread-attachment">
+          {attachment.file.type.startsWith("image/") ? (
+            <Image src={attachment.url} alt="Attachment preview" maxH="136px" borderRadius="md" />
+          ) : attachment.file.type.startsWith("video/") ? (
+            <video src={attachment.url} controls style={{ maxHeight: "136px" }} />
+          ) : attachment.file.type.startsWith("audio/") ? (
+            <audio src={attachment.url} controls />
+          ) : attachment.file.type === "application/pdf" ? (
+            <iframe src={attachment.url} title="PDF attachment preview" width="100%" height="136" />
+          ) : <Text noOfLines={1}>{attachment.file.name}</Text>}
+          <CloseButton size="sm" onClick={() => setAttachment(null)} isDisabled={isSending}
+            aria-label="Remove attachment" />
         </Box>
       )}
 
-      {/* Input Area */}
-      <MotionFlex as="form" onSubmit={handleSendMessage} className="message-editor"
-        w="full"
-        bg={bgColor}
-        borderRadius="full"
-        boxShadow="lg"
-        px={4}
-        py={2}
-        alignItems="center"
-        gap={2}
-        border="1px solid"
-        borderColor={borderColor}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="*/*"
-          style={{ display: "none" }}
-          id="media-upload"
-          onChange={handleMediaUpload}
-        />
-        <IconButton
-          as="label"
-          htmlFor="media-upload"
-          icon={<BsFillImageFill />}
-          aria-label="Upload Media"
-          variant="ghost"
-          size="sm"
-          _hover={{ bg: iconHoverColor }}
-        />
+      {voice.phase !== "idle" ? <VoiceComposer voice={voice} sending={isSending} onSend={sendVoice} /> : (
+        <Flex as="form" onSubmit={(event) => { event.preventDefault(); void sendMessage(); }} className="message-editor"
+          w="full" borderRadius="full" px={3} py={2} alignItems="center" gap={2}
+          border="1px solid" borderColor="var(--chat-line)">
+        <input ref={fileInputRef} type="file" hidden onChange={handleMediaUpload} />
+        <IconButton type="button" icon={<FiPaperclip />} aria-label="Upload Media"
+          onClick={() => fileInputRef.current?.click()} isDisabled={Boolean(editingMessageId) || isSending}
+          variant="ghost" size="sm" _hover={{ bg: iconHoverColor }} />
 
         {isGroupConversation && <IconButton type="button"
           icon={<MdPoll />}
@@ -473,17 +351,16 @@ const handleOptionChange = (index, value) => {
           onChange={handleTyping}
           flex={1}
           variant="unstyled"
-          bg={bgColor}
         />
 
         <IconButton
-          icon={isRecording ? <IoPause /> : <IoMic />}
+          icon={<FiMic />}
           type="button"
-          onClick={handleAudioRecording}
-          aria-label="Record"
+          onClick={() => void voice.start()}
+          aria-label="Record voice message"
+          isDisabled={Boolean(attachment || editingMessageId) || isSending}
           variant="ghost"
           size="sm"
-          colorScheme={isRecording ? "red" : "gray"}
           _hover={{ bg: iconHoverColor }}
         />
 
@@ -491,12 +368,13 @@ const handleOptionChange = (index, value) => {
           icon={isSending ? <Spinner size="sm" /> : <IoSendSharp />}
           aria-label="Send"
           type="submit"
-          isDisabled={isSending || (!messageText.trim() && !audioBlob && !mediaFile)}
+          isDisabled={isSending || (!messageText.trim() && !attachment)}
           variant="ghost"
           size="sm"
           _hover={{ bg: iconHoverColor }}
         />
-      </MotionFlex>
+        </Flex>
+      )}
 
 
       <Modal isOpen={isPollModalOpen} onClose={() => setIsPollModalOpen(false)}>

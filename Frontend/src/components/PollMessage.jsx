@@ -53,12 +53,12 @@ const PollMessage = ({ message, currentUserId }) => {
 
   return (
     <div className="w-full">
-      <div className="rounded-xl p-3 bg-emerald-50 text-emerald-950 border border-emerald-100">
+      <div className="chat-poll rounded-xl p-3">
         <h3 className="font-semibold mb-3 leading-snug">
           {poll.question}
         </h3>
 
-        {error && <p role="alert" className="mb-2 text-sm text-red-800">{error}</p>}
+        {error && <p role="alert" className="chat-poll-error mb-2 text-sm">{error}</p>}
         <div className="space-y-3">
           {poll.options.map((opt, index) => {
             const userVotedHere = opt.votes.includes(currentUserId);
@@ -68,16 +68,13 @@ const PollMessage = ({ message, currentUserId }) => {
               <button
                 type="button"
                 key={opt._id || index}
-                className={`w-full text-left group rounded-lg px-3 py-2 bg-white/60 hover:bg-white border border-emerald-100 transition relative`}
+                className="chat-poll-option w-full text-left rounded-lg px-3 py-2"
                 onClick={() => handleVoteClick(index)}
               >
                 <div className="flex items-center gap-3 relative z-10">
                   <span
-                    className={`flex items-center justify-center h-5 w-5 rounded-full border ${
-                      userVotedHere || selectedOptions.includes(index)
-                        ? "border-emerald-600 bg-emerald-600 text-white"
-                        : "border-emerald-400 bg-white"
-                    }`}
+                    className="chat-poll-check flex items-center justify-center h-5 w-5 rounded-full"
+                    data-checked={userVotedHere || selectedOptions.includes(index)}
                   >
                     {(userVotedHere || selectedOptions.includes(index)) && (
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
@@ -85,16 +82,16 @@ const PollMessage = ({ message, currentUserId }) => {
                       </svg>
                     )}
                   </span>
-                  <span className="flex-1 font-medium text-sm text-emerald-950">{opt.optionText}</span>
+                  <span className="flex-1 font-medium text-sm">{opt.optionText}</span>
                   {voted && (
-                    <span className="text-xs font-semibold text-emerald-700 min-w-[2rem] text-right">{percent}%</span>
+                    <span className="chat-poll-meta text-xs font-semibold min-w-[2rem] text-right">{percent}%</span>
                   )}
                 </div>
 
                 {/* Progress bar when results visible */}
                 {voted && (
-                  <div className="mt-2 h-2 w-full rounded-full bg-emerald-100 overflow-hidden">
-                    <div className="h-full bg-emerald-500" style={{ width: `${percent}%` }} />
+                  <div className="chat-poll-track mt-2 h-1 w-full rounded-full overflow-hidden">
+                    <div className="chat-poll-fill h-full" style={{ width: `${percent}%` }} />
                   </div>
                 )}
               </button>
@@ -108,22 +105,20 @@ const PollMessage = ({ message, currentUserId }) => {
             <button
               onClick={() => submitVote()}
               disabled={loading || (!poll.multiSelect && selectedOptions.length === 0) || (poll.multiSelect && selectedOptions.length === 0)}
-              className={`px-3 py-1.5 rounded-lg text-white text-sm font-semibold ${
-                poll.multiSelect ? "bg-emerald-600 disabled:bg-emerald-200" : "bg-emerald-600 disabled:bg-emerald-200 hidden"
-              }`}
+              className={`chat-poll-submit px-3 py-1.5 rounded-lg text-sm font-semibold${poll.multiSelect ? "" : " hidden"}`}
             >
               {loading ? "Voting..." : poll.multiSelect ? "Submit votes" : "Vote"}
             </button>
           ) : (
             <button
               onClick={() => setShowVoters((s) => !s)}
-              className="text-emerald-700 text-sm font-semibold hover:underline"
+              className="chat-poll-meta text-sm font-semibold hover:underline"
             >
               View votes
             </button>
           )}
 
-          <span className="text-[11px] text-emerald-700/80">
+          <span className="chat-poll-meta text-[11px]">
             {totalVotes} vote{totalVotes === 1 ? "" : "s"}
           </span>
         </div>
@@ -131,7 +126,7 @@ const PollMessage = ({ message, currentUserId }) => {
 
       {/* Optional voters list (IDs only if names unavailable) */}
       {showVoters && (
-        <div className="mt-2 rounded-lg bg-white/70 border border-emerald-100 p-2 text-xs text-emerald-900">
+        <div className="chat-poll mt-2 rounded-lg p-2 text-xs">
           {poll.options.map((opt, idx) => (
             <div key={opt._id || idx} className="flex items-start gap-2 py-1">
               <span className="min-w-[10ch] font-medium">{opt.optionText}:</span>

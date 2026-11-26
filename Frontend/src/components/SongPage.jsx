@@ -157,7 +157,8 @@ const SongPage = () => {
         <Input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search for songs, artists, or albums"
+          type="search"
+              placeholder="Search for songs, artists, or albums"
           size="lg"
           width="50%"
           color="white"

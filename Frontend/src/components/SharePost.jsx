@@ -160,6 +160,7 @@ const SharePost = ({ postId }) => {
           <ModalCloseButton />
           <ModalBody>
             <Input
+              type="search"
               placeholder="Search users or groups..."
               mb={3}
               value={searchTerm}

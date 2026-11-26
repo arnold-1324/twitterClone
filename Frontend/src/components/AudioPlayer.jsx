@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const PlayIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
@@ -23,7 +23,7 @@ const AudioPlayer = ({ audioUrl, isPlaying, onPlay }) => {
     if (audioRef.current) {
       audioRef.current.playbackRate = playbackRate;
       if (isPlaying) {
-        audioRef.current.play();
+        void audioRef.current.play().catch(() => {});
       } else {
         audioRef.current.pause();
       }
@@ -75,6 +75,7 @@ const AudioPlayer = ({ audioUrl, isPlaying, onPlay }) => {
 
   // Click to seek
   const handleProgressClick = (e) => {
+    if (!Number.isFinite(duration) || duration <= 0) return;
     const rect = progressRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percent = clickX / rect.width;
@@ -82,11 +83,11 @@ const AudioPlayer = ({ audioUrl, isPlaying, onPlay }) => {
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-full shadow-md w-full max-w-md bg-white">
+    <div className="chat-audio flex items-center gap-2 p-2 rounded-full w-full max-w-md">
       {/* Play / Pause Button */}
       <button
-        onClick={togglePlay}
-        className="flex items-center justify-center bg-black text-white w-10 h-10 rounded-full"
+        type="button" onClick={togglePlay} aria-label={isPlaying ? "Pause audio" : "Play audio"}
+        className="chat-audio-button flex items-center justify-center w-9 h-9 rounded-full"
       >
         {isPlaying ? <PauseIcon /> : <PlayIcon />}
       </button>
@@ -105,24 +106,24 @@ const AudioPlayer = ({ audioUrl, isPlaying, onPlay }) => {
       <div
         ref={progressRef}
         onClick={handleProgressClick}
-        className="flex-1 h-2 bg-gray-200 rounded-full cursor-pointer relative"
+        className="chat-poll-track flex-1 h-1 rounded-full cursor-pointer"
       >
         <div
-          className="h-2 bg-blue-500 rounded-full"
+          className="chat-poll-fill h-1 rounded-full"
           style={{ width: `${(currentTime / duration) * 100 || 0}%` }}
         />
       </div>
 
       {/* Speed button */}
       <button
-        onClick={handlePlaybackSpeedChange}
-        className="ml-3 px-2 py-1 text-sm bg-gray-200 rounded-full"
+        type="button" onClick={handlePlaybackSpeedChange} aria-label="Change playback speed"
+        className="chat-audio-button px-2 py-1 text-sm rounded-full"
       >
         {playbackRate}x
       </button>
 
       {/* Time */}
-      <span className="text-gray-500 text-sm">{formatTime(currentTime)}</span>
+      <span className="voice-time">{formatTime(currentTime)}</span>
     </div>
   );
 };

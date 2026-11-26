@@ -100,7 +100,8 @@ function App() {
   }, [userId, setSaved]);
 
   return (
-    <Box className={user ? "dayline-shell" : undefined} position={"relative"} w="full" minHeight="100vh">
+    <Box className={user ? `dayline-shell${pathname === "/chat" ? " chat-shell" : ""}` : undefined}
+      position={"relative"} w="full" minHeight="100vh">
       <Container
         maxW={pathname === "/chat" ? "none" : pathname === "/activity" ? "1080px" : pathname === "/" ? "1120px" : pathname === "/auth" ? "960px" : "760px"}
         minHeight="100vh"
