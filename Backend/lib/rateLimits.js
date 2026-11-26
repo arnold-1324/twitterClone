@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
+import { redisClient } from "../Redis.js";
 
 export function createRateStore({ maxEntries = 20000, now = () => performance.now() } = {}) {
   const buckets = new Map();
@@ -29,6 +30,34 @@ const takeIp = createRateStore({ maxEntries: 12000 });
 const takeRoute = createRateStore();
 export const takeSocket = createRateStore({ maxEntries: 12000 });
 
+const chargeRedis = `
+local used = tonumber(redis.call('GET', KEYS[1])) or 0
+local ttl = redis.call('PTTL', KEYS[1])
+local limit = tonumber(ARGV[1])
+if ttl < 1 then
+  used = 0
+  ttl = tonumber(ARGV[2])
+end
+if used >= limit then return {0, 0, ttl} end
+redis.call('SET', KEYS[1], used + 1, 'PX', ttl)
+return {1, limit - used - 1, ttl}
+`;
+
+async function takeHttp(fallback, key, limit, windowMs) {
+  if (redisClient.isReady) {
+    const digest = createHash("sha256").update(key).digest("hex");
+    try {
+      const [allowed, remaining, ttl] = await redisClient.sendCommand([
+        "EVAL", chargeRedis, "1", `social:rate:${digest}`, String(limit), String(windowMs),
+      ], { signal: AbortSignal.timeout(250) });
+      return { allowed: Boolean(allowed), remaining, retry: Math.max(1, Math.ceil(ttl / 1000)) };
+    } catch {
+      // Keep enforcing local limits if Redis is starting, full or unavailable.
+    }
+  }
+  return fallback(key, limit, windowMs);
+}
+
 function reply(res, budget, limit) {
   res.set("RateLimit-Limit", String(limit));
   res.set("RateLimit-Remaining", String(budget.remaining));
@@ -39,13 +68,13 @@ function reply(res, budget, limit) {
   return true;
 }
 
-export function limitIp(req, res, next) {
-  const budget = takeIp(req.ip, 360, minute);
+export async function limitIp(req, res, next) {
+  const budget = await takeHttp(takeIp, `ip:${req.ip}`, 360, minute);
   if (!budget.allowed) return reply(res, budget, 360);
   next();
 }
 
-export function limitResource(req, res, next) {
+export async function limitResource(req, res, next) {
   const path = req.route.path;
   const resource = `${req.baseUrl}${path === "/" ? "" : path}`;
   const read = req.method === "GET" || req.method === "HEAD";
@@ -64,7 +93,7 @@ export function limitResource(req, res, next) {
   else if (resource.includes("/analytics")) limit = 8;
 
   const principal = req.user?._id ? `user:${req.user._id}` : `ip:${req.ip}`;
-  const budget = takeRoute(`${method}:${resource}:${principal}`, limit, period);
+  const budget = await takeHttp(takeRoute, `${method}:${resource}:${principal}`, limit, period);
   if (reply(res, budget, limit)) return;
 
   if (auth && ["/login", "/forgot-password", "/verify-email"].includes(path)) {
@@ -72,7 +101,8 @@ export function limitResource(req, res, next) {
     if (typeof identity === "string" && identity.length <= 254) {
       const digest = createHash("sha256").update(identity.trim().toLowerCase()).digest("hex");
       const identityLimit = path === "/login" ? 15 : 8;
-      if (reply(res, takeRoute(`auth:${path}:${digest}`, identityLimit, period), identityLimit)) return;
+      const identityBudget = await takeHttp(takeRoute, `auth:${path}:${digest}`, identityLimit, period);
+      if (reply(res, identityBudget, identityLimit)) return;
     }
   }
   next();

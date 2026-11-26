@@ -1,0 +1,13 @@
+*
+!Dockerfile
+!Backend/
+!Backend/**
+!Frontend/
+!Frontend/**
+**/node_modules
+**/dist
+**/.env*
+**/.dayline-media
+**/.git
+**/*.log
+Backend/tests

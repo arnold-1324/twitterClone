@@ -200,13 +200,13 @@ npm ci --prefix Frontend
 
 ### 2. Start supporting services
 
-Start MongoDB locally by your preferred method. If you want a local Redis container for future cache work, run:
+Start MongoDB locally by your preferred method. For Redis-backed HTTP rate limits, start a local Redis container:
 
 ```bash
 docker compose up -d redis
 ```
 
-Redis is disabled in application code. MongoDB is required. Local media uploads require no S3 credentials.
+Set `REDIS_URL` to the Redis connection URL, including any credentials. HTTP rate limits fall back to process memory if Redis is unavailable. MongoDB is required. Local media uploads require no S3 credentials.
 
 ### 3. Run the backend
 
@@ -239,6 +239,16 @@ DAYLINE_API_TARGET=http://127.0.0.1:5000 npm run preview --prefix Frontend -- --
 ```
 
 Open `http://localhost:3000` in a browser that supports PWA installation. The production service worker caches the app shell for offline startup. API data still requires a connection.
+
+## Railway deployment
+
+The root `Dockerfile` builds the PWA and API into one service. Express serves the app, API and Socket.IO on the same HTTPS domain, so session cookies and private attachment links work from the installed app. The container runs Redis on loopback for HTTP rate-limit counters.
+
+- Set the service builder to `DOCKERFILE` with `Dockerfile` at the repository root. Expose port `5000` and use `/health` as the health check.
+- Attach a persistent volume at `/data` and set `MEDIA_DIR=/data/media`. Back it up with the MongoDB database.
+- Set `NODE_ENV=production`, `MONGODB_URL`, `JWT_SECRET`, `ENCRYPTION_SECRET`, and `TOKEN` in Railway's service variables. Use a database user with `readWrite` only on the app database. Store credentials in Railway variables.
+- Set `TRUST_PROXY_HOPS=1` when the service is reached through Railway's single edge proxy. Set `FRONTEND_URL`, `CLIENT_URL`, and `APP_URL` to the service's HTTPS domain.
+- Optional S3 credentials serve previously uploaded S3 objects. The deployed service writes new uploads to the attached volume.
 
 ## Available scripts
 
