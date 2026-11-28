@@ -12,6 +12,8 @@ import { saveMedia, removeMedia } from "../lib/mediaStore.js";
 import mongoose from "mongoose";
 import { redisClient } from "../Redis.js";
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const followUnfollowUser = async (req, res, next) => {
   const { id } = req.params;
   const actor = req.user._id;
@@ -66,7 +68,15 @@ export const getUserProfile = async (req, res) => {
     // Redis disabled: skip storing cached user profile
     // await redisClient.setEx(cacheKey, 600, JSON.stringify(user));
 
-    const profile = await presentProfile(user);
+    const [profile, postsCount] = await Promise.all([
+      presentProfile(user),
+      Post.countDocuments({ postedBy: user._id }).maxTimeMS(1500),
+    ]);
+    const following = new Set((req.user?.following ?? []).map(String));
+    const mutualIds = (user.followers ?? []).filter((id) => following.has(String(id))).slice(0, 3);
+    profile.mutuals = await Promise.all((await User.find({ _id: { $in: mutualIds }, isFrozen: { $ne: true } })
+      .select("username fullName profileImg").maxTimeMS(1000).lean()).map(presentProfile));
+    profile.postsCount = postsCount;
     if (profile.hideBio && String(profile._id) !== String(req.user?._id)) delete profile.bio;
     return res.status(200).json(profile);
 
@@ -212,10 +222,16 @@ export async function searchUsers(req, res, next) {
   const query = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
   if (!/^[a-zA-Z0-9_]{2,24}$/.test(query)) return res.json([]);
   try {
-    const matches = await peopleCache.read(query, () => User.find({
-      username: { $regex: `^${query}`, $options: "i" },
-    }).select("username fullName profileImg").sort({ username: 1 }).limit(13).maxTimeMS(1500).lean().exec());
+    const pattern = `^${escapeRegex(query)}`;
+    const matches = await peopleCache.read(query, () => User.aggregate([
+      { $match: { username: { $regex: pattern, $options: "i" }, isFrozen: { $ne: true } } },
+      { $addFields: { followersCount: { $size: { $ifNull: ["$followers", []] } } } },
+      { $project: { username: 1, fullName: 1, profileImg: 1, isVerified: 1, followersCount: 1 } },
+      { $sort: { username: 1 } },
+      { $limit: 13 },
+    ]).option({ maxTimeMS: 1500 }));
     const visible = matches.filter((user) => String(user._id) !== String(req.user._id)).slice(0, 12);
+    res.set("Cache-Control", "private, no-store");
     return res.json(await Promise.all(visible.map(presentProfile)));
   } catch (error) {
     return next(error);

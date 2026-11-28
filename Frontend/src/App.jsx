@@ -22,6 +22,7 @@ const DiscoveryPage = React.lazy(() => import("./Pages/DiscoveryPage"));
 const ReelsPage = React.lazy(() => import("./Pages/ReelsPage"));
 const Home = React.lazy(() => import("./Pages/Home"));
 const SearchPage = React.lazy(() => import("./Pages/SearchPage"));
+const SearchProfileScreen = React.lazy(() => import("./Pages/SearchProfileScreen"));
 const ChatPage = React.lazy(() => import("./Pages/ChatPage"));
 const UpdateProfile = React.lazy(() => import("./Pages/UpdateProfile"));
 const ResetPasswordForm = React.lazy(() => import("./components/ForgotpassCard"));
@@ -33,7 +34,8 @@ const SettingPage = React.lazy(() => import("./Pages/SettingPage"));
 const StoryPage = React.lazy(() => import("./Pages/StoryPage"));
 
 function App() {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const user = useAppValue(userAtom);
   const setNotify = useSetAppValue(NotifyAtom);
   const setUser = useSetAppValue(userAtom);
@@ -126,7 +128,7 @@ function App() {
   }, [userId, setSaved]);
 
   return (
-    <Box className={user ? `dayline-shell${pathname === "/chat" ? " chat-shell" : pathname === "/reels" ? " reels-shell" : ""}` : undefined}
+    <Box className={user ? `dayline-shell${pathname === "/chat" ? " chat-shell" : pathname === "/reels" ? " reels-shell" : pathname === "/search" || location.state?.fromSearch ? " search-shell" : ""}` : undefined}
       position={"relative"} w="full" minHeight="100vh">
       <Container
         maxW={["/chat", "/reels"].includes(pathname) ? "none" : pathname === "/activity" ? "1080px" : pathname === "/" ? "1120px" : pathname === "/auth" ? "960px" : "760px"}
@@ -143,7 +145,7 @@ function App() {
             <Route path="/auth" element={!user ? <AuthPage /> : <Navigate to="/" />} />
             <Route path="/auth/reset-password/:token" element={<ResetPasswordForm />} />
             <Route path="/update" element={user ? <UpdateProfile /> : <Navigate to="/auth" />} />
-            <Route path="/:username" element={user ? <Userpage /> : <Navigate to="/auth" />} />
+            <Route path="/:username" element={user ? (location.state?.fromSearch ? <SearchProfileScreen /> : <Userpage />) : <Navigate to="/auth" />} />
             <Route path="/search" element={user ? <SearchPage /> : <Navigate to="/auth" />} />
             <Route path="/create" element={user ? <CreatePost page /> : <Navigate to="/auth" />} />
             <Route path="/discover" element={user ? <DiscoveryPage key="discover" /> : <Navigate to="/auth" />} />

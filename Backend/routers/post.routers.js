@@ -1,5 +1,5 @@
 import { limitResource, limitUpload } from "../lib/rateLimits.js";
-import { recordPostView, likePostReply, repost } from "../controller/post.controller.js";
+import { recordPostView, likePostReply, repost, searchTopics } from "../controller/post.controller.js";
 import express from 'express'
 import { uploadCarousel, uploadPostImage, uploadReel } from "../lib/utils/uploader.js"
 import { protectRoute } from "../middleware/protectRoute.js";
@@ -16,6 +16,7 @@ router.put("/:id/view", protectRoute, limitResource, recordPostView);
 router.post("/reels", protectRoute, limitResource, limitUpload, uploadReel, createReel);
 router.get("/reels", protectRoute, limitResource, recommendations("reel"));
 router.get("/discover", protectRoute, limitResource, recommendations("post"));
+router.get("/search-topics", protectRoute, limitResource, searchTopics);
 router.get("/saved/ids", protectRoute, limitResource, getSavedIds);
 router.get("/saved", protectRoute, limitResource, listSaved);
 router.put("/:id/save", protectRoute, limitResource, savePost);

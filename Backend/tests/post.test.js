@@ -5,6 +5,7 @@ import request from "supertest";
 import Post from "../models/post.model.js";
 import Session from "../models/session.model.js";
 import User from "../models/user.model.js";
+import { searchTopics } from "../controller/post.controller.js";
 
 let app;
 const account = new mongoose.Types.ObjectId();
@@ -41,4 +42,28 @@ test("home feed includes the signed-in author, followers, and followed authors",
   const find = jest.spyOn(Post, "find").mockReturnValue(query);
   await request(app).get("/api/posts/feed").set("Cookie", session()).expect(200, []);
   expect(find).toHaveBeenCalledWith({ postedBy: { $in: [account, followed, follower] } });
+});
+
+test("topic suggestions normalize hashtags and return the bounded aggregation", async () => {
+  const topics = [{ topic: "nature", postCount: 4 }];
+  jest.spyOn(Post, "aggregate").mockReturnValue({ option: async () => topics });
+  const res = { set: jest.fn(), json: jest.fn() };
+
+  await searchTopics({ query: { q: "#Nature" } }, res, jest.fn());
+
+  const pipeline = Post.aggregate.mock.calls[0][0];
+  expect(pipeline[0].$match.topics.$regex).toBe("^nature");
+  expect(pipeline.some((stage) => stage.$limit === 8)).toBe(true);
+  expect(res.set).toHaveBeenCalledWith("Cache-Control", "private, no-store");
+  expect(res.json).toHaveBeenCalledWith(topics);
+});
+
+test("topic suggestions reject non-topic input before querying MongoDB", async () => {
+  const aggregate = jest.spyOn(Post, "aggregate");
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+
+  await searchTopics({ query: { q: "nature.*" } }, res, jest.fn());
+
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(aggregate).not.toHaveBeenCalled();
 });

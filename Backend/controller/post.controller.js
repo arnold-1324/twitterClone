@@ -117,11 +117,47 @@ export function recommendations(kind) {
                 { path: "postedBy", select: "username fullName profileImg" },
                 { path: "likes", select: "username profileImg" },
             ]);
-            return res.json(await presentPosts(chosen));
+            const presented = await presentPosts(chosen);
+            if (kind !== "reel" && chosen.length) {
+                const counts = await PostView.aggregate([
+                    { $match: { post: { $in: chosen.map(({ _id }) => _id) }, expiresAt: { $gt: new Date() } } },
+                    { $group: { _id: "$post", count: { $sum: 1 } } },
+                ]).option({ maxTimeMS: 1500 });
+                const byPost = new Map(counts.map(({ _id, count }) => [String(_id), count]));
+                for (const post of presented) post.viewCount = byPost.get(String(post._id)) ?? 0;
+            }
+            return res.json(presented);
         } catch (error) {
             return next(error);
         }
     };
+}
+
+export async function searchTopics(req, res, next) {
+    const raw = typeof req.query.q === "string"
+        ? req.query.q.trim().normalize("NFKC").replace(/^#/, "").toLowerCase()
+        : "";
+    if (!raw) return res.json([]);
+    if ([...raw].length > 32 || !/^[\p{L}\p{N}_]+$/u.test(raw)) {
+        return res.status(400).json({ error: "Search with a word, number, or hashtag." });
+    }
+
+    const pattern = `^${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`;
+    try {
+        const topics = await Post.aggregate([
+            { $match: { kind: { $ne: "reel" }, topics: { $regex: pattern } } },
+            { $unwind: "$topics" },
+            { $match: { topics: { $regex: pattern } } },
+            { $group: { _id: "$topics", postCount: { $sum: 1 } } },
+            { $sort: { postCount: -1, _id: 1 } },
+            { $limit: 8 },
+            { $project: { _id: 0, topic: "$_id", postCount: 1 } },
+        ]).option({ maxTimeMS: 1500 });
+        res.set("Cache-Control", "private, no-store");
+        return res.json(topics);
+    } catch (error) {
+        return next(error);
+    }
 }
 
 export async function getSavedIds(req, res, next) {
