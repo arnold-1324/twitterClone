@@ -8,6 +8,7 @@ import CreatorFollow from "./CreatorFollow";
 import MusicPlayer from "./MusicPlayer";
 import PostCaption from "./PostCaption";
 import { apiFetch } from "../lib/apiFetch";
+import { useMusicTrack } from "../lib/music";
 
 export default function ReelSlide({ post, viewer, muted, setMuted, sheet, setSheet, position, goNext }) {
   const video = useRef(null);
@@ -24,13 +25,30 @@ export default function ReelSlide({ post, viewer, muted, setMuted, sheet, setShe
   const [musicOpen, setMusicOpen] = useState(false);
   const creator = post.postedBy?._id ? post.postedBy : null;
   const media = post.media?.find(({ type }) => type === "video");
+  const track = useMusicTrack(post.music?.id, post.music?.track);
+  const attachedAudio = Boolean(track?.url && track.provider !== "spotify");
+
+  function toggleSound() {
+    const next = !muted;
+    const player = attachedAudio ? slide.current.querySelector("audio") : video.current;
+    if (player) {
+      player.muted = next;
+      if (!next && !paused && !ended) void player.play().catch(() => {});
+    }
+    setMuted(next);
+  }
 
   useEffect(() => {
     const element = video.current;
     if (!element) return;
     function sync() {
       if (paused || document.hidden || musicOpen) element.pause();
-      else void element.play().catch(() => {});
+      else void element.play().catch((error) => {
+        if (error.name !== "NotAllowedError" || element.muted || document.hidden) return;
+        element.muted = true;
+        setMuted(true);
+        void element.play().catch(() => {});
+      });
     }
     element.addEventListener("canplay", sync);
     document.addEventListener("visibilitychange", sync);
@@ -40,7 +58,7 @@ export default function ReelSlide({ post, viewer, muted, setMuted, sheet, setShe
       document.removeEventListener("visibilitychange", sync);
       element.pause();
     };
-  }, [paused, musicOpen, attempt]);
+  }, [paused, musicOpen, attempt, setMuted]);
 
   useEffect(() => {
     if (waiting || paused || ended || failed || musicOpen || creator?._id === viewer?._id) return;
@@ -94,7 +112,7 @@ export default function ReelSlide({ post, viewer, muted, setMuted, sheet, setShe
   return <div ref={slide} className="reel-slide-content" data-sheet={sheet || undefined}>
     <div className="reel-visual" onClick={handleSurfaceTap}>
       <AdaptiveVideo key={attempt} videoRef={video} eager src={media.url} streamUrl={media.streamUrl}
-        aria-label={post.caption || "Reel video"} className="reel-stage-video" controls={false} muted={muted}
+        aria-label={post.caption || "Reel video"} className="reel-stage-video" controls={false} muted={muted || attachedAudio}
         onLoadedMetadata={(event) => {
           const seconds = position.get(post._id) ?? 0;
           if (seconds > 0 && seconds < event.currentTarget.duration) event.currentTarget.currentTime = seconds;
@@ -133,11 +151,13 @@ export default function ReelSlide({ post, viewer, muted, setMuted, sheet, setShe
           <button type="button" aria-label={paused || ended ? "Play reel" : "Pause reel"}
             onClick={() => ended ? replay() : setPaused(!paused)}>{paused || ended ? <FiPlay /> : <FiPause />}</button>
           <button type="button" aria-label={muted ? "Unmute reel" : "Mute reel"} aria-pressed={!muted}
-            onClick={() => setMuted(!muted)}>{muted ? <FiVolumeX /> : <FiVolume2 />}</button>
+            onClick={toggleSound}>{muted ? <FiVolumeX /> : <FiVolume2 />}</button>
         </div>
       </div>
       <PostCaption text={post.caption} compact />
-      {post.music?.id && <button className="reel-audio" type="button" onClick={() => setMusicOpen(true)}>
+      {attachedAudio ? <div className="reel-audio">
+        <MusicPlayer music={{ ...post.music, track, style: "audio" }} autoPlay active={!paused && !ended && !failed} muted={muted} />
+      </div> : post.music?.id && <button className="reel-audio" type="button" onClick={() => setMusicOpen(true)}>
         <FiMusic /> Listen to track
       </button>}
       <Actions post={post} reel likeActionRef={likeAction} onOverlayChange={setSheet} />

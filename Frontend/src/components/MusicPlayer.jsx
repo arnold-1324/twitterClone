@@ -43,7 +43,7 @@ function SpotifyTrack({ music, active = true, spotifyAutoPlay = false, overlay =
   </div>;
 }
 
-function TrackPlayback({ music, active = true, inView = true, volumeAxis, autoPlay = false, overlay = false }) {
+function TrackPlayback({ music, active = true, inView = true, volumeAxis, autoPlay = false, overlay = false, muted }) {
   const player = useRef(null);
   const host = useRef(null);
   const [stage, setStage] = useState(null);
@@ -62,8 +62,8 @@ function TrackPlayback({ music, active = true, inView = true, volumeAxis, autoPl
   useEffect(() => {
     const audio = player.current;
     audio.volume = autoPlay ? sound.volume : .75;
-    audio.muted = autoPlay && sound.muted;
-  }, [autoPlay, sound]);
+    audio.muted = muted ?? (autoPlay && sound.muted);
+  }, [autoPlay, sound, muted]);
 
   useEffect(() => {
     const audio = player.current;
@@ -154,7 +154,7 @@ function TrackPlayback({ music, active = true, inView = true, volumeAxis, autoPl
 
   return <div ref={host} className={`music-player${overlay ? " music-overlay" : ""}${style === "audio" && overlay ? " music-overlay-audio" : ""}`} style={layout}>
     {stage ? createPortal(volumeControl, stage) : volumeControl}
-    <audio ref={player} muted={autoPlay && sound.muted} src={track.url} preload={autoPlay && active && inView ? "auto" : "none"}
+    <audio ref={player} muted={muted ?? (autoPlay && sound.muted)} src={track.url} preload={autoPlay && active && inView ? "auto" : "none"}
       onLoadedMetadata={begin} onTimeUpdate={() => {
         const audio = player.current;
         if (audio.currentTime >= Math.min(start + duration, audio.duration) - .04) audio.currentTime = start;
