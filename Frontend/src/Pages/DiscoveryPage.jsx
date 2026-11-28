@@ -1,20 +1,23 @@
 import { Button, Spinner } from "@chakra-ui/react";
-import { Link } from "react-router-dom";
-import { useSetRecoilState, useRecoilValue } from "recoil";
+import { Link, useSearchParams } from "react-router-dom";
+import { useSetAppValue, useAppValue } from "../state/store";
 import savedPostsAtom from "../atom/savedPostsAtom";
 import postsAtom from "../atom/postsAtom";
 import Post from "../components/Post";
 import usePostPages from "../hooks/usePostPages";
 
 export default function DiscoveryPage({ reels = false, saved = false }) {
-  const posts = useRecoilValue(postsAtom);
-  const setPosts = useSetRecoilState(postsAtom);
-  const savedIds = useRecoilValue(savedPostsAtom);
-  const { loading, error, retry, cursor, loadMore } = usePostPages(saved ? "/api/posts/saved" : reels ? "/api/posts/reels" : "/api/posts/discover", setPosts);
+  const posts = useAppValue(postsAtom);
+  const setPosts = useSetAppValue(postsAtom);
+  const savedIds = useAppValue(savedPostsAtom);
+  const [params] = useSearchParams();
+  const topic = params.get("topic");
+  const discover = topic && !saved && !reels ? `/api/posts/discover?topic=${encodeURIComponent(topic)}` : "/api/posts/discover";
+  const { loading, error, retry, cursor, loadMore } = usePostPages(saved ? "/api/posts/saved" : reels ? "/api/posts/reels" : discover, setPosts);
   const visible = saved ? posts.filter((post) => savedIds?.includes(post._id)) : posts;
   return <main className={reels ? "dayline-tool-page reels-page" : "dayline-tool-page"}>
     <div className="discovery-header">
-      <h1>{saved ? "Saved" : reels ? "Reels" : "Discover"}</h1>
+      <h1>{saved ? "Saved" : reels ? "Reels" : topic ? `#${topic}` : "Discover"}</h1>
       {!reels && !saved && <Button as={Link} to="/saved" size="sm" variant="outline">Saved posts</Button>}
       {reels && <Button as={Link} to="/create?type=reel" variant="outline" size="sm">Create reel</Button>}
     </div>

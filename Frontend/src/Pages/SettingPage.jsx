@@ -1,14 +1,15 @@
 import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { Avatar, Button, FormControl, FormLabel, Input, Stack, Switch, useColorMode } from "@chakra-ui/react";
 import { Link } from "react-router-dom";
-import { useRecoilState } from "recoil";
+import { useAppState } from "../state/store";
 import { useState } from "react";
 import userAtom from "../atom/userAtom";
 import useLogout from "../hooks/useLogout";
 import useShowToast from "../hooks/useShowToast";
+import MusicImportPanel from "../components/MusicImportPanel";
 
 export default function SettingPage() {
-  const [user, setUser] = useRecoilState(userAtom);
+  const [user, setUser] = useAppState(userAtom);
   const logout = useLogout();
   const showToast = useShowToast();
   const { colorMode, toggleColorMode } = useColorMode();
@@ -84,6 +85,7 @@ export default function SettingPage() {
           <span><strong>Dark mode</strong><small>Change the theme on this device.</small></span>
           <Switch aria-label="Dark mode" colorScheme="purple" isChecked={colorMode === "dark"} onChange={toggleColorMode} />
         </label>
+        <MusicImportPanel userId={user._id} />
         <form className="settings-password" onSubmit={changePassword}>
           <Stack spacing={4}>
             <h2>Change password</h2>

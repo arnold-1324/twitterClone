@@ -7,7 +7,7 @@ RUN npm run build
 
 FROM node:22-alpine AS app
 WORKDIR /app
-RUN apk add --no-cache ffmpeg redis tini
+RUN apk add --no-cache ffmpeg redis tini python3 qpdf
 COPY Backend/package*.json ./Backend/
 RUN npm ci --prefix Backend --omit=dev --ignore-scripts
 COPY Backend/ ./Backend/

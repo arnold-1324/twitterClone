@@ -1,3 +1,4 @@
+import StickerPicker from "./Stickers";
 import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import {
   Flex,
@@ -13,11 +14,13 @@ import {
   Checkbox,
   CloseButton,
 } from "@chakra-ui/react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useContext, useId } from "react";
 import { IoSendSharp } from "react-icons/io5";
-import { FiMic, FiPaperclip } from "react-icons/fi";
+import { FiMapPin, FiMic, FiPaperclip, FiRadio } from "react-icons/fi";
 import { selectedConversationAtom, selectedMsg } from "../atom/messagesAtom";
-import { useRecoilState, useRecoilValue } from "recoil";
+import { LiveLocationContext } from "../context/liveLocation";
+import userAtom from "../atom/userAtom";
+import { useAppState, useAppValue } from "../state/store";
 import useUploadWithProgress from "../hooks/useUploadWithProgress";
 import useVoiceRecorder from "../hooks/useVoiceRecorder";
 import VoiceComposer from "./VoiceComposer";
@@ -25,10 +28,26 @@ import { useSocket } from "../context/SocketContext";
 import { MdPoll } from "react-icons/md";
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader,
-  ModalBody, ModalFooter, ModalCloseButton, Button,
+  ModalBody, ModalFooter, ModalCloseButton, Button, Menu, MenuButton, MenuItem, MenuList, Portal,
   VStack, Input as ChakraInput
 } from "@chakra-ui/react";
 
+
+function QueuedAttachment({ file, onRemove, disabled }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    if (!file.type.startsWith("image/")) return;
+    const preview = URL.createObjectURL(file);
+    setUrl(preview);
+    return () => URL.revokeObjectURL(preview);
+  }, [file]);
+
+  return <div className="queued-attachment">
+    {url && <img src={url} alt="Selected attachment" />}
+    <span title={file.name}>{file.name}</span>
+    <CloseButton size="sm" onClick={onRemove} isDisabled={disabled} aria-label={`Remove ${file.name}`} />
+  </div>;
+}
 
 const MessageInput = ({
   onConversationReady,
@@ -38,26 +57,89 @@ const MessageInput = ({
   editingText,
   setEditingText,
   isGroupConversation,
-  groupId
+  groupId,
+  participants = [],
 }) => {
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [attachment, setAttachment] = useState(null);
+  const [attachments, setAttachments] = useState([]);
   const [isPollModalOpen, setIsPollModalOpen] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState(["", ""]);
    const [multiSelect, setMultiSelect] = useState(false);
    const [expiresAt, setExpiresAt] = useState("");
   const { upload, progress, isUploading } = useUploadWithProgress();
-  const recipient = useRecoilValue(selectedConversationAtom);
+  const recipient = useAppValue(selectedConversationAtom);
+  const userId = useAppValue(userAtom)?._id;
+  const location = useContext(LiveLocationContext);
+  const locationRequest = useRef(null);
+  const [sharingLocation, setSharingLocation] = useState(false);
   const toast = useToast();
   const voice = useVoiceRecorder((description) =>
     toast({ title: "Voice recording", description, status: "error" }));
-  const [replyMsg, setReply] = useRecoilState(selectedMsg);
+  const [replyMsg, setReply] = useAppState(selectedMsg);
   const { socket } = useSocket();
   const lastTyping = useRef(0);
   const typingTimeout = useRef(null);
   const fileInputRef = useRef(null);
+  const messageInputRef = useRef(null);
+  const mentionListId = useId();
+  const [caret, setCaret] = useState(0);
+  const [mentionFocus, setMentionFocus] = useState(false);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mention = isGroupConversation && mentionFocus
+    ? /(?<![\w.@])@([\w.@-]*)$/.exec(messageText.slice(0, caret)) : null;
+  const matches = mention ? participants.filter(({ _id, username }) =>
+    _id !== userId && username?.toLowerCase().startsWith(mention[1].toLowerCase())).slice(0, 6) : [];
+  const activeIndex = Math.min(mentionIndex, matches.length - 1);
+
+  function chooseMention(person) {
+    const end = caret + (/^[\w.@-]*/.exec(messageText.slice(caret))?.[0].length ?? 0);
+    const prefix = `${messageText.slice(0, mention.index)}@${person.username} `;
+    if (prefix.length + (messageText.length - end) > 4000) return;
+    setMessageText(prefix + messageText.slice(end));
+    setCaret(prefix.length);
+    setMentionFocus(false);
+    requestAnimationFrame(() => {
+      const input = messageInputRef.current;
+      input?.focus();
+      input?.setSelectionRange(prefix.length, prefix.length);
+    });
+  }
+
+  function mentionKeys(event) {
+    if (!matches.length) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setMentionFocus(false);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setMentionIndex((activeIndex + (event.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length);
+    } else if (event.key === "Enter" || (event.key === "Tab" && !event.shiftKey)) {
+      event.preventDefault();
+      chooseMention(matches[activeIndex]);
+    }
+  }
+
+  useEffect(() => () => locationRequest.current?.abort(), []);
+
+  async function shareLocation(mode) {
+    if (locationRequest.current || !location) return;
+    const controller = new AbortController();
+    locationRequest.current = controller;
+    setSharingLocation(true);
+    try {
+      const message = await location.share(recipient, mode, controller.signal);
+      if (controller.signal.aborted) return;
+      setMessages((items) => items.some(({ _id }) => _id === message._id) ? items : [...items, message]);
+      onConversationReady?.(message);
+    } catch (error) {
+      if (!controller.signal.aborted) toast({ title: "Share location", description: error.message, status: "error" });
+    } finally {
+      locationRequest.current = null;
+      if (!controller.signal.aborted) setSharingLocation(false);
+    }
+  }
 
 const handleOptionChange = (index, value) => {
     const newOptions = [...pollOptions];
@@ -123,11 +205,6 @@ const handleOptionChange = (index, value) => {
     };
   }, [socket, recipient._id, recipient.mock]);
 
-  useEffect(() => {
-    const url = attachment?.url;
-    return () => { if (url) URL.revokeObjectURL(url); };
-  }, [attachment?.url]);
-
   const isValidReply = (replyMsg.text || replyMsg.media) &&
     (!replyMsg.media || ['img', 'video', 'audio'].includes(replyMsg.mediaType));
 
@@ -137,8 +214,8 @@ const handleOptionChange = (index, value) => {
   const replyAccent = useColorModeValue("green.600", "green.200");
   const replyText = useColorModeValue("gray.800", "gray.100");
 
-  const sendMessage = async (file = attachment?.file) => {
-    if (isSending || (!messageText.trim() && !file)) return;
+  const sendMessage = async (files = attachments, text = messageText) => {
+    if (isSending || (!text.trim() && !files.length)) return;
     setIsSending(true);
 
     try {
@@ -149,7 +226,7 @@ const handleOptionChange = (index, value) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messageId: editingMessageId,
-            newText: messageText,
+            newText: text,
             groupId: groupId
           })
         });
@@ -160,42 +237,28 @@ const handleOptionChange = (index, value) => {
         return;
       }
 
-      // Handle new message sending
-      const formData = new FormData();
-      formData.append("message", messageText);
-
-      if (isGroupConversation) {
-        formData.append("groupId", groupId);
-      } else {
-        formData.append("recipientId", recipient.userId);
-      }
-
-      if (replyMsg.id) {
-        formData.append("messageId", replyMsg.id);
-
-      }
-
-      if (file) formData.append("media", file);
-
+      const destination = isGroupConversation ? { groupId } : { recipientId: recipient.userId };
+      const body = { ...destination, message: text, ...(replyMsg.id && { messageId: replyMsg.id }) };
       const url = replyMsg.id ? "/api/messages/reply" : "/api/messages/send";
-
-      await new Promise((resolve, reject) => {
-        upload(
-          url,
-          formData,
-          (data) => {
-            clearTimeout(typingTimeout.current);
-            if (socket?.connected && !recipient.mock) socket.emit("typing", { conversationId: recipient._id, isTyping: false });
-            setMessages(messages => messages.some((item) => item._id === data._id) ? messages : [...messages, data]);
-            onConversationReady?.(data);
-            resetInputs();
-            resolve();
-          },
-          (err) => {
-            reject(new Error(err));
-          }
-        );
-      });
+      let data;
+      if (files.length) {
+        const formData = new FormData();
+        for (const [name, value] of Object.entries(body)) formData.append(name, value);
+        files.forEach((file) => formData.append("media", file));
+        data = await new Promise((resolve, reject) => upload(url, formData, resolve, (error) => reject(new Error(error))));
+      } else {
+        const response = await apiFetch(url, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        data = await readApiJson(response);
+        if (!response.ok) throw new Error(data.error || "Could not send message.");
+      }
+      clearTimeout(typingTimeout.current);
+      if (socket?.connected && !recipient.mock) socket.emit("typing", { conversationId: recipient._id, isTyping: false });
+      setMessages((items) => items.some((item) => item._id === data._id) ? items : [...items, data]);
+      onConversationReady?.(data);
+      resetInputs();
+      if (text !== messageText) setMessageText(messageText);
     } catch (error) {
       toast({ title: "Error", description: error.message, status: "error", duration: 5000 });
     } finally {
@@ -205,8 +268,9 @@ const handleOptionChange = (index, value) => {
 
   const resetInputs = () => {
     setMessageText("");
+    setMentionFocus(false);
     voice.discard();
-    setAttachment(null);
+    setAttachments([]);
     setReply({
       id: "",
       text: '',
@@ -223,6 +287,9 @@ const handleOptionChange = (index, value) => {
 
   const handleTyping = (e) => {
     setMessageText(e.target.value);
+    setCaret(e.target.selectionStart);
+    setMentionFocus(true);
+    setMentionIndex(0);
     if (!socket?.connected || !recipient._id || recipient.mock) return;
 
     const now = Date.now();
@@ -247,13 +314,17 @@ const handleOptionChange = (index, value) => {
   async function sendVoice() {
     if (isSending) return;
     const file = voice.file || await voice.stop();
-    if (file) await sendMessage(file);
+    if (file) await sendMessage([file]);
   }
 
   function handleMediaUpload(event) {
-    const file = event.target.files[0];
-    if (file) setAttachment({ file, url: URL.createObjectURL(file) });
+    const files = [...attachments, ...event.target.files];
     event.target.value = "";
+    if (files.length > 6 || files.reduce((sum, file) => sum + file.size, 0) > 25 * 1024 * 1024) {
+      toast({ title: "Attachment limit", description: "Choose up to 6 files, 25 MB total.", status: "error" });
+      return;
+    }
+    setAttachments(files);
   }
 
   return (
@@ -305,30 +376,28 @@ const handleOptionChange = (index, value) => {
         </Box>
       )}
 
-      {attachment && (
-        <Box className="thread-attachment">
-          {attachment.file.type.startsWith("image/") ? (
-            <Image src={attachment.url} alt="Attachment preview" maxH="136px" borderRadius="md" />
-          ) : attachment.file.type.startsWith("video/") ? (
-            <video src={attachment.url} controls style={{ maxHeight: "136px" }} />
-          ) : attachment.file.type.startsWith("audio/") ? (
-            <audio src={attachment.url} controls />
-          ) : attachment.file.type === "application/pdf" ? (
-            <iframe src={attachment.url} title="PDF attachment preview" width="100%" height="136" />
-          ) : <Text noOfLines={1}>{attachment.file.name}</Text>}
-          <CloseButton size="sm" onClick={() => setAttachment(null)} isDisabled={isSending}
-            aria-label="Remove attachment" />
-        </Box>
-      )}
+      {attachments.length > 0 && <div className="queued-attachments" aria-label="Selected attachments">
+        {attachments.map((file, index) => <QueuedAttachment file={file} key={`${file.name}:${file.lastModified}:${index}`}
+          disabled={isSending} onRemove={() => setAttachments((items) => items.filter((_, position) => position !== index))} />)}
+      </div>}
 
       {voice.phase !== "idle" ? <VoiceComposer voice={voice} sending={isSending} onSend={sendVoice} /> : (
         <Flex as="form" onSubmit={(event) => { event.preventDefault(); void sendMessage(); }} className="message-editor"
           w="full" borderRadius="full" px={3} py={2} alignItems="center" gap={2}
           border="1px solid" borderColor="var(--chat-line)">
-        <input ref={fileInputRef} type="file" hidden onChange={handleMediaUpload} />
+        {matches.length > 0 && <div id={mentionListId} className="mention-options" role="listbox" aria-label="Group members">
+          {matches.map((person, index) => <button key={person._id} type="button" id={`${mentionListId}-${index}`}
+            tabIndex={-1} role="option" aria-selected={index === activeIndex}
+            onMouseDown={(event) => event.preventDefault()} onClick={() => chooseMention(person)}>
+            @{person.username}
+          </button>)}
+        </div>}
+        <input ref={fileInputRef} type="file" multiple hidden onChange={handleMediaUpload} />
         <IconButton type="button" icon={<FiPaperclip />} aria-label="Upload Media"
           onClick={() => fileInputRef.current?.click()} isDisabled={Boolean(editingMessageId) || isSending}
           variant="ghost" size="sm" _hover={{ bg: iconHoverColor }} />
+
+        <StickerPicker disabled={isSending || Boolean(editingMessageId || attachments.length)} onSelect={(text) => void sendMessage([], text)} />
 
         {isGroupConversation && <IconButton type="button"
           icon={<MdPoll />}
@@ -339,8 +408,18 @@ const handleOptionChange = (index, value) => {
           onClick={() => setIsPollModalOpen(true)}
         />}
 
+        {location && <Menu placement="top-start" isLazy>
+          <MenuButton as={IconButton} icon={sharingLocation ? <Spinner size="xs" /> : <FiMapPin />}
+            aria-label="Share location" isDisabled={sharingLocation || isSending || Boolean(editingMessageId)}
+            variant="ghost" size="sm" />
+          <Portal><MenuList>
+            <MenuItem icon={<FiMapPin />} onClick={() => shareLocation("current")}>Share current location</MenuItem>
+            <MenuItem icon={<FiRadio />} onClick={() => shareLocation("live")}>Share live location for 15 minutes</MenuItem>
+          </MenuList></Portal>
+        </Menu>}
 
         <Input
+          ref={messageInputRef}
           placeholder={editingMessageId
             ? "Edit your message..."
             : (isGroupConversation ? "Type a message to group..." : "Type a message")}
@@ -349,6 +428,14 @@ const handleOptionChange = (index, value) => {
           minW={0}
           value={messageText}
           onChange={handleTyping}
+          onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+          onBlur={() => setMentionFocus(false)}
+          onKeyDown={mentionKeys}
+          role={isGroupConversation ? "combobox" : undefined}
+          aria-autocomplete={isGroupConversation ? "list" : undefined}
+          aria-expanded={isGroupConversation ? Boolean(matches.length) : undefined}
+          aria-controls={matches.length ? mentionListId : undefined}
+          aria-activedescendant={matches.length ? `${mentionListId}-${activeIndex}` : undefined}
           flex={1}
           variant="unstyled"
         />
@@ -358,7 +445,7 @@ const handleOptionChange = (index, value) => {
           type="button"
           onClick={() => void voice.start()}
           aria-label="Record voice message"
-          isDisabled={Boolean(attachment || editingMessageId) || isSending}
+          isDisabled={Boolean(attachments.length || editingMessageId) || isSending}
           variant="ghost"
           size="sm"
           _hover={{ bg: iconHoverColor }}
@@ -368,7 +455,7 @@ const handleOptionChange = (index, value) => {
           icon={isSending ? <Spinner size="sm" /> : <IoSendSharp />}
           aria-label="Send"
           type="submit"
-          isDisabled={isSending || (!messageText.trim() && !attachment)}
+          isDisabled={isSending || (!messageText.trim() && !attachments.length)}
           variant="ghost"
           size="sm"
           _hover={{ bg: iconHoverColor }}

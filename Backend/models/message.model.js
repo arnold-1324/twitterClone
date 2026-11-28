@@ -14,6 +14,25 @@ const pollSchema = new mongoose.Schema({
     closed: { type: Boolean, default: false },
 }, { _id: false });
 
+const callSchema = new mongoose.Schema({
+    mode: { type: String, enum: ["audio", "video"], required: true },
+    outcome: {
+        type: String,
+        enum: ["completed", "missed", "declined", "canceled", "failed", "offline", "busy", "interrupted"],
+        required: true,
+    },
+    durationSeconds: { type: Number, min: 0, max: 7200 },
+}, { _id: false });
+
+const locationSchema = new mongoose.Schema({
+    mode: { type: String, enum: ["current", "live"], required: true },
+    iv: String,
+    encryptedData: String,
+    updatedAt: Date,
+    expiresAt: Date,
+    stoppedAt: Date,
+    revision: { type: Number, default: 0 },
+}, { _id: false });
 
 const messageSchema = new mongoose.Schema(
     {
@@ -25,7 +44,7 @@ const messageSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["text", "image", "video","post","audio","file","poll"], 
+            enum: ["text", "image", "video","post","audio","file","poll", "location", "bundle"],
             default: "text",
         },
         iv: {
@@ -38,6 +57,41 @@ const messageSchema = new mongoose.Schema(
             type: pollSchema,
             required: function () { return this.type === "poll"; },
         },
+        call: callSchema,
+        storyReference: {
+            id: { type: mongoose.Schema.Types.ObjectId, ref: "Story" },
+            username: String,
+            purpose: { type: String, enum: ["reply", "share", "mention"] },
+            video: Boolean,
+        },
+        noteReply: Boolean,
+        noteReference: {
+            author: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+            version: Date,
+        },
+        attachment: {
+            name: String,
+            size: Number,
+            extension: String,
+            kind: String,
+        },
+        attachments: [{
+            _id: false,
+            kind: { type: String, enum: ["image", "video", "audio", "file"], required: true },
+            key: { type: String, required: true },
+            attachment: {
+                name: String,
+                size: Number,
+                extension: String,
+                kind: String,
+            },
+        }],
+        location: locationSchema,
+        mentions: [{
+            _id: false,
+            user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+            username: { type: String, required: true },
+        }],
         seen: {
             type: Boolean,
             default: false,

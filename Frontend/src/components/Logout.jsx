@@ -1,13 +1,13 @@
 import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { Button } from "@chakra-ui/react"
-import { useRecoilState } from "recoil";
+import { useAppState } from "../state/store";
 import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
 import { HiOutlineLogout } from "react-icons/hi";
 
 
 const Logout = () => {
-    const [user, setUser] = useRecoilState(userAtom);
+    const [user, setUser] = useAppState(userAtom);
    const showToast = useShowToast();
     const handleLogout = async()=>{
         //debugger

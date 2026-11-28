@@ -3,7 +3,7 @@ import { Flex, Box, FormControl, FormLabel, Input, InputGroup, HStack, InputRigh
 import { useState } from 'react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
 import authScreenAtom from '../atom/authAtom';
-import { useSetRecoilState } from "recoil";
+import { useSetAppValue } from "../state/store";
 import userAtom from "../atom/userAtom";
 import useShowToast from '../hooks/useShowToast';
 import { useNavigate } from 'react-router-dom';
@@ -14,7 +14,7 @@ export default function SignupCard() {
   const showToast = useShowToast();
   const [confPass, setConfPass] = useState(false);
   const navigate = useNavigate();
-  const setAuthScreen = useSetRecoilState(authScreenAtom);
+  const setAuthScreen = useSetAppValue(authScreenAtom);
   const [inputs, setInputs] = useState({
     fullName: "",
     username: "",
@@ -22,7 +22,7 @@ export default function SignupCard() {
     password: "",
     confirmPassword: ""
   });
-  const setUser = useSetRecoilState(userAtom);
+  const setUser = useSetAppValue(userAtom);
   const [verificationCode, setVerificationCode] = useState("");
   const [isOptSent, setIsOptSent] = useState(false);
 

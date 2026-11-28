@@ -1,11 +1,12 @@
 import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { useState } from "react";
-import { useRecoilState } from "recoil";
+import { useAppState } from "../state/store";
 import useShowToast from "./useShowToast";
 import userAtom from "../atom/userAtom";
+import { clearEphemeralCache, noteProfilePath, notesPath, storyFeedPath } from "../lib/ephemeralCache";
 
 export default function useFollowUnfollow(user) {
-  const [currentUser, setUser] = useRecoilState(userAtom);
+  const [currentUser, setUser] = useAppState(userAtom);
   const following = Boolean(currentUser?.following?.includes(user._id));
   const [updating, setUpdating] = useState(false);
   const showToast = useShowToast();
@@ -19,6 +20,7 @@ export default function useFollowUnfollow(user) {
       });
       const result = await readApiJson(response);
       if (!response.ok) throw new Error(result.error || "Failed to update follow status.");
+      clearEphemeralCache(currentUser._id, (path) => path === notesPath || path === noteProfilePath(user._id) || path === storyFeedPath);
       setUser((account) => {
         if (account?._id !== currentUser._id) return account;
         const ids = new Set(account.following ?? []);

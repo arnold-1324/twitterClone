@@ -1,10 +1,17 @@
+import { finishResponse, isMeasuredResponse, sampleResponse } from "./browserMetrics.js";
+
 let pendingRefresh;
 
 const unavailable = () => new Error("The app is temporarily unavailable. Try again in a moment.");
 
 export async function readApiJson(response) {
   try {
-    return await response.json();
+    if (!isMeasuredResponse(response)) return await response.json();
+    const body = await response.text();
+    const started = performance.now();
+    const parsed = JSON.parse(body);
+    finishResponse(response, started);
+    return parsed;
   } catch (error) {
     if (error.name === "AbortError") throw error;
     throw unavailable();
@@ -41,8 +48,12 @@ export async function apiFetch(input, options) {
   const url = new URL(input instanceof Request ? input.url : input, location.href);
   const eligible = url.origin === location.origin && url.pathname.startsWith("/api/") && !url.pathname.startsWith("/api/auth/");
   const retry = eligible && input instanceof Request ? input.clone() : input;
+  const started = performance.now();
   const response = await request(input, options);
+  sampleResponse(url, response, started);
   if (!eligible || response.status !== 401 || options?.signal?.aborted) return response;
   if (!(await refreshSession()) || options?.signal?.aborted) return response;
-  return request(retry, options);
+  const refreshed = await request(retry, options);
+  sampleResponse(url, refreshed, started);
+  return refreshed;
 }

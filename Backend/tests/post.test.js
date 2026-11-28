@@ -30,11 +30,15 @@ test("rejects blank captions before writing a post", async () => {
   expect(save).not.toHaveBeenCalled();
 });
 
-test("feed includes the signed-in author and followed authors", async () => {
+test("home feed includes the signed-in author, followers, and followed authors", async () => {
+  const follower = new mongoose.Types.ObjectId();
   jest.spyOn(Session, "exists").mockResolvedValue({ _id: sid });
-  jest.spyOn(User, "findById").mockReturnValue({ select: async () => ({ _id: account, following: [followed] }) });
+  jest.spyOn(User, "findById").mockReturnValue({ select: async () => ({
+    _id: account, following: [followed], followers: [followed, follower],
+  }) });
+  jest.spyOn(Post, "aggregate").mockReturnValue({ option: async () => [] });
   const query = { sort: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), maxTimeMS: jest.fn().mockReturnThis(), populate: jest.fn().mockReturnThis(), then: (resolve) => resolve([]) };
   const find = jest.spyOn(Post, "find").mockReturnValue(query);
   await request(app).get("/api/posts/feed").set("Cookie", session()).expect(200, []);
-  expect(find).toHaveBeenCalledWith({ postedBy: { $in: [account, followed] } });
+  expect(find).toHaveBeenCalledWith({ postedBy: { $in: [account, followed, follower] } });
 });

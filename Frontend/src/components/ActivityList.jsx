@@ -2,14 +2,14 @@ import { Avatar, Button, IconButton, Spinner } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { FiBell, FiCheck, FiHeart, FiUserPlus, FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
-import { useRecoilState, useRecoilValue } from "recoil";
+import { useAppState, useAppValue } from "../state/store";
 import { apiFetch, readApiJson } from "../lib/apiFetch";
 import notifyAtom from "../atom/notifyAtom";
 import userAtom from "../atom/userAtom";
 
 export default function ActivityList({ compact = false, onNavigate }) {
-  const [feed, setFeed] = useRecoilState(notifyAtom);
-  const user = useRecoilValue(userAtom);
+  const [feed, setFeed] = useAppState(notifyAtom);
+  const user = useAppValue(userAtom);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { ChakraProvider } from '@chakra-ui/react';
-import { RecoilRoot } from 'recoil';
+import { AppStateProvider } from "../state/AppStateProvider";
 import MessageContainer from '../components/MessageContainer';
 import { SocketContextProvider, useSocket } from '../context/SocketContext';
 
@@ -57,13 +57,13 @@ const meta = {
   component: MessageContainer,
   decorators: [
     (Story) => (
-      <RecoilRoot>
+      <AppStateProvider>
         <SocketContextProvider>
           <ChakraProvider>
             <Story />
           </ChakraProvider>
         </SocketContextProvider>
-      </RecoilRoot>
+      </AppStateProvider>
     ),
   ],
 };

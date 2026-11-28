@@ -16,12 +16,12 @@ import {
 } from '@chakra-ui/react'
 import { useState } from 'react';
 import useShowToast from '../hooks/useShowToast';
-import { useSetRecoilState } from "recoil";
+import { useSetAppValue } from "../state/store";
 import userAtom from '../atom/userAtom';
 
 export default function VerifyEmail() {
   const [verificationCode, setVerificationCode] = useState("");
-  const setUser = useSetRecoilState(userAtom);
+  const setUser = useSetAppValue(userAtom);
   const showToast = useShowToast();
 
   const handleVerifyEmail = async () => {

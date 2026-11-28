@@ -1,8 +1,11 @@
 import { useEffect, useRef } from "react";
 import { refreshSession } from "../lib/apiFetch.js";
 
-export default function AdaptiveVideo({ src, streamUrl, playWhenVisible = false, ...props }) {
-  const video = useRef(null);
+const autoplayThreshold = 0.65;
+
+export default function AdaptiveVideo({ src, streamUrl, playWhenVisible = false, eager = false, videoRef, ...props }) {
+  const internalVideo = useRef(null);
+  const video = videoRef ?? internalVideo;
 
   useEffect(() => {
     const element = video.current;
@@ -62,7 +65,7 @@ export default function AdaptiveVideo({ src, streamUrl, playWhenVisible = false,
     const onPlay = () => { void initialize(); };
     element.addEventListener("play", onPlay);
     element.addEventListener("error", fallback);
-    const preload = "IntersectionObserver" in window
+    const preload = !eager && "IntersectionObserver" in window
       ? new IntersectionObserver(([entry]) => {
         if (entry.isIntersecting) {
           void initialize();
@@ -81,28 +84,33 @@ export default function AdaptiveVideo({ src, streamUrl, playWhenVisible = false,
       element.removeAttribute("src");
       element.load();
     };
-  }, [src, streamUrl]);
+  }, [src, streamUrl, eager, video]);
 
   useEffect(() => {
     const element = video.current;
     if (!playWhenVisible || !("IntersectionObserver" in window)) return;
     let visible = false;
-    const play = () => {
-      if (visible) void element.play().catch(() => {});
+    const tryAutoplay = () => {
+      if (visible && document.visibilityState === "visible") void element.play().catch(() => {});
+    };
+    const syncPlayback = () => {
+      if (visible && document.visibilityState === "visible") tryAutoplay();
+      else element.pause();
     };
     const observer = new IntersectionObserver(([entry]) => {
-      visible = entry.isIntersecting;
-      if (visible) play();
-      else element.pause();
-    }, { threshold: 0.65 });
+      visible = entry.isIntersecting && entry.intersectionRatio >= autoplayThreshold;
+      syncPlayback();
+    }, { threshold: autoplayThreshold });
     observer.observe(element);
-    element.addEventListener("canplay", play);
+    element.addEventListener("canplay", tryAutoplay);
+    document.addEventListener("visibilitychange", syncPlayback);
     return () => {
       observer.disconnect();
-      element.removeEventListener("canplay", play);
+      element.removeEventListener("canplay", tryAutoplay);
+      document.removeEventListener("visibilitychange", syncPlayback);
       element.pause();
     };
-  }, [playWhenVisible, src, streamUrl]);
+  }, [playWhenVisible, src, streamUrl, video]);
 
   return <video ref={video} controls playsInline muted={playWhenVisible}
     loop={playWhenVisible} preload="metadata" {...props} />;

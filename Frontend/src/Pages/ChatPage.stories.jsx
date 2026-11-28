@@ -1,6 +1,7 @@
 // ChatPage.stories.js
 import ChatPage from './ChatPage';
-import { RecoilRoot, useSetRecoilState } from 'recoil';
+import { useSetAppValue } from "../state/store";
+import { AppStateProvider } from "../state/AppStateProvider";
 import { conversationsAtom, selectedConversationAtom } from '../atom/messagesAtom';
 import userAtom from '../atom/userAtom';
 import { SocketContextProvider } from '../context/SocketContext';
@@ -44,9 +45,9 @@ const mockConversations = [
 
 // Wrapper component to initialize Recoil state
 const WithProviders = ({ children }) => {
-  const setConversations = useSetRecoilState(conversationsAtom);
-  const setSelectedConversation = useSetRecoilState(selectedConversationAtom);
-  const setCurrentUser = useSetRecoilState(userAtom);
+  const setConversations = useSetAppValue(conversationsAtom);
+  const setSelectedConversation = useSetAppValue(selectedConversationAtom);
+  const setCurrentUser = useSetAppValue(userAtom);
 
   // Set mock data in Recoil atoms after component mounts
   useEffect(() => {
@@ -67,11 +68,11 @@ export default {
   component: ChatPage,
   decorators: [
     (Story) => (
-      <RecoilRoot>
+      <AppStateProvider>
         <WithProviders>
           <Story />
         </WithProviders>
-      </RecoilRoot>
+      </AppStateProvider>
     ),
   ],
 };

@@ -1,10 +1,10 @@
 import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import userAtom from "../atom/userAtom";
-import { useSetRecoilState } from "recoil";
+import { useSetAppValue } from "../state/store";
 import useShowToast from "./useShowToast";
 
 const useLogout = () => {
-	const setUser = useSetRecoilState(userAtom);
+	const setUser = useSetAppValue(userAtom);
 	const showToast = useShowToast();
 
 	const logout = async () => {

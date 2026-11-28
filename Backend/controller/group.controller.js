@@ -1,5 +1,6 @@
 import Group from "../models/group.model.js";
 import Conversation from "../models/conversation.model.js";
+import ConversationPreference from "../models/conversationPreference.model.js";
 import { getIO, getRecipientRoom } from "../socket/socket.js";
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
@@ -76,7 +77,7 @@ export const createGroup = async (req, res) => {
     if (people.length !== memberIds.length) return res.status(400).json({ error: "A selected member no longer exists." });
 
     if (req.file) {
-      ({ key: profileImage } = await saveMedia(req.file, { kind: "image", groupId: id }));
+      ({ key: profileImage } = await saveMedia(req.file, { signal: req.requestAbortSignal, kind: "image", groupId: id }));
     }
 
     await Conversation.create({ _id: id, kind: "group", participants: memberIds });
@@ -265,8 +266,11 @@ export const deleteGroup = async (req, res) => {
     if (group.conversation) await Conversation.updateOne({ _id: group.conversation }, { $set: { kind: "group" } });
     await Group.findByIdAndDelete(groupId);
     if (group.conversation) {
-      await Conversation.deleteOne({ _id: group.conversation, kind: "group" });
+      const conversation = await Conversation.findOneAndDelete({ _id: group.conversation, kind: "group" })
+        .select("customBackgroundKey").lean();
+      if (conversation?.customBackgroundKey) await removeMedia([conversation.customBackgroundKey]);
       await Message.deleteMany({ conversationId: group.conversation });
+      await ConversationPreference.deleteMany({ conversation: group.conversation });
     }
     res.json({ message: "Group deleted." });
   } catch (err) { handleError(res, err, err.code); }
@@ -329,7 +333,7 @@ export const updateGroup = async (req, res) => {
     requireAdmin(group, userId);
 
     if (req.file) {
-      ({ key: uploadedKey } = await saveMedia(req.file, { kind: "image", groupId }));
+      ({ key: uploadedKey } = await saveMedia(req.file, { signal: req.requestAbortSignal, kind: "image", groupId }));
     }
     const updatedGroup = await Group.findOneAndUpdate(
       { _id: groupId, $or: [{ owner: userId }, { admins: userId }] },

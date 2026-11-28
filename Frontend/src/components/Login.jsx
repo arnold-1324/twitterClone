@@ -15,14 +15,14 @@ import {
   Link,
 } from '@chakra-ui/react';
 import authScreenAtom from '../atom/authAtom';
-import { useSetRecoilState } from "recoil";
+import { useSetAppValue } from "../state/store";
 import { useState } from 'react';
 import useShowToast from '../hooks/useShowToast';
 import userAtom from '../atom/userAtom';
 
 export default function SimpleCard() {
-  const setAuthScreen = useSetRecoilState(authScreenAtom);
-  const setUser = useSetRecoilState(userAtom);
+  const setAuthScreen = useSetAppValue(authScreenAtom);
+  const setUser = useSetAppValue(userAtom);
   const [forgot, setForgot] = useState(false);
   const [Femail, setFemail] = useState("");
   const [inputs, setInputs] = useState({

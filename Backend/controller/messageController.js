@@ -1,38 +1,52 @@
+import { findDirectConversation, getOrCreateDirect } from "../lib/directConversation.js";
 import { beforeCursor, sendCursor } from "../lib/cursorPage.js";
 import mongoose from "mongoose";
 import moment from "moment";
-import { mediaUrl, streamUrl, saveMedia, removeMedia } from "../lib/mediaStore.js";
+import { mediaUrl, streamUrl, saveMedia, removeMedia, describeAttachment } from "../lib/mediaStore.js";
 import { presentPost } from "../lib/utils/presentPost.js";
 import { presentProfile } from "../lib/utils/presentProfile.js";
 import User from "../models/user.model.js";
 import Conversation from "../models/conversation.model.js";
+import ConversationPreference from "../models/conversationPreference.model.js";
 import Message from "../models/message.model.js";
 import Group from "../models/group.model.js";
 import { belongsToConversation, getIO, getRecipientRoom } from "../socket/socket.js";
 import { encrypt, decrypt } from "../lib/utils/Msg_encryption/encrypt.js";
 import { redisClient } from "../Redis.js";
+import { saveConversationPreview } from "../lib/conversationPreview.js";
+import { liveLocationDuration, presentLocation, readCoordinates, sealCoordinates } from "../lib/messageLocation.js";
+import { chatBackgrounds, chatFonts } from "../lib/chatBackgrounds.js";
+import { findVisibleStory } from "../lib/storyLifetime.js";
+import { recordStoryActivity } from "../lib/storyActivity.js";
+import { resolveContentReference } from "../lib/contentReference.js";
+import Note from "../models/note.model.js";
+import { canSeeNote } from "../lib/noteAudience.js";
+import { messagePreviews, storyMessagePreview } from "../lib/messagePreviews.js";
+import { groupReadReceipts, inboxUnread, markInboxRead } from "../lib/inboxUnread.js";
 
-async function findDirectConversation(userId, recipientId) {
-  if (!mongoose.isObjectIdOrHexString(recipientId) || String(userId) === String(recipientId)) return null;
-  const candidates = await Conversation.find({
-    kind: { $ne: "group" },
-    participants: { $size: 2, $all: [userId, recipientId] },
-  }).sort({ updatedAt: -1 }).lean();
-  if (!candidates.length) return null;
-  const groupConversations = new Set((await Group.distinct("conversation", {
-    conversation: { $in: candidates.map(({ _id }) => _id) },
-  })).map(String));
-  return candidates.find(({ _id }) => !groupConversations.has(String(_id))) ?? null;
+async function conversationTheme(conversation) {
+  return {
+    snowfall: Boolean(conversation.snowfall),
+    backgroundTheme: conversation.backgroundTheme ?? "default",
+    customBackgroundUrl: conversation.customBackgroundKey ? await mediaUrl(conversation.customBackgroundKey) : null,
+    chatFont: conversation.chatFont ?? "default",
+    themeRevision: conversation.themeRevision ?? 0,
+  };
 }
 
 const signMessagePayload = async (msg) => {
   const signedMsg = {
     ...msg,
+    location: presentLocation(msg.location),
     img: await mediaUrl(msg.img),
     video: await mediaUrl(msg.video),
     videoStreamUrl: streamUrl(msg.video),
     audio: await mediaUrl(msg.audio),
     file: await mediaUrl(msg.file),
+    ...(msg.attachments?.length && { type: "bundle", attachments: await Promise.all(msg.attachments.map(async ({ kind, key, attachment }) => ({
+      kind, url: await mediaUrl(key), ...(kind === "video" && { streamUrl: streamUrl(key) }), attachment,
+    }))) }),
+    ...(msg.file && { attachment: msg.attachment?.name ? msg.attachment : await describeAttachment(msg.file) }),
   };
 
   if (signedMsg.sender && signedMsg.sender.profileImg) {
@@ -81,44 +95,78 @@ const signMessagePayload = async (msg) => {
   return signedMsg;
 };
 
-async function getOrCreateDirect(senderId, recipientId) {
-  const existing = await findDirectConversation(senderId, recipientId);
-  if (existing) return existing;
-  const directKey = [String(senderId), recipientId.toLowerCase()].sort().join(":");
-  try {
-    return await Conversation.findOneAndUpdate({ directKey }, {
-      $setOnInsert: { directKey, kind: "direct", participants: [senderId, recipientId], createdAt: new Date(), updatedAt: new Date() },
-    }, { new: true, upsert: true, timestamps: false });
-  } catch (error) {
-    if (error.code !== 11000) throw error;
-    return Conversation.findOne({ directKey });
+async function resolveMentions(text, group, sender) {
+  if (!group || !text.includes("@")) return [];
+  const names = new Set();
+  for (const [, username] of text.matchAll(/(?<![\w.@])@([\w-][\w.@-]{0,63})/g)) {
+    names.add(username);
+    names.add(username.replace(/\.+$/, ""));
+    if (names.size >= 40) break;
   }
-}
-
-export async function saveConversationPreview(message, preview) {
-  const sentAt = message.createdAt;
-  await Conversation.updateOne({
-    _id: message.conversationId,
-    $or: [
-      { "lastMessage.sentAt": { $exists: false } },
-      { "lastMessage.sentAt": { $lt: sentAt } },
-      { "lastMessage.sentAt": sentAt, "lastMessage.messageId": { $lt: message._id } },
-    ],
-  }, { $set: { lastMessage: { ...preview, sender: message.sender, messageId: message._id, sentAt, seen: false } } });
+  if (!names.size) return [];
+  const excluded = new Set([String(sender), ...(group.blocked ?? []).map(String)]);
+  const users = await User.find({
+    _id: { $in: group.members.filter((id) => !excluded.has(String(id))) },
+    username: { $in: [...names] },
+  }).select("username").limit(20).lean();
+  return users.map(({ _id, username }) => ({ user: _id, username }));
 }
 
 async function writeMessage(req, res, parentId) {
-  const { recipientId, groupId } = req.body;
+  const { recipientId, groupId, location, storyId, sharedStoryId, noteVersion } = req.body ?? {};
+  const files = req.files ?? (req.file ? [req.file] : []);
+  const hasFiles = files.length > 0;
   const sender = req.user._id;
-  const text = typeof req.body.message === "string" ? req.body.message.trim() : "";
-  if ((!text && !req.file) || text.length > 4000) {
+  const coordinates = location === undefined ? null : readCoordinates(location);
+  if (location !== undefined && (!coordinates || !["current", "live"].includes(location.mode) || hasFiles || parentId)) {
+    return res.status(400).json({ error: "Choose a valid location to share." });
+  }
+  const text = coordinates ? (location.mode === "live" ? "Live location" : "Current location")
+    : typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  const messageText = text || (sharedStoryId ? "Shared a story" : "");
+  if ((!messageText && !hasFiles) || messageText.length > 4000) {
     return res.status(400).json({ error: "Enter a message of up to 4,000 characters or attach a file." });
   }
-  let uploadedKey;
+  const uploadedKeys = [];
   let persisted = false;
   try {
     let conversation;
     let group;
+    let storyReference;
+    let story;
+    let note;
+    let noteAuthor;
+    if (noteVersion !== undefined) {
+      const updatedAt = typeof noteVersion === "string" && noteVersion.length <= 30 ? new Date(noteVersion) : null;
+      if (!mongoose.isObjectIdOrHexString(recipientId) || !updatedAt || !Number.isFinite(updatedAt.getTime())
+        || groupId || parentId || location || hasFiles || storyId || sharedStoryId || !text) {
+        return res.status(400).json({ error: "Choose an active note and enter a reply." });
+      }
+      const account = recipientId.toLowerCase();
+      if (canSeeNote(req.user, account)) {
+        [note, noteAuthor] = await Promise.all([
+          Note.findOne({ _id: account, updatedAt, expiresAt: { $gt: new Date() } }).lean(),
+          User.findOne({ _id: account, isFrozen: { $ne: true } }).select("username").lean(),
+        ]);
+      }
+      if (!note || !noteAuthor) {
+        return res.status(404).json({ error: "This note is unavailable." });
+      }
+    }
+    if (storyId !== undefined || sharedStoryId !== undefined) {
+      const sharing = sharedStoryId !== undefined;
+      if (!mongoose.isObjectIdOrHexString(sharing ? sharedStoryId : storyId)
+        || (sharing ? storyId !== undefined : !text || groupId) || parentId || location || hasFiles) {
+        return res.status(400).json({ error: "Choose a story and a recipient." });
+      }
+      story = await findVisibleStory(sharing ? sharedStoryId : storyId);
+      if (!story || (!sharing && !story.author.equals(recipientId))) return res.status(404).json({ error: "This story is unavailable." });
+      const author = await User.findById(story.author).select("username").lean();
+      if (!author) return res.status(404).json({ error: "This story is unavailable." });
+      const source = story.sharedContent && await resolveContentReference(story.sharedContent);
+      storyReference = { id: story._id, username: author.username, purpose: sharing ? "share" : "reply",
+        video: story.kind === "video" || source?.media[0]?.type === "video" };
+    }
     if (groupId) {
       if (!mongoose.isObjectIdOrHexString(groupId)) return res.status(400).json({ error: "Invalid group." });
       group = await Group.findOne({ _id: groupId, members: sender, blocked: { $ne: sender } });
@@ -154,23 +202,53 @@ async function writeMessage(req, res, parentId) {
       if (!parent) return res.status(404).json({ error: "Parent message unavailable." });
     }
 
-    const encrypted = text ? encrypt(text) : {};
+    const encrypted = messageText ? encrypt(messageText) : {};
     const data = { sender, conversationId: conversation._id, text: encrypted.encryptedData || "", iv: encrypted.iv };
+    if (storyReference) data.storyReference = storyReference;
+    if (note) {
+      data.noteReply = true;
+      data.noteReference = { author: note._id, version: note.updatedAt };
+    }
+    data.mentions = await resolveMentions(text, group, sender);
+    if (coordinates) {
+      const now = Date.now();
+      data.type = "location";
+      data.location = {
+        mode: location.mode, ...sealCoordinates(coordinates), updatedAt: new Date(now),
+        expiresAt: location.mode === "live" ? new Date(now + liveLocationDuration) : undefined,
+      };
+    }
     if (parent) data.replyTo = parent._id;
-    if (req.file) {
+    if (hasFiles) {
       data._id = new mongoose.Types.ObjectId();
-      const { key, kind } = await saveMedia(req.file, { conversationId: conversation._id, messageId: data._id });
-      uploadedKey = key;
-      data[kind === "image" ? "img" : kind] = key;
-      data.type = kind;
+      const parts = [];
+      for (const file of files) {
+        const stored = await saveMedia(file, { signal: req.requestAbortSignal, conversationId: conversation._id, messageId: data._id });
+        uploadedKeys.push(stored.key);
+        parts.push(stored);
+      }
+      if (parts.length === 1) {
+        const [{ key, kind, attachment }] = parts;
+        data[kind === "image" ? "img" : kind] = key;
+        data.type = kind;
+        if (attachment) data.attachment = attachment;
+      } else {
+        data.type = "file";
+        data.attachments = parts;
+      }
     }
     const saved = await Message.create(data);
     persisted = true;
-    await saveConversationPreview(saved, { text: data.text, iv: data.iv }).catch((error) => {
+    if (story) await recordStoryActivity(story, sender, sharedStoryId ? "shared" : "replied")
+      .catch((error) => console.error("Story message activity:", error.message));
+    const summary = !messageText && data.attachments?.length ? encrypt(`${files.length} attachments`) : null;
+    await saveConversationPreview(saved, { text: summary?.encryptedData ?? data.text, iv: summary?.iv ?? data.iv, mentionedUsers: data.mentions.map(({ user }) => user) }).catch((error) => {
       console.error("Could not update conversation preview:", error.message);
     });
     await saved.populate("sender", "username profileImg");
-    const payload = await signMessagePayload({ ...saved.toObject(), text, iv: undefined,
+    const payload = await signMessagePayload({ ...saved.toObject(), text: messageText, iv: undefined,
+      ...(story && { storyPreview: await storyMessagePreview(story._id) }),
+      ...(note && { notePreview: { ...note, username: noteAuthor.username } }),
       replyTo: parent ? { ...parent, text: readMessageText(parent), iv: undefined } : null,
       isGroupMessage: Boolean(group), groupId: group?._id ?? null });
     const io = getIO();
@@ -187,7 +265,7 @@ async function writeMessage(req, res, parentId) {
     }
     return res.status(201).json(payload);
   } catch (error) {
-    if (uploadedKey && !persisted) await removeMedia([uploadedKey]);
+    if (uploadedKeys.length && !persisted) await removeMedia(uploadedKeys);
     if (error.status) return res.status(error.status).json({ error: error.message });
     console.error("Could not send message:", error.message);
     return res.status(500).json({ error: "Could not send message." });
@@ -260,7 +338,7 @@ export const getMessages = async (req, res, next) => {
       })
       .populate({
         path: 'postReference',
-        select: 'postedBy caption images media kind',
+        select: 'postedBy caption images media kind sharedContent music',
         populate: { path: 'postedBy', select: 'username profileImg' }
       })
       .populate({
@@ -271,54 +349,18 @@ export const getMessages = async (req, res, next) => {
       .lean();
 
     const messages = sendCursor(res, pageRows, 50).reverse();
-    const unseenMessages = messages.filter(msg => !msg.seen && String(msg.sender?._id ?? msg.sender) !== String(userId));
-    if (unseenMessages.length > 0) {
-      await Message.updateMany(
-        { _id: { $in: unseenMessages.map(msg => msg._id) } },
-        { seen: true }
-      );
+    if (!req.query.before && req.query.markRead !== "false") {
+      await markInboxRead(userId, conversation._id, messages.at(-1), !isGroupConversation,
+        otherUserId && !groupId ? [otherUserId] : []);
     }
 
-    if (!req.query.before && conversation.lastMessage?.sender && String(conversation.lastMessage.sender) !== String(userId)) {
-      await Conversation.updateOne(
-        { _id: conversation._id, "lastMessage.messageId": conversation.lastMessage.messageId ?? null },
-        { 'lastMessage.seen': true }
-      );
-    }
-
-    const decryptedMessages = await Promise.all(messages.map((msg) => signMessagePayload({
+    const hydrated = await messagePreviews(messages, req.user);
+    const decryptedMessages = await Promise.all(hydrated.map((msg) => signMessagePayload({
       ...msg, text: readMessageText(msg), iv: undefined,
       replyTo: msg.replyTo ? { ...msg.replyTo, text: readMessageText(msg.replyTo), iv: undefined } : null,
       isGroupMessage: isGroupConversation, groupId: groupId || null,
     })));
 
-    const io = getIO();
-
-    if (isGroupConversation) {
-      // For group conversations, notify all group members
-      const group = await Group.findById(groupId).populate('members');
-      const memberIds = group.members
-        .filter(member => member._id.toString() !== userId.toString())
-        .map(member => member._id.toString());
-
-      memberIds.forEach(memberId => {
-        const memberSocketId = getRecipientRoom(memberId);
-        if (memberSocketId) {
-          io?.to(memberSocketId).emit("messagesSeen", {
-            conversationId: conversation._id,
-            groupId: groupId
-          });
-        }
-      });
-    } else {
-      // For one-on-one conversations
-      const recipientSocketId = getRecipientRoom(otherUserId);
-      if (recipientSocketId) {
-        io?.to(recipientSocketId).emit("messagesSeen", { conversationId: conversation._id });
-      }
-    }
-  // Redis disabled: skip storing cached messages
-  // await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
     res.status(200).json(decryptedMessages);
   } catch (error) {
     next(error);
@@ -366,135 +408,103 @@ export const reactTomsg = async (req, res) => {
 };
 
 
+const inboxConversationFields = "participants updatedAt lastMessage snowfall backgroundTheme customBackgroundKey chatFont themeRevision";
+
+function presentInboxPreview(lastMessage) {
+  let text = "";
+  try {
+    if (lastMessage?.iv) text = decrypt({ iv: lastMessage.iv, encryptedData: lastMessage.text });
+  } catch {
+    text = "[Decryption failed]";
+  }
+  return {
+    text,
+    sender: lastMessage?.sender || null,
+    seen: lastMessage?.seen || false,
+    mentionedUsers: lastMessage?.mentionedUsers === undefined ? [] : lastMessage.mentionedUsers,
+  };
+}
+
 export const getConversation = async (req, res) => {
   try {
-    const currentUserId = req.user._id.toString();
-    const cacheKey = `messages:convo:${currentUserId}`;
-    // Redis disabled: skip fetching cached conversations
-    // const cachedConversations = await redisClient.get(cacheKey);
-    // if (cachedConversations) {
-    //   return res.status(200).json(JSON.parse(cachedConversations));
-    // }
-    // 1:1 conversations
-    const conversations = await Conversation.find({
-      participants: currentUserId,
-      kind: { $ne: "group" },
-    }).populate({
-      path: "participants",
-      select: "username profileImg",
-    });
-
-    // group conversations where user is a member
-    const userGroups = await Group.find({
-      members: currentUserId,
-      blocked: { $ne: currentUserId },
-      conversation: { $exists: true, $ne: null },
-    })
-      .select("name description profileImage owner admins members conversation")
-      .populate({
-        path: "conversation",
-        populate: {
-          path: "participants",
-          select: "username profileImg",
-        },
-      })
-      .populate({
-        path: "members",
-        select: "username profileImg",
-      });
-
-    const referencedGroups = new Set((await Group.distinct("conversation", {
-      conversation: { $in: conversations.map(({ _id }) => _id) },
-    })).map(String));
-    // Legacy groups may have conversation records without a kind.
-    const convoData = await Promise.all(conversations.filter((convo) => !referencedGroups.has(String(convo._id))).map(async (convo) => {
-      const others = convo.participants.filter(
-        (p) => p._id.toString() !== currentUserId
-      );
-      let decryptedText;
-      try {
-        decryptedText = convo.lastMessage?.iv ? decrypt({
-          iv: convo.lastMessage.iv,
-          encryptedData: convo.lastMessage.text,
-        }) : "";
-      } catch {
-        decryptedText = "[Decryption failed]";
-      }
-      return {
-        _id: convo._id,
-        participants: await Promise.all(others.map(presentProfile)),
-        lastMessage: {
-          text: decryptedText,
-          sender: convo.lastMessage?.sender || null,
-          seen: convo.lastMessage?.seen || false,
-        },
-        updatedAt: convo.updatedAt,
-        isGroup: false,
-        groupId: null,
-      };
-    }));
-
-    // map group chats
-    const groupConvoData = await Promise.all(userGroups.filter((group) => group.conversation).map(async (group) => {
-      let decryptedText;
-      try {
-        decryptedText = group.conversation.lastMessage?.iv ? decrypt({
-          iv: group.conversation.lastMessage.iv,
-          encryptedData: group.conversation.lastMessage.text,
-        }) : "";
-      } catch {
-        decryptedText = "[Decryption failed]";
-      }
-      return {
-        _id: group.conversation._id,
-        groupInfo: {
-          _id: group._id,
-          name: group.name,
-          description: group.description,
-          profileImage: await mediaUrl(group.profileImage),
-          owner: group.owner,
-          admins: group.admins,
-        },
-        participants: await Promise.all(group.members.map(presentProfile)),
-        lastMessage: {
-          text: decryptedText,
-          sender: group.conversation.lastMessage?.sender || null,
-          seen: group.conversation.lastMessage?.seen || false,
-        },
-        updatedAt: group.conversation.updatedAt,
-        isGroup: true,
-        groupId: group._id,
-      };
-    }));
-
-    
-    const merged = [...convoData, ...groupConvoData];
-    const uniqueMap = new Map();
-    for (const convo of merged) {
-      if (!uniqueMap.has(convo._id.toString())) {
-        uniqueMap.set(convo._id.toString(), convo);
-      } else {
-        // If duplicate, prefer isGroup:true
-        const existing = uniqueMap.get(convo._id.toString());
-        if (!existing.isGroup && convo.isGroup) {
-          uniqueMap.set(convo._id.toString(), convo);
-        }
-      }
+    const user = req.user._id;
+    const userId = String(user);
+    const [direct, groups] = await Promise.all([
+      Conversation.find({ participants: user, kind: { $ne: "group" } }).select(inboxConversationFields).lean(),
+      Group.find({ members: user, blocked: { $ne: user }, conversation: { $exists: true, $ne: null } })
+        .select("name description profileImage owner admins members blocked conversation").lean(),
+    ]);
+    const [referencedIds, groupConversations] = await Promise.all([
+      direct.length ? Group.distinct("conversation", { conversation: { $in: direct.map(({ _id }) => _id) } }) : [],
+      groups.length ? Conversation.find({ _id: { $in: groups.map(({ conversation }) => conversation) } })
+        .select(inboxConversationFields).lean() : [],
+    ]);
+    const referenced = new Set(referencedIds.map(String));
+    const groupByConversation = new Map();
+    for (const group of groups) {
+      const key = String(group.conversation);
+      if (!groupByConversation.has(key)) groupByConversation.set(key, group);
     }
-    const allConversations = Array.from(uniqueMap.values()).sort(
-      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
-    );
+    const threads = direct.filter(({ _id }) => !referenced.has(String(_id))).map((conversation) => ({
+      conversation, members: (conversation.participants ?? []).filter((id) => String(id) !== userId),
+    }));
+    // Preserve group iteration order, including when timestamps tie.
+    const groupThreads = new Map(groupConversations.map((conversation) => [String(conversation._id), conversation]));
+    for (const [key, group] of groupByConversation) {
+      const conversation = groupThreads.get(key);
+      if (!conversation) continue;
+      const blocked = new Set((group.blocked ?? []).map(String));
+      threads.push({ conversation, group, members: (group.members ?? []).filter((id) => !blocked.has(String(id))) });
+    }
+    if (!threads.length) return res.json([]);
 
-   
-    // Redis disabled: skip storing cached conversations
-    // await redisClient.setEx(cacheKey, 60, JSON.stringify(allConversations));
-    res.status(200).json(allConversations);
+    const profileIds = new Map();
+    for (const { members } of threads) {
+      for (const id of members) profileIds.set(String(id), id);
+    }
+    const [people, preferences] = await Promise.all([
+      profileIds.size ? User.find({ _id: { $in: [...profileIds.values()] } })
+        .select("username profileImg lastActiveAt").lean() : [],
+      ConversationPreference.find({ user, conversation: { $in: threads.map(({ conversation }) => conversation._id) } })
+        .select("conversation pinned archived revision").lean(),
+    ]);
+    const profiles = new Map(await Promise.all(people.map(async (person) => [
+      String(person._id), await presentProfile({ profileImg: "", ...person }),
+    ])));
+    const preferenceById = new Map(preferences.map((item) => [String(item.conversation), conversationPreference(item)]));
+
+    const results = await Promise.all(threads.map(async ({ conversation, group, members }) => {
+      const participants = [];
+      for (const id of members) {
+        const profile = profiles.get(String(id));
+        if (!profile) continue;
+        if (group) {
+          const { lastActiveAt: _lastActiveAt, ...groupProfile } = profile;
+          participants.push(groupProfile);
+        } else participants.push(profile);
+      }
+      const [theme, groupImage] = await Promise.all([
+        conversationTheme(conversation), group ? mediaUrl(group.profileImage) : undefined,
+      ]);
+      return {
+        _id: conversation._id,
+        ...theme,
+        ...(group && { groupInfo: { _id: group._id, name: group.name, description: group.description,
+          profileImage: groupImage, owner: group.owner, admins: group.admins === undefined ? [] : group.admins } }),
+        participants,
+        lastMessage: presentInboxPreview(conversation.lastMessage),
+        updatedAt: conversation.updatedAt,
+        isGroup: Boolean(group),
+        groupId: group?._id ?? null,
+        preference: preferenceById.get(String(conversation._id)),
+      };
+    }));
+    return res.json(results.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
   } catch (error) {
-    console.error("Error in getConversation:", error);
-    res.status(500).json({ error: "Failed to fetch conversations" });
+    console.error("Could not fetch conversations:", error.name);
+    return res.status(500).json({ error: "Failed to fetch conversations" });
   }
 };
-
 
 export const getGroupConversationInfo = async (req, res) => {
   const { groupId } = req.params;
@@ -570,14 +580,196 @@ export const getGroupConversationInfo = async (req, res) => {
 
 
 
+export async function getUnreadMessages(req, res, next) {
+  try {
+    return res.json(await inboxUnread(req.user._id));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function markMessagesRead(req, res, next) {
+  const { conversationId } = req.params;
+  const { messageId } = req.body ?? {};
+  if (!mongoose.isObjectIdOrHexString(conversationId) || !mongoose.isObjectIdOrHexString(messageId)) {
+    return res.status(400).json({ error: "Choose a valid message." });
+  }
+  try {
+    const user = req.user._id;
+    const { members, group } = await messageAudience(conversationId);
+    if (!members.includes(String(user))) return res.status(404).json({ error: "Conversation not found." });
+    const message = await Message.findOne({ _id: messageId, conversationId, deletedFor: { $ne: user } }).select("createdAt").lean();
+    if (!message) return res.status(404).json({ error: "Message not found." });
+    await markInboxRead(user, conversationId, message, !group, group ? [] : members.filter((id) => id !== String(user)));
+    return res.sendStatus(204);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function messageAudience(conversationId) {
   const group = await Group.findOne({ conversation: conversationId }).select("members blocked permissions owner admins").lean();
   if (group) {
-    const blocked = new Set(group.blocked.map(String));
-    return { group, members: group.members.map(String).filter((id) => !blocked.has(id)) };
+    const blocked = new Set((group.blocked ?? []).map(String));
+    return { group, members: (group.members ?? []).map(String).filter((id) => !blocked.has(id)) };
   }
   const conversation = await Conversation.findOne({ _id: conversationId, kind: { $ne: "group" } }).select("participants").lean();
   return { members: (conversation?.participants ?? []).map(String) };
+}
+
+function conversationPreference({ pinned, archived, revision }) {
+  return { pinned: Boolean(pinned), archived: Boolean(archived), revision };
+}
+
+export async function setConversationPreference(req, res, next) {
+  const { conversationId } = req.params;
+  const { pinned, archived } = req.body ?? {};
+  const change = Object.fromEntries(Object.entries({ pinned, archived }).filter(([, value]) => value !== undefined));
+  if (!mongoose.isObjectIdOrHexString(conversationId) || !Object.keys(change).length
+    || Object.values(change).some((value) => typeof value !== "boolean")) {
+    return res.status(400).json({ error: "Choose a valid conversation preference." });
+  }
+  try {
+    const user = req.user._id;
+    if (!(await belongsToConversation(conversationId, user))) return res.status(404).json({ error: "Conversation not found." });
+    const filter = { user, conversation: conversationId };
+    const update = { $set: change, $inc: { revision: 1 } };
+    let item;
+    try {
+      item = await ConversationPreference.findOneAndUpdate(filter, update, { new: true, upsert: true });
+    } catch (error) {
+      if (error.code !== 11000) throw error;
+      item = await ConversationPreference.findOneAndUpdate(filter, update, { new: true });
+    }
+    const payload = { conversationId, preference: conversationPreference(item) };
+    getIO()?.to(getRecipientRoom(user)).emit("conversationPreferenceChanged", payload);
+    return res.json(payload);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stopSharingLocation(now) {
+  return {
+    $set: { "location.stoppedAt": now },
+    $unset: { "location.iv": "", "location.encryptedData": "" },
+    $inc: { "location.revision": 1 },
+  };
+}
+
+function emitLocation(message, members) {
+  const payload = { messageId: message._id, conversationId: message.conversationId, location: presentLocation(message.location) };
+  const deletedFor = new Set((message.deletedFor ?? []).map(String));
+  const rooms = members.filter((id) => !deletedFor.has(id)).map(getRecipientRoom);
+  if (rooms.length) getIO()?.to(rooms).emit("liveLocationUpdated", payload);
+  return payload;
+}
+
+export async function updateLiveLocation(req, res, next) {
+  const { messageId } = req.params;
+  const stop = req.body?.stop === true;
+  const coordinates = stop ? null : readCoordinates(req.body);
+  if (!mongoose.isObjectIdOrHexString(messageId) || (!stop && !coordinates)) {
+    return res.status(400).json({ error: "Choose a valid live location update." });
+  }
+  try {
+    const sender = req.user._id;
+    const now = new Date();
+    const filter = { _id: messageId, sender, "location.mode": "live", deletedFor: { $ne: sender } };
+    const original = await Message.findOne(filter).select("conversationId location deletedFor").lean();
+    if (!original) return res.status(404).json({ error: "Live location not found." });
+    const { members } = await messageAudience(original.conversationId);
+    if (!stop && !members.includes(String(sender))) return res.status(404).json({ error: "Live location not found." });
+    if (original.location.stoppedAt || original.location.expiresAt <= now) {
+      if (stop) return res.json({ messageId, conversationId: original.conversationId, location: presentLocation(original.location) });
+      return res.status(410).json({ error: "Live location sharing has ended." });
+    }
+    let change = stopSharingLocation(now);
+    if (!stop) {
+      const { iv, encryptedData } = sealCoordinates(coordinates);
+      change = { $set: { "location.updatedAt": now, "location.iv": iv, "location.encryptedData": encryptedData },
+        $inc: { "location.revision": 1 } };
+    }
+    const updated = await Message.findOneAndUpdate({
+      ...filter, "location.stoppedAt": null, "location.expiresAt": { $gt: now },
+    }, change, { new: true, timestamps: false })
+      .select("conversationId location deletedFor").lean();
+    if (!updated) return res.status(410).json({ error: "Live location sharing has ended." });
+    return res.json(emitLocation(updated, members));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function setConversationTheme(req, res, next) {
+  const { conversationId } = req.params;
+  const { snowfall, backgroundTheme, chatFont, removeCustomBackground } = req.body ?? {};
+  if (!mongoose.isObjectIdOrHexString(conversationId)) return res.status(400).json({ error: "Choose a valid conversation." });
+  const change = {};
+  if (snowfall !== undefined) {
+    if (typeof snowfall !== "boolean") return res.status(400).json({ error: "Choose whether snowfall is on or off." });
+    change.snowfall = snowfall;
+  }
+  if (backgroundTheme !== undefined) {
+    if (backgroundTheme !== "custom" && !chatBackgrounds.includes(backgroundTheme)) {
+      return res.status(400).json({ error: "Choose an available chat background." });
+    }
+    change.backgroundTheme = backgroundTheme;
+  }
+  if (chatFont !== undefined) {
+    if (!chatFonts.includes(chatFont)) return res.status(400).json({ error: "Choose a built-in chat font." });
+    change.chatFont = chatFont;
+  }
+  if (req.file) {
+    if (backgroundTheme !== "custom" || !["image/jpeg", "image/png", "image/webp"].includes(req.file.mimetype)) {
+      return res.status(415).json({ error: "Choose a JPEG, PNG or WebP image for the custom background." });
+    }
+  }
+  if (removeCustomBackground !== undefined) {
+    if (removeCustomBackground !== true || !chatBackgrounds.includes(backgroundTheme) || req.file) {
+      return res.status(400).json({ error: "Choose a preset background when removing the saved image." });
+    }
+    change.customBackgroundKey = null;
+  }
+  if (!Object.keys(change).length) return res.status(400).json({ error: "Choose a chat appearance setting." });
+  let uploadedKey;
+  let committed = false;
+  try {
+    let { members, group } = await messageAudience(conversationId);
+    if (!members.includes(String(req.user._id))) return res.status(404).json({ error: "Conversation not found." });
+    if (req.file) {
+      ({ key: uploadedKey } = await saveMedia(req.file, { signal: req.requestAbortSignal, kind: "image", conversationId, chatBackground: true }));
+      change.customBackgroundKey = uploadedKey;
+      ({ members, group } = await messageAudience(conversationId));
+      if (!members.includes(String(req.user._id))) return res.status(404).json({ error: "Conversation not found." });
+    }
+    const filter = { _id: conversationId, ...(group ? {} : { participants: req.user._id, kind: { $ne: "group" } }) };
+    const needsSavedImage = backgroundTheme === "custom" && !uploadedKey;
+    if (needsSavedImage) filter.customBackgroundKey = { $type: "string" };
+    // The pre-update record identifies the displaced image even if another member writes concurrently.
+    const previous = await Conversation.findOneAndUpdate(filter, {
+      $set: change, $inc: { themeRevision: 1 },
+    }, { new: false, timestamps: false }).select("snowfall backgroundTheme customBackgroundKey chatFont themeRevision").lean();
+    if (!previous) return needsSavedImage
+      ? res.status(400).json({ error: "Upload an image to use a custom background." })
+      : res.status(404).json({ error: "Conversation not found." });
+    committed = true;
+    const theme = { conversationId: String(previous._id), ...(await conversationTheme({
+      ...previous, ...change, themeRevision: (previous.themeRevision ?? 0) + 1,
+    })) };
+    getIO()?.to(members.map(getRecipientRoom)).emit("conversationThemeChanged", theme);
+    if (Object.hasOwn(change, "customBackgroundKey") && previous.customBackgroundKey) {
+      await removeMedia([previous.customBackgroundKey]);
+    }
+    return res.json(theme);
+  } catch (error) {
+    return next(error);
+  } finally {
+    if (uploadedKey && !committed) {
+      const inUse = await Conversation.exists({ _id: conversationId, customBackgroundKey: uploadedKey }).catch(() => true);
+      if (!inUse) await removeMedia([uploadedKey]);
+    }
+  }
 }
 
 export const editMessage = async (req, res, next) => {
@@ -586,7 +778,8 @@ export const editMessage = async (req, res, next) => {
   if (!mongoose.isObjectIdOrHexString(messageId) || typeof newText !== "string"
     || !newText.trim() || newText.length > 4000) return res.status(400).json({ error: "Enter a valid message." });
   try {
-    const filter = { _id: messageId, sender: userId, type: { $nin: ["poll", "post"] }, deletedFor: { $ne: userId } };
+    const filter = { _id: messageId, sender: userId, type: { $nin: ["poll", "post", "location"] },
+      call: { $exists: false }, deletedFor: { $ne: userId } };
     const original = await Message.findOne(filter).select("conversationId").lean();
     if (!original) return res.status(404).json({ error: "Message not found." });
     const { members, group } = await messageAudience(original.conversationId);
@@ -597,13 +790,15 @@ export const editMessage = async (req, res, next) => {
     }
     const text = newText.trim();
     const encrypted = encrypt(text);
-    const change = { text: encrypted.encryptedData, iv: encrypted.iv, edited: true };
+    const mentions = await resolveMentions(text, group, userId);
+    const change = { text: encrypted.encryptedData, iv: encrypted.iv, edited: true, mentions };
     const result = await Message.updateOne(filter, { $set: change });
     if (!result.matchedCount) return res.status(404).json({ error: "Message not found." });
     await Conversation.updateOne({
       _id: original.conversationId, "lastMessage.messageId": messageId,
-    }, { $set: { "lastMessage.text": change.text, "lastMessage.iv": change.iv } }, { timestamps: false });
-    const payload = { _id: messageId, conversationId: original.conversationId, text, edited: true };
+    }, { $set: { "lastMessage.text": change.text, "lastMessage.iv": change.iv,
+      "lastMessage.mentionedUsers": mentions.map(({ user }) => user) } }, { timestamps: false });
+    const payload = { _id: messageId, conversationId: original.conversationId, text, edited: true, mentions };
     getIO()?.to(members.map(getRecipientRoom)).emit("messageEdited", payload);
     return res.json(payload);
   } catch (error) {
@@ -665,7 +860,7 @@ export const getGroupMessages = async (req, res, next) => {
       })
       .populate({
         path: 'postReference',
-        select: 'postedBy caption images media kind',
+        select: 'postedBy caption images media kind sharedContent music',
         populate: { path: 'postedBy', select: 'username profileImg' }
       })
       .populate({
@@ -676,64 +871,18 @@ export const getGroupMessages = async (req, res, next) => {
       .lean();
 
     const messages = sendCursor(res, pageRows, 50).reverse();
-    // Helper to safely get a sender id (works if sender is populated object or raw ObjectId)
-    const senderIdOf = (senderField) => {
-      if (!senderField) return null;
-      // populated sender -> object with _id; raw ObjectId -> use it directly
-      return senderField._id ? String(senderField._id) : String(senderField);
-    };
-
-    // Find unseen messages (safe checks)
-    const unseenMessages = messages.filter(msg => {
-      if (msg.seen) return false;
-      const sId = senderIdOf(msg.sender);
-      // If there is no sender (system message), treat it as not from the user => mark seen
-      if (!sId) return true;
-      return String(sId) !== String(userId);
-    });
-
-    if (unseenMessages.length > 0) {
-      await Message.updateMany(
-        { _id: { $in: unseenMessages.map(msg => msg._id) } },
-        { seen: true }
-      );
+    if (!req.query.before && req.query.markRead !== "false") {
+      await markInboxRead(userId, conversation._id, messages.at(-1), false);
     }
 
-    // Update conversation.lastMessage.seen only if lastMessage exists and its sender is not the current user
-    const lastMsgSenderId = conversation.lastMessage
-      ? (conversation.lastMessage.sender?._id
-        ? String(conversation.lastMessage.sender._id)
-        : String(conversation.lastMessage.sender || ""))
-      : null;
-
-    if (!req.query.before && lastMsgSenderId && String(lastMsgSenderId) !== String(userId)) {
-      await Conversation.updateOne(
-        { _id: conversation._id, "lastMessage.messageId": conversation.lastMessage.messageId ?? null },
-        { 'lastMessage.seen': true }
-      );
-    }
-
-    const decryptedMessages = await Promise.all(messages.map((msg) => signMessagePayload({
+    const receipts = await groupReadReceipts(messages, conversation._id, userId, group);
+    const hydrated = await messagePreviews(receipts, req.user);
+    const decryptedMessages = await Promise.all(hydrated.map((msg) => signMessagePayload({
       ...msg, text: readMessageText(msg), iv: undefined,
       replyTo: msg.replyTo ? { ...msg.replyTo, text: readMessageText(msg.replyTo), iv: undefined } : null,
       isGroupMessage: true, groupId,
     })));
 
-    // Notify other group members that messages have been seen
-    const io = getIO();
-    const memberIds = memberIdStrings.filter(idStr => idStr !== String(userId));
-
-    memberIds.forEach(memberId => {
-      const memberSocketId = getRecipientRoom(memberId);
-      if (memberSocketId) {
-        io.to(memberSocketId).emit("messagesSeen", {
-          conversationId: conversation._id,
-          groupId: groupId
-        });
-      }
-    });
-    // Redis caching disabled — skip storing cached messages
-    // await redisClient.setEx(cacheKey, 60, JSON.stringify(decryptedMessages));
     res.status(200).json(decryptedMessages);
   } catch (error) {
     next(error);
@@ -746,9 +895,17 @@ export const deleteMessage = async (req, res, next) => {
   const userId = req.user._id;
   if (!mongoose.isObjectIdOrHexString(messageId)) return res.status(400).json({ error: "Invalid message." });
   try {
-    const message = await Message.findById(messageId).select("conversationId").lean();
-    if (!message || !(await belongsToConversation(message.conversationId, userId))) {
+    const message = await Message.findById(messageId).select("conversationId sender location.mode").lean();
+    const { members } = message ? await messageAudience(message.conversationId) : { members: [] };
+    if (!members.includes(String(userId))) {
       return res.status(404).json({ error: "Message not found." });
+    }
+    if (message.location?.mode === "live" && String(message.sender) === String(userId)) {
+      const stopped = await Message.findOneAndUpdate({
+        _id: messageId, "location.stoppedAt": null,
+      }, stopSharingLocation(new Date()), { new: true, timestamps: false })
+        .select("conversationId location deletedFor").lean();
+      if (stopped) emitLocation(stopped, members);
     }
     await Message.updateOne({ _id: messageId }, { $addToSet: { deletedFor: userId } });
     getIO()?.to(getRecipientRoom(userId)).emit("messageDeleted", { messageId });

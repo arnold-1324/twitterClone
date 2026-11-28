@@ -1,0 +1,8 @@
+MediaPipe Tasks Vision runtime by the MediaPipe authors
+Apache License 2.0
+https://github.com/google-ai-edge/mediapipe
+https://www.apache.org/licenses/LICENSE-2.0
+
+Face Landmarker and Selfie Segmenter models distributed by Google for MediaPipe
+https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker
+https://ai.google.dev/edge/mediapipe/solutions/vision/image_segmenter

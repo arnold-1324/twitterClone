@@ -1,3 +1,3 @@
-import { atom } from "recoil";
+import { defineState } from "../state/store";
 
-export default atom({ key: "savedPostsAtom", default: null });
+export default defineState({ key: "savedPostsAtom", default: null });

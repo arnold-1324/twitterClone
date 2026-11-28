@@ -2,13 +2,13 @@ import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { Button, Flex, FormControl, FormLabel, Heading, Input, Stack, useColorModeValue, Avatar, Center } from "@chakra-ui/react";
 import { useRef, useState, useEffect,useNavi } from "react";
 import { useNavigate } from 'react-router-dom';
-import { useRecoilState } from "recoil";
+import { useAppState } from "../state/store";
 import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
 import { motion } from "framer-motion"; // Import Framer Motion
 
 export default function UpdateProfilePage() {
-  const [user, setUser] = useRecoilState(userAtom);
+  const [user, setUser] = useAppState(userAtom);
   const [inputs, setInputs] = useState({
     _id: "",
     username: "",

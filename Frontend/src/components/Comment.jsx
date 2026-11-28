@@ -1,3 +1,5 @@
+import { MessageSticker } from "./Stickers";
+import { stickerLabel } from "../lib/stickers";
 import { Avatar, Divider, Flex, Text } from "@chakra-ui/react";
 
 const Comment = ({ reply, lastReply }) => {
@@ -11,7 +13,8 @@ const Comment = ({ reply, lastReply }) => {
 							{reply.username}
 						</Text>
 					</Flex>
-					<Text>{reply.comment}</Text>
+					<Text as="div">{stickerLabel(reply.comment) ? <MessageSticker text={reply.comment} /> : reply.comment}</Text>
+					{reply.mediaUrl && <img className="engagement-comment-image" src={reply.mediaUrl} loading="lazy" alt="Photo attached to reply" />}
 				</Flex>
 			</Flex>
 			{!lastReply ? <Divider /> : null}

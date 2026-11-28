@@ -20,7 +20,7 @@ import {
   useColorModeValue,
   IconButton,
 } from "@chakra-ui/react";
-import { useRecoilValue, useRecoilState } from "recoil";
+import { useAppValue, useAppState } from "../state/store";
 import userAtom from "../atom/userAtom";
 import postsAtom from "../atom/postsAtom";
 import { LuSend } from "react-icons/lu";
@@ -30,8 +30,8 @@ const SharePost = ({ postId }) => {
   const [conversations, setConversations] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]); // selected conversation IDs
   const [text, setText] = useState("");
-  const [posts, setPosts] = useRecoilState(postsAtom);
-  const user = useRecoilValue(userAtom);
+  const [posts, setPosts] = useAppState(postsAtom);
+  const user = useAppValue(userAtom);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");

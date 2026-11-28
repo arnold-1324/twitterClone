@@ -2,12 +2,14 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
+import "./streams.css";
 import { ChakraProvider, ColorModeScript, extendTheme } from "@chakra-ui/react";
 import { mode } from "@chakra-ui/theme-tools";
 import { BrowserRouter } from 'react-router-dom';
-import { RecoilRoot } from "recoil";
+import { AppStateProvider } from "./state/AppStateProvider";
 import { CallProvider } from "./context/CallContext.jsx";
 import { SocketContextProvider } from "./context/SocketContext.jsx";
+import LiveLocationProvider from "./context/LiveLocationProvider.jsx";
 
 const styles = {
   global:(props)=>({
@@ -34,15 +36,15 @@ const theme = extendTheme({ config, styles, colors });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <RecoilRoot>
+    <AppStateProvider>
       <BrowserRouter>
         <ChakraProvider theme={theme}>
           <ColorModeScript initialColorMode={theme.config.initialColorMode} />
           <SocketContextProvider>
-            <CallProvider><App /></CallProvider>
+            <CallProvider><LiveLocationProvider><App /></LiveLocationProvider></CallProvider>
           </SocketContextProvider>
         </ChakraProvider>
       </BrowserRouter>
-    </RecoilRoot>
+    </AppStateProvider>
   </React.StrictMode>,
 )

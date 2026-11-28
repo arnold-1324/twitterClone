@@ -1,6 +1,6 @@
-import { atom } from "recoil";
+import { defineState } from "../state/store";
 
-const  NotifyAtom= atom({
+const  NotifyAtom= defineState({
 	key: "NotifyAtom",
 	default: { notifications: [], unreadCount: 0 }, 
 });

@@ -1,6 +1,6 @@
 import { refreshSession } from "../lib/apiFetch.js";
 import { createContext, useContext, useEffect, useState } from "react";
-import { useRecoilValue } from "recoil";
+import { useAppValue } from "../state/store";
 import io from "socket.io-client";
 import userAtom from "../atom/userAtom";
 
@@ -14,7 +14,8 @@ export const SocketContextProvider = ({ children }) => {
 	
 	const [socket, setSocket] = useState(null);
 	const [onlineUsers, setOnlineUsers] = useState([]);
-	const user = useRecoilValue(userAtom);
+	const [recentlyOffline, setRecentlyOffline] = useState(() => new Map());
+	const user = useAppValue(userAtom);
 
 	useEffect(() => {
 		if (!user?._id) return;
@@ -26,6 +27,17 @@ export const SocketContextProvider = ({ children }) => {
 				const members = new Set([...current, ...online]);
 				offline.forEach((id) => members.delete(id));
 				return [...members];
+			});
+			setRecentlyOffline((current) => {
+				const next = new Map(current);
+				for (const id of online) next.delete(id);
+				const now = Date.now();
+				for (const id of offline) {
+					next.delete(id);
+					next.set(id, now);
+				}
+				while (next.size > 500) next.delete(next.keys().next().value);
+				return next;
 			});
 		});
 		let disposed = false;
@@ -49,8 +61,9 @@ export const SocketContextProvider = ({ children }) => {
 			connection.disconnect();
 			setSocket(null);
 			setOnlineUsers([]);
+			setRecentlyOffline(new Map());
 		};
 	}, [user?._id]);
 
-	return <SocketContext.Provider value={{ socket, onlineUsers }}>{children}</SocketContext.Provider>;
+	return <SocketContext.Provider value={{ socket, onlineUsers, recentlyOffline }}>{children}</SocketContext.Provider>;
 };

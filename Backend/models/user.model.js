@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema({
     savedPosts: { type: [mongoose.Schema.Types.ObjectId], default: [], select: false },
     hideBio: { type: Boolean, default: false },
     sessionVersion: { type: Number, default: 0 },
+    lastActiveAt: Date,
     lastLogin: {
         type: Date,
         default: Date.now,

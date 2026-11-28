@@ -1,7 +1,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { readFileSync } from "node:fs";
 import manifest from "./public/manifest.json";
+
+function registerProductionWorker() {
+  return {
+    name: "social-register-production-worker",
+    apply: "build",
+    transformIndexHtml: () => [{
+      tag: "script",
+      attrs: { "data-network-shell": true },
+      children: readFileSync(new URL("./public/registerSW.js", import.meta.url), "utf8"),
+      injectTo: "head-prepend",
+    }],
+  };
+}
 
 // A production PWA may already control the origin when Vite starts on the
 // same host and port. Replace that worker so it cannot serve old build assets.
@@ -40,6 +54,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       retireDevelopmentServiceWorker(),
+      registerProductionWorker(),
       VitePWA({
         registerType: "autoUpdate",
         devOptions: {
@@ -49,24 +64,40 @@ export default defineConfig(({ mode }) => {
         includeAssets: ["favicon.png", "dark-logo-192.png", "dark-logo-512.png"],
         manifest,
         strategies: "generateSW",
-        injectRegister: "auto",
+        injectRegister: false,
         workbox: {
+          skipWaiting: false,
+          clientsClaim: true,
           cleanupOutdatedCaches: true,
           sourcemap: true,
           globPatterns: ["index.html", "assets/**/*.{js,css,woff,woff2,ttf,eot}"],
+          globIgnores: [
+            "assets/pdf-*.js",
+            "assets/hls.light-*.js",
+            "assets/videoEffects-*.js",
+            "assets/vision_wasm*-*.js",
+          ],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
-          navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/socket\.io(?:\/|$)/],
+          navigateFallback: null,
+          directoryIndex: null,
           runtimeCaching: [
             {
               urlPattern: ({ sameOrigin, url }) => sameOrigin && /^\/(api|socket\.io)(\/|$)/.test(url.pathname),
               handler: "NetworkOnly",
             },
             {
-              urlPattern: ({ url, sameOrigin }) => sameOrigin && /\.(png|jpg|jpeg|svg|gif)$/.test(url.pathname),
-              handler: "CacheFirst",
+              urlPattern: ({ request, sameOrigin }) => sameOrigin && request.mode === "navigate",
+              handler: "NetworkOnly",
+              options: { precacheFallback: { fallbackURL: "/index.html" } },
+            },
+            {
+              urlPattern: ({ url, sameOrigin, request }) => sameOrigin && request.destination === "image"
+                && /^\/[^/]+\.(png|jpe?g|jfif|svg|gif|webp|avif|ico)$/i.test(url.pathname),
+              handler: "StaleWhileRevalidate",
               options: {
                 cacheName: "images",
-                expiration: { maxEntries: 60, maxAgeSeconds: 2592000 },
+                cacheableResponse: { statuses: [200] },
+                expiration: { maxEntries: 48, maxAgeSeconds: 604800 },
               },
             },
           ],

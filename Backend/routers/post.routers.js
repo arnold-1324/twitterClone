@@ -1,14 +1,18 @@
 import { limitResource, limitUpload } from "../lib/rateLimits.js";
+import { recordPostView, likePostReply, repost } from "../controller/post.controller.js";
 import express from 'express'
-import { uploadCarousel, uploadReel } from "../lib/utils/uploader.js"
+import { uploadCarousel, uploadPostImage, uploadReel } from "../lib/utils/uploader.js"
 import { protectRoute } from "../middleware/protectRoute.js";
 import { likePost,addReply,NewPost,createReel,recommendations,getSavedIds,listSaved,savePost,listAccountMedia,DeletePost,deletePostsUsersCollection,sharepost,getFeedPosts,getUserPosts,getPost } from '../controller/post.controller.js';
 const router=express.Router();
 
 router.post("/create",protectRoute, limitResource, limitUpload, uploadCarousel, NewPost); //working  for both
 router.put("/like/:id",protectRoute, limitResource, likePost);   //working    for both
-router.put("/reply/:id",protectRoute ,limitResource, addReply);   //working    for both
+router.put("/reply/:id", protectRoute, limitResource, limitUpload, uploadPostImage.single("media"), addReply);
+router.put("/:id/replies/:replyId/like", protectRoute, limitResource, likePostReply);
+router.put("/:id/repost", protectRoute, limitResource, repost);
 router.get("/feed", protectRoute, limitResource, getFeedPosts);  //working for both
+router.put("/:id/view", protectRoute, limitResource, recordPostView);
 router.post("/reels", protectRoute, limitResource, limitUpload, uploadReel, createReel);
 router.get("/reels", protectRoute, limitResource, recommendations("reel"));
 router.get("/discover", protectRoute, limitResource, recommendations("post"));

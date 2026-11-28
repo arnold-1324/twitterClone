@@ -1,11 +1,11 @@
-import { useRecoilValue } from "recoil";
+import { useAppValue } from "../state/store";
 import { FiCamera, FiMessageCircle } from "react-icons/fi";
 import Login from "../components/Login";
 import SignupCard from "../components/SignupCard";
 import authScreenAtom from "../atom/authAtom";
 
 export default function AuthPage() {
-  const screen = useRecoilValue(authScreenAtom);
+  const screen = useAppValue(authScreenAtom);
   return (
     <main className="social-panel auth-layout">
       <section className="auth-intro" aria-labelledby="welcome-title">

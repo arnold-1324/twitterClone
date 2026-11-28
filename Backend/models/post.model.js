@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import contentReference from "./contentReference.schema.js";
+import musicSchema from "./music.schema.js";
 
 const postSchema = new mongoose.Schema({
     postedBy: {
@@ -14,17 +16,31 @@ const postSchema = new mongoose.Schema({
         type: String
     },
     kind: { type: String, enum: ["post", "reel"], default: "post" },
+    sharedContent: contentReference,
+    music: musicSchema,
     media: [{
         _id: false,
         key: { type: String, required: true },
         type: { type: String, enum: ["image", "video"], required: true },
+        credit: {
+            title: String,
+            creator: String,
+            source: String,
+            original: String,
+            license: String,
+            licenseUrl: String,
+            changes: String,
+        },
     }],
     topics: [String],
     likes: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
     }],
+    repostedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     replies: [{
+        parentId: mongoose.Schema.Types.ObjectId,
+        likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
         userId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
@@ -32,8 +48,9 @@ const postSchema = new mongoose.Schema({
         },
         comment: {
             type: String,
-            required: true,
+            default: "",
         },
+        mediaKey: String,
         profileImg: {
             type: String,
             default: "",
@@ -58,6 +75,7 @@ const postSchema = new mongoose.Schema({
 });
 
 postSchema.index({ postedBy: 1, createdAt: -1, _id: -1 });
+postSchema.index({ repostedBy: 1, createdAt: -1, _id: -1 });
 
 postSchema.index({ kind: 1, createdAt: -1, _id: -1 });
 postSchema.index({ likes: 1, createdAt: -1 });

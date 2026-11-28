@@ -1,13 +1,23 @@
+import { recordMusicClip } from "../lib/hostedMusic.js";
 import { isImage, isVideo } from "../lib/utils/uploader.js";
 import { extractTopics, recentInterests, scorePost } from "../lib/recommendations.js";
 import { presentProfile } from "../lib/utils/presentProfile.js";
-import { messageAudience, saveConversationPreview } from "./messageController.js";
+import { messageAudience } from "./messageController.js";
+import { saveConversationPreview } from "../lib/conversationPreview.js";
 import { getIO, getRecipientRoom } from "../socket/socket.js";
 import { postCache } from "../lib/readCache.js";
 import { beforeCursor, sendCursor } from "../lib/cursorPage.js";
 import { presentPost } from "../lib/utils/presentPost.js";
 import { mediaUrl, removeMedia, saveMedia } from "../lib/mediaStore.js";
 import Post from "../models/post.model.js";
+import PostView from "../models/postView.model.js";
+import { homeFeed } from "../lib/homeFeed.js";
+import { contentMentions, deliverContentMentions } from "../lib/contentMentions.js";
+import { readContentReference, resolveContentReference } from "../lib/contentReference.js";
+import { recordStoryActivity } from "../lib/storyActivity.js";
+import { findVisibleStory } from "../lib/storyLifetime.js";
+import { authenticatedUser } from "../middleware/protectRoute.js";
+import { readMusic } from "../lib/photoComposition.js";
 import User from "../models/user.model.js";
 import Notification from "../models/notification.model.js";
 
@@ -19,9 +29,9 @@ import { encrypt } from "../lib/utils/Msg_encryption/encrypt.js";
 import { redisClient } from "../Redis.js";
 
 
-const presentPosts = async (posts) => {
+const presentPosts = async (posts, options) => {
     return await Promise.all(
-        posts.map(post => presentPost(post))
+        posts.map(post => presentPost(post, options))
     );
 };
 
@@ -32,9 +42,9 @@ const presentPosts = async (posts) => {
 
 async function publishPost(req, res, next, kind) {
     const reel = kind === "reel";
-    const caption = typeof req.body.caption === "string" ? req.body.caption.trim() : "";
+    const caption = typeof req.body?.caption === "string" ? req.body.caption.trim() : "";
     const files = reel ? (req.file ? [req.file] : []) : [...(req.files?.image ?? []), ...(req.files?.media ?? [])];
-    if (caption.length > 280 || (!files.length && (reel || !caption))) {
+    if (caption.length > 280 || (!files.length && !req.body?.source && (reel || (!caption && !req.body?.music)))) {
         return res.status(400).json({ error: reel ? "Choose a video and use up to 280 caption characters." : "Add a caption or photos." });
     }
     if (!files.every(reel ? isVideo : isImage)) {
@@ -43,14 +53,33 @@ async function publishPost(req, res, next, kind) {
     const media = [];
     let saved;
     try {
+        if (req.user.isFrozen) return res.status(403).json({ error: "This account cannot publish." });
+        const music = await readMusic(req.body?.music);
+        if (!reel && !files.length && !caption && !req.body?.source && !music) {
+            return res.status(400).json({ error: "Add a caption, photo, or track." });
+        }
+        const reference = readContentReference(req.body?.source);
+        const source = reference && await resolveContentReference(reference);
+        if (reference && !source) return res.status(404).json({ error: "Original content is unavailable." });
+        if (source && (files.length || (reel && source.media[0]?.type !== "video"))) {
+            return res.status(400).json({ error: reel ? "Choose a video source for your reel." : "Choose original media or a reshare." });
+        }
+        const recipients = await contentMentions(req.user._id, caption, req.body?.tags);
         for (const file of files) {
-            const { key, kind: type } = await saveMedia(file, { kind: reel ? "video" : "image" });
+            const { key, kind: type } = await saveMedia(file, { signal: req.requestAbortSignal, kind: reel ? "video" : "image" });
             media.push({ key, type });
         }
         saved = await Post.create({
             postedBy: req.user._id, caption, kind, topics: extractTopics(caption), media,
             images: reel ? "" : media[0]?.key ?? "",
+            sharedContent: source?.original, music,
         });
+        recordMusicClip(req.user._id, music, kind);
+        if (reference?.type === "story") {
+            const story = await findVisibleStory(reference.id);
+            if (story) await recordStoryActivity(story, req.user._id, "shared").catch((error) => console.error("Story reshare activity:", error.message));
+        }
+        await deliverContentMentions(req.user, recipients, saved, kind).catch((error) => console.error("Content mentions:", error.message));
         return res.status(201).json(await presentPost(saved));
     } catch (error) {
         if (!saved) await removeMedia(media.map(({ key }) => key));
@@ -65,13 +94,25 @@ export function recommendations(kind) {
     return async (req, res, next) => {
         try {
             const filter = kind === "reel" ? { kind } : { postedBy: { $ne: req.user._id }, kind: { $ne: "reel" } };
+            const { topic, scope, before } = req.query;
+            if (topic !== undefined) {
+                if (typeof topic !== "string" || !/^[\p{L}\p{N}_]{1,32}$/u.test(topic)) {
+                    return res.status(400).json({ error: "Choose a valid topic." });
+                }
+                filter.topics = topic.normalize("NFKC").toLowerCase();
+            }
+            if (kind === "reel" && scope === "following") filter.postedBy = { $in: req.user.following ?? [] };
             const [interest, candidates] = await Promise.all([
                 recentInterests(req.user),
                 Post.find(filter).sort({ createdAt: -1, _id: -1 }).limit(120).maxTimeMS(3000).lean(),
             ]);
             const now = Date.now();
-            const chosen = candidates.map((post) => ({ post, score: scorePost(post, interest, now) }))
-                .sort((a, b) => b.score - a.score).slice(0, 24).map(({ post }) => post);
+            const ranked = candidates.map((post) => ({ post, score: scorePost(post, interest, now) }))
+                .sort((a, b) => b.score - a.score).map(({ post }) => post);
+            const offset = before === undefined ? 0 : ranked.findIndex(({ _id }) => String(_id) === before) + 1;
+            if (before !== undefined && offset === 0) return res.status(400).json({ error: "Refresh to continue from a current page." });
+            const chosen = ranked.slice(offset, offset + 24);
+            if (offset + chosen.length < ranked.length) res.set("X-Next-Cursor", String(chosen.at(-1)._id));
             await Post.populate(chosen, [
                 { path: "postedBy", select: "username fullName profileImg" },
                 { path: "likes", select: "username profileImg" },
@@ -161,95 +202,83 @@ export const likePost = async (req, res) => {
 // ADD REPLY
 // ============================================================
 
-export const addReply = async (req, res) => {
-
-    try {
-
-        const { comment } = req.body;
-        const { id: postId } = req.params;
-        const userId = req.user._id;
-
-
-        // ----------------------------------------------------
-        // Validate comment
-        // ----------------------------------------------------
-
-        if (!comment) {
-
-            return res.status(400).json({
-                message: "Comment required."
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // Get user
-        // ----------------------------------------------------
-
-        const user = await User.findById(userId)
-            .select(
-                "profileImg username"
-            );
-
-
-        if (!user) {
-
-            return res.status(404).json({
-                message: "User not found"
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // Get post
-        // ----------------------------------------------------
-
-        const post = await Post.findById(postId);
-
-
-        if (!post) {
-
-            return res.status(404).json({
-                message: "Post not found"
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // Create reply
-        // ----------------------------------------------------
-
-        const reply = {
-            userId,
-            comment,
-            profileImg: user.profileImg,
-            username: user.username
-        };
-
-
-        post.replies.push(reply);
-
-        await post.save();
-        postCache.invalidate(String(post._id));
-
-
-        return res.status(200).json(
-            { ...reply, profileImg: await mediaUrl(reply.profileImg) }
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Error in addReply:",
-            error.message
-        );
-
-        return res.status(500).json({
-            message: error.message
-        });
+export async function addReply(req, res, next) {
+    const { id } = req.params;
+    const { comment, parentId } = req.body ?? {};
+    if (!mongoose.isObjectIdOrHexString(id)) return res.status(404).json({ error: "Post not found." });
+    if ((comment !== undefined && typeof comment !== "string") || (!comment?.trim() && !req.file) || comment?.length > 4000
+        || (parentId !== undefined && !mongoose.isObjectIdOrHexString(parentId))) {
+        return res.status(400).json({ error: "Enter a comment of up to 4,000 characters or attach a photo." });
     }
-};
+    if (req.file && !isImage(req.file)) return res.status(415).json({ error: "Choose a valid image." });
+    const user = req.user;
+    const reply = {
+        _id: new mongoose.Types.ObjectId(),
+        userId: user._id,
+        comment: comment?.trim() ?? "",
+        username: user.username,
+        profileImg: user.profileImg || "",
+        createdAt: new Date(),
+        ...(parentId && { parentId: new mongoose.Types.ObjectId(parentId) }),
+        likes: [],
+    };
+    let mediaKey;
+    let stored = false;
+    try {
+        const filter = { _id: id, ...(parentId && { "replies._id": parentId }) };
+        if (req.file && await Post.exists(filter)) {
+            ({ key: mediaKey } = await saveMedia(req.file, { kind: "image", signal: req.requestAbortSignal }));
+        } else if (req.file) {
+            return res.status(404).json({ error: parentId ? "Comment not found." : "Post not found." });
+        }
+        const result = await Post.updateOne(filter, { $push: { replies: { ...reply, ...(mediaKey && { mediaKey }) } } },
+            { runValidators: true });
+        if (!result.matchedCount) return res.status(404).json({ error: parentId ? "Comment not found." : "Post not found." });
+        stored = true;
+        postCache.invalidate(id.toLowerCase());
+        return res.json({ ...reply, profileImg: await mediaUrl(reply.profileImg), ...(mediaKey && { mediaUrl: await mediaUrl(mediaKey) }) });
+    } catch (error) {
+        return next(error);
+    } finally {
+        if (mediaKey && !stored) await removeMedia([mediaKey]);
+    }
+}
 
+export async function likePostReply(req, res, next) {
+    const { id, replyId } = req.params;
+    const liked = req.body?.liked;
+    if (!mongoose.isObjectIdOrHexString(id) || !mongoose.isObjectIdOrHexString(replyId) || typeof liked !== "boolean") {
+        return res.status(400).json({ error: "Choose a valid comment and reaction." });
+    }
+    try {
+        const path = "replies.$.likes";
+        const result = await Post.updateOne({ _id: id, "replies._id": replyId },
+            { [liked ? "$addToSet" : "$pull"]: { [path]: req.user._id } });
+        if (!result.matchedCount) return res.status(404).json({ error: "Comment not found." });
+        postCache.invalidate(id.toLowerCase());
+        return res.json({ liked });
+    } catch (error) {
+        return next(error);
+    }
+}
+
+export async function repost(req, res, next) {
+    const { id } = req.params;
+    const reposted = req.body?.reposted;
+    if (!mongoose.isObjectIdOrHexString(id) || typeof reposted !== "boolean") {
+        return res.status(400).json({ error: "Choose a valid post and repost action." });
+    }
+    try {
+        const post = await Post.findOneAndUpdate({ _id: id },
+            { [reposted ? "$addToSet" : "$pull"]: { repostedBy: req.user._id } },
+            { new: true, projection: { repostedBy: 1 }, timestamps: false, lean: true });
+        if (!post) return res.status(404).json({ error: "Post not found." });
+        postCache.invalidate(id.toLowerCase());
+        return res.json({ reposted, count: post.repostedBy?.length ?? 0 });
+    } catch (error) {
+        return next(error);
+    }
+}
 
 // ============================================================
 // DELETE POST
@@ -263,7 +292,8 @@ export const DeletePost = async (req, res, next) => {
         await User.updateMany({ savedPosts: post._id }, { $pull: { savedPosts: post._id } }).catch((error) => {
             console.error("Saved list cleanup failed:", error.message);
         });
-        await removeMedia([post.images, ...(post.media ?? []).map(({ key }) => key)]);
+        await removeMedia([post.images, ...(post.media ?? []).map(({ key }) => key),
+            ...(post.replies ?? []).map((reply) => reply?.mediaKey)]);
         return res.json({ message: "Post deleted successfully" });
     } catch (error) {
         return next(error);
@@ -383,7 +413,8 @@ export const getPost = async (req, res, next) => {
         const post = await postCache.read(id.toLowerCase(), () => Post.findById(id)
             .populate("postedBy", "username fullName profileImg").populate("likes", "username profileImg").maxTimeMS(3000).lean().exec());
         if (!post) return res.status(404).json({ error: "Post not found" });
-        return res.json(await presentPost(post));
+        const includeStory = post.sharedContent?.type !== "story" || Boolean(await authenticatedUser(req));
+        return res.json(await presentPost(post, { includeStory }));
     } catch (error) {
         return next(error);
     }
@@ -396,18 +427,34 @@ export const getPost = async (req, res, next) => {
 
 export const getFeedPosts = async (req, res, next) => {
     try {
-        const feedPosts = await Post.find({
-            postedBy: { $in: [req.user._id, ...req.user.following] },
-            ...beforeCursor(req.query.before),
-        })
-            .sort({ createdAt: -1, _id: -1 }).limit(26).maxTimeMS(3000)
-            .populate("postedBy", "username fullName profileImg")
-            .populate("likes", "username profileImg");
-        return res.json(await presentPosts(sendCursor(res, feedPosts, 25)));
+        const { posts, cursor } = await homeFeed(req.user, req.query.before);
+        if (cursor) res.set("X-Next-Cursor", cursor);
+        return res.json(await presentPosts(posts));
     } catch (error) {
         return next(error);
     }
 };
+
+export async function recordPostView(req, res, next) {
+    const { id } = req.params;
+    if (!mongoose.isObjectIdOrHexString(id)) return res.status(404).json({ error: "Post not found." });
+    try {
+        const post = await Post.findById(id).select("postedBy").lean();
+        if (!post) return res.status(404).json({ error: "Post not found." });
+        if (String(post.postedBy) !== String(req.user._id) && !req.user.isFrozen
+            && await User.exists({ _id: post.postedBy, isFrozen: { $ne: true } })) {
+            const day = 86400000;
+            const date = Math.floor(Date.now() / day);
+            const key = `${post._id}:${req.user._id}:${date}`;
+            await PostView.updateOne({ _id: key }, { $setOnInsert: {
+                post: post._id, expiresAt: new Date((date + 7) * day),
+            } }, { upsert: true }).catch((error) => { if (error.code !== 11000) throw error; });
+        }
+        return res.sendStatus(204);
+    } catch (error) {
+        return next(error);
+    }
+}
 
 
 // ============================================================
@@ -423,7 +470,7 @@ export async function listAccountMedia(req, res, next) {
             : { postedBy: userId, kind: view === "reels" ? "reel" : { $ne: "reel" } };
         const rows = await Post.find({ ...filter, ...beforeCursor(req.query.before) })
             .sort({ createdAt: -1, _id: -1 }).limit(25).maxTimeMS(3000)
-            .select("caption media images kind postedBy createdAt").populate("postedBy", "username").lean();
+            .select("caption media images kind postedBy createdAt sharedContent").populate("postedBy", "username").lean();
         return res.json(await presentPosts(sendCursor(res, rows, 24)));
     } catch (error) {
         return next(error);
@@ -435,9 +482,14 @@ export const getUserPosts = async (req, res, next) => {
         const cursor = beforeCursor(req.query.before);
         const user = await User.findOne({ username: req.params.username }).select("_id").lean();
         if (!user) return res.status(404).json({ error: "User not found" });
-        const posts = await Post.find({ postedBy: user._id, ...cursor })
+        const reposts = req.query.filter === "reposts";
+        const query = Post.find({ [reposts ? "repostedBy" : "postedBy"]: user._id, ...cursor })
             .sort({ createdAt: -1, _id: -1 }).limit(26).maxTimeMS(3000).populate("likes", "username profileImg");
-        return res.json(await presentPosts(sendCursor(res, posts, 25)));
+        if (reposts) query.populate("postedBy", "username fullName profileImg");
+        const posts = await query;
+        const visible = sendCursor(res, posts, 25);
+        const includeStory = !visible.some((post) => post.sharedContent?.type === "story") || Boolean(await authenticatedUser(req));
+        return res.json(await presentPosts(visible, { includeStory }));
     } catch (error) {
         return next(error);
     }

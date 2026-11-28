@@ -168,7 +168,7 @@ export const UpdateUserProfile = async (req, res) => {
     if (bio !== undefined && bio !== user.bio) changes.push({ kind: "bio", action: bio ? "changed" : "removed", profileValue: bio });
 
     if (req.file) {
-      ({ key: uploadedKey } = await saveMedia(req.file, { kind: "image" }));
+      ({ key: uploadedKey } = await saveMedia(req.file, { signal: req.requestAbortSignal, kind: "image" }));
       user.profileImg = uploadedKey;
       changes.push({ kind: "photo" });
     }

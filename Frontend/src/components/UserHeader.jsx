@@ -3,17 +3,21 @@ import { Box, Flex, Link, Text, VStack } from "@chakra-ui/layout";
 import { Menu, MenuButton, MenuItem, MenuList } from "@chakra-ui/menu";
 import { Portal } from "@chakra-ui/portal";
 import { Button, useToast } from "@chakra-ui/react";
-import { BsInstagram } from "react-icons/bs";
 import { CgMoreO } from "react-icons/cg";
-import { useRecoilValue } from "recoil";
+import { useAppValue } from "../state/store";
 import userAtom from "../atom/userAtom";
 import { Link as RouterLink } from "react-router-dom";
 import useFollowUnfollow from "../hooks/useFollowUnfollow";
+import useEphemeralShelf from "../hooks/useEphemeralShelf";
+import { storyProfilePath } from "../lib/ephemeralCache";
+import { StoryLink } from "./StoryShelf";
+import ProfileNote from "./ProfileNote";
 
 const UserHeader = ({ user }) => {
   const toast = useToast();
-  const currentUser = useRecoilValue(userAtom);
+  const currentUser = useAppValue(userAtom);
   const { handleFollowUnfollow, following, updating } = useFollowUnfollow(user);
+  const { data: story } = useEphemeralShelf(user ? `${storyProfilePath(user.username)}/status` : null, currentUser?._id);
 
   const copyURL = () => {
     const currentURL = window.location.href;
@@ -42,11 +46,13 @@ const UserHeader = ({ user }) => {
             </Text>
           </Flex>
         </Box>
-        <Avatar
-          name={user.fullName}
-          src={user.profileImg || 'https://bit.ly/broken-link'}
-          size="xl"
-        />
+        <div className="profile-avatar-stack">
+          <ProfileNote key={user._id} person={user} viewer={currentUser} />
+          {story && new Date(story.expiresAt).getTime() > Date.now()
+            ? <StoryLink person={user} viewer={currentUser?._id} from={`/${encodeURIComponent(user.username)}`}
+              own={currentUser?._id === user._id} seen={!story.unseen} profile />
+            : <Avatar name={user.fullName} src={user.profileImg} size="xl" />}
+        </div>
       </Flex>
       <Text>{user.bio}</Text>
       {currentUser?._id === user._id ? (
@@ -73,6 +79,7 @@ const UserHeader = ({ user }) => {
               <MenuItem bg={"gray.dark"} onClick={copyURL}>
                 Copy link
               </MenuItem>
+              {currentUser?._id === user._id && <MenuItem as={RouterLink} to="/settings" bg={"gray.dark"}>Settings</MenuItem>}
             </MenuList>
           </Portal>
         </Menu>

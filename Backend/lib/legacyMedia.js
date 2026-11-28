@@ -3,7 +3,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 let client;
 
-function legacyStorage() {
+export function bucketStorage() {
   const { BUCKET_NAME, REGION, S3_ENDPOINT, S3_FORCE_PATH_STYLE } = process.env;
   const accessKeyId = process.env.ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = process.env.SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY;
@@ -21,14 +21,14 @@ function legacyStorage() {
 }
 
 export async function legacyMediaUrl(key) {
-  const storage = legacyStorage();
+  const storage = bucketStorage();
   if (!storage) return "";
   return getSignedUrl(storage.client, new GetObjectCommand({ Bucket: storage.bucket, Key: key }), { expiresIn: 900 })
     .catch(() => "");
 }
 
 export async function deleteLegacyMedia(key) {
-  const storage = legacyStorage();
+  const storage = bucketStorage();
   if (!storage) return;
   await storage.client.send(new DeleteObjectCommand({ Bucket: storage.bucket, Key: key }), {
     abortSignal: AbortSignal.timeout(3000),

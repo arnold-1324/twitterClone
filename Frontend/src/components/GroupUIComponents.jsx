@@ -32,7 +32,7 @@ import {
 } from "@chakra-ui/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaUsers, FaCrown, FaShieldAlt, FaEdit, FaCamera } from "react-icons/fa";
-import { useRecoilValue, useSetRecoilState } from "recoil";
+import { useAppValue, useSetAppValue } from "../state/store";
 import { selectedConversationAtom, conversationsAtom } from "../atom/messagesAtom";
 import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
@@ -69,9 +69,9 @@ const GroupUIComponents = ({ isOpen, onClose, mode = "edit", onCreated }) => {
   const [selectedMembers, setSelectedMembers] = useState([]); // array of user objects
   const [permissions, setPermissions] = useState({ canMessage: "all" });
 
-  const selectedConversation = useRecoilValue(selectedConversationAtom);
-  const currentUser = useRecoilValue(userAtom);
-  const setConversations = useSetRecoilState(conversationsAtom);
+  const selectedConversation = useAppValue(selectedConversationAtom);
+  const currentUser = useAppValue(userAtom);
+  const setConversations = useSetAppValue(conversationsAtom);
   const showToast = useShowToast();
 
   const memberHover = useColorModeValue("gray.50", "gray.700");

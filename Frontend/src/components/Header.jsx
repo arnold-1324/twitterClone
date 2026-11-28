@@ -2,9 +2,10 @@ import ActivityList from "./ActivityList";
 import { Avatar, IconButton, Tooltip, useBreakpointValue, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, useColorMode } from "@chakra-ui/react";
 import { FiBell, FiFilm, FiHome, FiLogOut, FiMessageCircle, FiMoon, FiPlusSquare, FiSearch, FiSettings, FiSun } from "react-icons/fi";
 import { Link, NavLink } from "react-router-dom";
-import { useRecoilValue } from "recoil";
+import { useAppValue } from "../state/store";
 import userAtom from "../atom/userAtom";
 import NotifyAtom from "../atom/notifyAtom";
+import inboxUnreadAtom from "../atom/inboxUnreadAtom";
 import useLogout from "../hooks/useLogout";
 
 const links = [
@@ -16,8 +17,9 @@ const links = [
 ];
 
 export default function Header() {
-  const user = useRecoilValue(userAtom);
-  const { unreadCount } = useRecoilValue(NotifyAtom);
+  const user = useAppValue(userAtom);
+  const { unreadCount } = useAppValue(NotifyAtom);
+  const { total: unreadMessages } = useAppValue(inboxUnreadAtom);
   const { colorMode, toggleColorMode } = useColorMode();
   const logout = useLogout();
   const activityPlacement = useBreakpointValue({ base: "top-end", md: "right-start" });
@@ -30,10 +32,15 @@ export default function Header() {
       {user && (
         <nav className="social-nav" aria-label="Primary navigation">
           {links.map(({ to, label, Icon }) => (
-            <NavLink end key={to} to={to} aria-label={label} className="social-nav-link">
+            <NavLink end key={to} to={to} aria-label={label}
+              aria-description={to === "/chat" && unreadMessages > 0 ? `${unreadMessages} unread messages` : undefined}
+              className={`social-nav-link${to === "/create" ? " nav-desktop-create" : ""}`}>
               <Icon />
               {to === "/" && <img className="mobile-feed-mark" src="/dark-logo-192.png" alt="" width="19" height="19" />}
               <span>{label}</span>
+              {to === "/chat" && unreadMessages > 0 && <small className="messages-badge" aria-hidden="true">
+                {unreadMessages > 99 ? "99+" : unreadMessages}
+              </small>}
             </NavLink>
           ))}
           <Popover placement={activityPlacement} isLazy lazyBehavior="unmount">
@@ -49,6 +56,9 @@ export default function Header() {
           </Popover>
           <NavLink to="/settings" className="social-nav-link mobile-settings" aria-label="Settings">
             <FiSettings /><span>Settings</span>
+          </NavLink>
+          <NavLink end to={`/${encodeURIComponent(user.username)}`} className="social-nav-link social-mobile-profile" aria-label="Your profile">
+            <Avatar size="xs" name={user.fullName || user.username} src={user.profileImg} />
           </NavLink>
         </nav>
       )}

@@ -1,11 +1,18 @@
 import { apiFetch, readApiJson } from "../lib/apiFetch.js";
 import { useEffect, useRef, useState } from "react";
-import { Button, IconButton, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay } from "@chakra-ui/react";
-import { FiMic, FiMicOff, FiVideo, FiVideoOff } from "react-icons/fi";
 import { useSocket } from "./SocketContext";
 import useShowToast from "../hooks/useShowToast";
+import useIncomingRingtone from "../hooks/useIncomingRingtone";
+import CallScreen from "../components/CallScreen";
 
 import { CallContext } from "./call.js";
+
+const cameraSize = { width: { ideal: 640, max: 960 }, height: { ideal: 480, max: 960 } };
+
+async function openCamera(constraints) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...cameraSize, ...constraints } });
+  return stream.getVideoTracks()[0];
+}
 
 function signal(socket, event, payload) {
   return new Promise((resolve, reject) => {
@@ -19,10 +26,9 @@ function signal(socket, event, payload) {
 export function CallProvider({ children }) {
   const { socket } = useSocket();
   const current = useRef(null);
-  const localVideo = useRef(null);
-  const remoteMedia = useRef(null);
   const [view, setView] = useState(null);
   const showToast = useShowToast();
+  const ringtone = useIncomingRingtone(view?.status === "incoming");
 
   function refresh(call, changes) {
     if (current.current !== call) return;
@@ -30,11 +36,14 @@ export function CallProvider({ children }) {
     setView({ ...call });
   }
 
-  function close(call, notifyPeer = true) {
+  function close(call, notifyPeer = true, connectionFailed = false) {
     if (current.current !== call) return;
     current.current = null;
-    if (notifyPeer && socket?.connected && call.id) socket.emit("call:end", { id: call.id });
+    if (notifyPeer && socket?.connected && call.id) socket.emit("call:end", { id: call.id, connectionFailed });
     clearTimeout(call.connectTimer);
+    clearTimeout(call.reconnectTimer);
+    call.filterController?.abort();
+    call.filter?.stop();
     call.pc?.close();
     call.stream?.getTracks().forEach((track) => track.stop());
     setView(null);
@@ -42,8 +51,8 @@ export function CallProvider({ children }) {
 
   function fail(call, error) {
     if (current.current !== call) return;
-    close(call);
-    showToast("Call unavailable", error.message, "error");
+    close(call, true, Boolean(call.pc));
+    showToast("Call unavailable", error.message, "error", "top");
   }
 
   async function getMedia(call) {
@@ -55,12 +64,12 @@ export function CallProvider({ children }) {
     const { iceServers } = await readApiJson(response);
     if (current.current !== call) return false;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true,
-      video: call.mode === "video" ? { facingMode: "user", width: { ideal: 640 } } : false });
+      video: call.mode === "video" ? { ...cameraSize, facingMode: "user" } : false });
     if (current.current !== call) {
       stream.getTracks().forEach((track) => track.stop());
       return false;
     }
-    refresh(call, { stream, iceServers });
+    refresh(call, { stream, iceServers, cameraFacing: stream.getVideoTracks()[0]?.getSettings().facingMode ?? "user" });
     return true;
   }
 
@@ -69,7 +78,10 @@ export function CallProvider({ children }) {
     call.pc = pc;
     call.connectTimer = setTimeout(() => fail(call, new Error("Could not establish a media connection.")), 22000);
     call.candidates = [];
-    for (const track of call.stream.getTracks()) pc.addTrack(track, call.stream);
+    for (const track of call.stream.getTracks()) {
+      const sender = pc.addTrack(track, call.stream);
+      if (track.kind === "video") call.videoSender = sender;
+    }
     pc.onicecandidate = ({ candidate }) => {
       if (candidate && current.current === call && socket.connected) {
         socket.emit("call:signal", { id: call.id, candidate: candidate.toJSON() });
@@ -77,12 +89,19 @@ export function CallProvider({ children }) {
     };
     pc.ontrack = ({ streams }) => refresh(call, { remote: streams[0] });
     pc.onconnectionstatechange = () => {
+      if (current.current !== call) return;
       if (pc.connectionState === "connected") {
         clearTimeout(call.connectTimer);
-        refresh(call, { status: "connected" });
+        clearTimeout(call.reconnectTimer);
+        call.reconnectTimer = undefined;
+        socket.emit("call:connected", { id: call.id });
+        refresh(call, { status: "connected", connectedAt: call.connectedAt ?? performance.now() });
       }
-      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+      if (pc.connectionState === "failed") {
         fail(call, new Error("Media connection lost."));
+      }
+      if (pc.connectionState === "disconnected" && !call.reconnectTimer) {
+        call.reconnectTimer = setTimeout(() => fail(call, new Error("Media connection lost.")), 4500);
       }
     };
   }
@@ -90,10 +109,10 @@ export function CallProvider({ children }) {
   async function start(chat, mode) {
     if (current.current) return;
     if (!socket?.connected) {
-      showToast("Call unavailable", "Wait for the inbox to reconnect.", "error");
+      showToast("Call unavailable", "Wait for the inbox to reconnect.", "error", "top");
       return;
     }
-    const call = { name: chat.username, mode, status: "preparing", chain: Promise.resolve() };
+    const call = { name: chat.username, profileImg: chat.userProfilePic, mode, status: "preparing", chain: Promise.resolve() };
     current.current = call;
     refresh(call, {});
     try {
@@ -116,8 +135,8 @@ export function CallProvider({ children }) {
     try {
       if (!(await getMedia(call))) return;
       makePeer(call);
-      await signal(socket, "call:accept", { id: call.id });
       refresh(call, { status: "connecting" });
+      await signal(socket, "call:accept", { id: call.id });
     } catch (error) {
       fail(call, error);
     }
@@ -125,9 +144,9 @@ export function CallProvider({ children }) {
 
   useEffect(() => {
     if (!socket) return;
-    function incoming({ id, from, mode }) {
+    function incoming({ id, from, mode, profileImg }) {
       if (current.current) return;
-      const call = { id, name: from, mode, status: "incoming", chain: Promise.resolve() };
+      const call = { id, name: from, profileImg, mode, status: "incoming", chain: Promise.resolve() };
       current.current = call;
       refresh(call, {});
     }
@@ -165,7 +184,7 @@ export function CallProvider({ children }) {
       const call = current.current;
       if (call?.id !== id) return;
       close(call, false);
-      if (reason !== "Call ended") showToast(reason, undefined, "info");
+      if (reason !== "Call ended") showToast(reason, undefined, "info", "top");
     }
     function disconnected() {
       if (current.current) close(current.current, false);
@@ -187,50 +206,137 @@ export function CallProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, showToast]);
 
-  useEffect(() => {
-    if (localVideo.current) localVideo.current.srcObject = view?.stream ?? null;
-    if (remoteMedia.current) remoteMedia.current.srcObject = view?.remote ?? null;
-  }, [view]);
-
   function toggle(kind) {
     const call = current.current;
     if (!call) return;
     const track = call.stream?.getTracks().find((item) => item.kind === kind);
     if (!track) return;
+    if (kind === "video") {
+      if (call.videoOperation) return;
+      if (track.readyState === "ended") {
+        void changeCamera(call.cameraFacing, true);
+        return;
+      }
+    }
     track.enabled = !track.enabled;
+    if (kind === "video" && call.filter) call.filter.track.enabled = track.enabled;
     refresh(call, { [kind === "audio" ? "muted" : "cameraOff"]: !track.enabled });
   }
 
-  const statuses = { incoming: "Incoming call", preparing: "Requesting media access…",
-    ringing: "Ringing…", connecting: "Connecting…", connected: "Connected" };
+  async function installCamera(call, track, facing) {
+    if (call.filter) await call.filter.setCamera(track);
+    else await call.videoSender.replaceTrack(track);
+    if (current.current !== call) return false;
+    if (call.filter) call.filter.track.enabled = true;
+    const stream = new MediaStream([...call.stream.getAudioTracks(), track]);
+    refresh(call, { stream, cameraFacing: facing, cameraOff: false });
+    return true;
+  }
+
+  async function changeCamera(target, recoverOnly = false) {
+    const call = current.current;
+    if (!call?.videoSender || call.status !== "connected" || call.videoOperation) return;
+    const previous = call.stream.getVideoTracks()[0];
+    const source = previous.getSettings();
+    const restore = source.deviceId ? { deviceId: { exact: source.deviceId } }
+      : { facingMode: { ideal: call.cameraFacing } };
+    let replacement;
+    refresh(call, { videoOperation: "camera" });
+    try {
+      const next = recoverOnly ? restore : { facingMode: { exact: target } };
+      try {
+        replacement = await openCamera(next);
+      } catch (error) {
+        if (error.name !== "NotReadableError" || current.current !== call) throw error;
+        // Some phones can only hold one camera stream at a time.
+        previous.stop();
+        replacement = await openCamera(next);
+      }
+      const chosen = replacement.getSettings();
+      if (!recoverOnly && ((source.deviceId && chosen.deviceId === source.deviceId)
+        || (chosen.facingMode && chosen.facingMode !== target))) {
+        throw new Error("The other camera is unavailable.");
+      }
+      if (current.current !== call || !await installCamera(call, replacement, chosen.facingMode ?? target)) {
+        replacement.stop();
+        return;
+      }
+      previous.stop();
+    } catch {
+      replacement?.stop();
+      if (current.current !== call) return;
+      let restored = previous;
+      try {
+        if (previous.readyState === "ended") restored = await openCamera(restore);
+        if (current.current !== call || !await installCamera(call, restored, call.cameraFacing)) {
+          restored.stop();
+          return;
+        }
+      } catch {
+        if (restored !== previous) restored.stop();
+        if (call.filter) call.filter.track.enabled = false;
+        refresh(call, { cameraOff: true });
+      }
+      showToast("Camera unavailable", recoverOnly ? "Check that the camera is available and try again."
+        : `Could not switch to the ${target === "environment" ? "rear" : "front"} camera.`, "error", "top");
+    } finally {
+      refresh(call, { videoOperation: undefined });
+    }
+  }
+
+  async function removeFilter(call) {
+    const filter = call.filter;
+    if (!filter) return;
+    await call.videoSender.replaceTrack(call.stream.getVideoTracks()[0]);
+    call.filterController.abort();
+    filter.stop();
+    refresh(call, { filter: undefined });
+  }
+
+  async function setVideoEffect(effect) {
+    const call = current.current;
+    if (!call?.videoSender || call.status !== "connected" || call.videoOperation || (effect !== "original" && call.cameraOff)
+      || effect === (call.filter?.effect ?? "original")) return;
+    refresh(call, { videoOperation: "effect" });
+    let filter;
+    try {
+      if (effect === "original") {
+        await removeFilter(call);
+        return;
+      }
+      if (call.filter) {
+        await call.filter.setEffect(effect);
+        return;
+      }
+      const controller = new AbortController();
+      call.filterController = controller;
+      const { createVideoEffect } = await import("../lib/videoEffects.js");
+      controller.signal.throwIfAborted();
+      filter = await createVideoEffect(call.stream.getVideoTracks()[0], effect, controller.signal, () => {
+        if (current.current !== call || call.filter !== filter) return;
+        void removeFilter(call).catch(() => {});
+        showToast("Video filter stopped", "Try selecting the filter again.", "error", "top");
+      });
+      controller.signal.throwIfAborted();
+      await call.videoSender.replaceTrack(filter.track);
+      controller.signal.throwIfAborted();
+      refresh(call, { filter });
+    } catch {
+      filter?.stop();
+      if (current.current === call) showToast("Video effect unavailable", "Try selecting the filter again.", "error", "top");
+    } finally {
+      refresh(call, { videoOperation: undefined });
+    }
+  }
+
   return (
     <CallContext.Provider value={{ start, busy: Boolean(view), connected: Boolean(socket) }}>
       {children}
-      <Modal isOpen={Boolean(view)} onClose={() => current.current && close(current.current)} isCentered
-        closeOnOverlayClick={false} closeOnEsc={false} size={{ base: "full", sm: "lg" }}>
-        <ModalOverlay />
-        {view && <ModalContent className="dayline-call">
-          <ModalHeader>{view.mode === "video" ? "Video" : "Voice"} call · {view.name}</ModalHeader>
-          <ModalBody>
-            <p role="status">{statuses[view.status]}</p>
-            {view.mode === "video" ? <div className="call-video">
-              <video ref={remoteMedia} autoPlay playsInline aria-label="Remote video" />
-              <video ref={localVideo} autoPlay playsInline muted aria-label="Your camera preview" />
-            </div> : <audio ref={remoteMedia} autoPlay />}
-          </ModalBody>
-          <ModalFooter className="call-actions">
-            {view.status === "incoming" ? <Button colorScheme="green" onClick={accept}>Answer</Button> : <>
-              {view.stream && <IconButton aria-label={view.muted ? "Unmute microphone" : "Mute microphone"}
-                icon={view.muted ? <FiMicOff /> : <FiMic />} onClick={() => toggle("audio")} />}
-              {view.stream && view.mode === "video" && <IconButton aria-label={view.cameraOff ? "Turn camera on" : "Turn camera off"}
-                icon={view.cameraOff ? <FiVideoOff /> : <FiVideo />} onClick={() => toggle("video")} />}
-            </>}
-            <Button colorScheme="red" onClick={() => close(current.current)}>
-              {view.status === "incoming" ? "Decline" : "End call"}
-            </Button>
-          </ModalFooter>
-        </ModalContent>}
-      </Modal>
+      {view && <CallScreen call={view} onAnswer={accept} onToggle={toggle}
+        onFlipCamera={() => changeCamera(view.cameraFacing === "environment" ? "user" : "environment")}
+        onVideoEffect={setVideoEffect}
+        onEnableRingtone={ringtone.needsGesture ? ringtone.enable : undefined}
+        onEnd={() => current.current && close(current.current)} />}
     </CallContext.Provider>
   );
 }

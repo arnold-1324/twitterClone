@@ -49,7 +49,7 @@ async function takeHttp(fallback, key, limit, windowMs) {
     try {
       const [allowed, remaining, ttl] = await redisClient.sendCommand([
         "EVAL", chargeRedis, "1", `social:rate:${digest}`, String(limit), String(windowMs),
-      ], { signal: AbortSignal.timeout(250) });
+      ], { abortSignal: AbortSignal.timeout(250) });
       return { allowed: Boolean(allowed), remaining, retry: Math.max(1, Math.ceil(ttl / 1000)) };
     } catch {
       // Keep enforcing local limits if Redis is starting, full or unavailable.

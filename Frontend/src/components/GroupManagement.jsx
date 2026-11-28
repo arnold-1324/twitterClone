@@ -28,7 +28,7 @@ import {
   ListIcon,
 } from "@chakra-ui/react";
 import { FaUsers, FaCrown, FaShieldAlt, FaEdit, FaCamera } from "react-icons/fa";
-import { useRecoilValue, useSetRecoilState } from "recoil";
+import { useAppValue, useSetAppValue } from "../state/store";
 import { selectedConversationAtom, conversationsAtom } from "../atom/messagesAtom";
 import userAtom from "../atom/userAtom";
 import useShowToast from "../hooks/useShowToast";
@@ -44,9 +44,9 @@ const GroupManagement = ({ isOpen, onClose }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
-  const selectedConversation = useRecoilValue(selectedConversationAtom);
-  const currentUser = useRecoilValue(userAtom);
-  const setConversations = useSetRecoilState(conversationsAtom);
+  const selectedConversation = useAppValue(selectedConversationAtom);
+  const currentUser = useAppValue(userAtom);
+  const setConversations = useSetAppValue(conversationsAtom);
   const showToast = useShowToast();
   const toast = useToast();
 

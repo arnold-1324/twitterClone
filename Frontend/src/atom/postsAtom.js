@@ -1,6 +1,6 @@
-import { atom } from "recoil";
+import { defineState } from "../state/store";
 
-const postsAtom = atom({
+const postsAtom = defineState({
 	key: "postsAtom",
 	default: [],
 });

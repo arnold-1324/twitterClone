@@ -1,5 +1,7 @@
+import { MessageSticker } from "./Stickers";
+import { stickerLabel } from "../lib/stickers";
 import AdaptiveVideo from "./AdaptiveVideo";
-import React, { useState, useEffect, useMemo } from "react";
+import { memo, useState, useEffect } from "react";
 import {
   Box,
   Flex,
@@ -11,6 +13,7 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  Portal,
   useColorModeValue,
   Textarea,
   Button,
@@ -21,12 +24,34 @@ import { motion } from "framer-motion";
 //import AudioPlayerNew from "./AudioPlayerNew";
 import Reaction from "./Reaction";
 import formatMessageTime from "../Utils/Timeformate";
-import { useRecoilValue } from "recoil";
+import { useAppValue } from "../state/store";
 import userAtom from "../atom/userAtom";
 import AudioPlayer from "./AudioPlayer"; // Assuming you have an AudioPlayer component
 import PollMessage from "./PollMessage";
+import LocationMessage from "./LocationMessage";
+import { Link } from "react-router-dom";
+import ChatContentPreview from "./ChatContentPreview";
+import ChatAttachment from "./ChatAttachment";
+import ChatAlbum from "./ChatAlbum";
 
 const MotionFlex = motion(Flex);
+
+function renderMentions(text, mentions, currentUserId) {
+  if (!mentions?.length) return text;
+  const byName = new Map(mentions.map((mention) => [mention.username, mention]));
+  const result = [];
+  let cursor = 0;
+  for (const match of text.matchAll(/(?<![\w.@])@([\w-][\w.@-]{0,63})/g)) {
+    const mention = byName.get(match[1]) ?? byName.get(match[1].replace(/\.+$/, ""));
+    if (!mention) continue;
+    const { username, user } = mention;
+    result.push(text.slice(cursor, match.index));
+    result.push(<Link className="message-mention" data-mention-you={user === currentUserId || undefined}
+      key={match.index} to={`/${encodeURIComponent(username)}`}>@{username}</Link>);
+    cursor = match.index + username.length + 1;
+  }
+  return [...result, text.slice(cursor)];
+}
 
 // Helper: detect emoji-only short messages (best-effort)
 const isEmojiOnly = (text = "") => {
@@ -55,17 +80,16 @@ const Message = ({
   setEditingMessageId,
   setEditingText,
   onEditSubmit,
+  onLocationUpdate,
 }) => {
   const toast = useToast();
-  const currentUser = useRecoilValue(userAtom);
-   const audioRef = React.useRef(null);
+  const currentUser = useAppValue(userAtom);
   const [localEditingText, setLocalEditingText] = useState(message.text);
   const [isEditing, setIsEditing] = useState(false);
   // const [playingAudioId, setPlayingAudioId] = useState(null);
 
   // move color tokens to component scope (hooks must be top-level)
   const subtleBorder = useColorModeValue("gray.200", "gray.600");
-  const subtleText = useColorModeValue("gray.500", "gray.400");
   const menuText = useColorModeValue("black", "white");
   const secondaryText = useColorModeValue("gray.600", "gray.400");
   const senderText = useColorModeValue("gray.200", "gray.300");
@@ -74,9 +98,6 @@ const Message = ({
   const replyAuthor = useColorModeValue("teal.600", "teal.200");
   const replyColor = useColorModeValue("gray.800", "gray.100");
   const menuSurface = useColorModeValue("white", "gray.800");
-  const bgCard = useColorModeValue("gray.50", "gray.700");
-  const textCard = useColorModeValue("gray.900", "gray.100");
-  const muted = useColorModeValue("gray.600", "gray.300");
 
   useEffect(() => {
     setIsEditing(editingMessageId === message._id);
@@ -114,10 +135,10 @@ const Message = ({
 
   // If message was deleted for this user -> show deleted notice
   const isDeletedForMe = Array.isArray(message.deletedFor) && message.deletedFor.includes(currentUser._id);
-  const isDeletedForAll = Array.isArray(message.deletedFor) && message.deletedFor.length > 0 && !isDeletedForMe;
 
   // Improved renderMedia with compact fallback card
   const renderMedia = () => {
+    if (message.location) return <LocationMessage message={message} outgoing={isOwnMessage} onUpdate={onLocationUpdate} />;
 
     // For pure audio messages with no text or post/media -> render audio player only
     if (message.type === "audio" && !message.text?.trim()) {
@@ -154,92 +175,11 @@ const Message = ({
     }
 
 
-    // Case: post message with missing postReference -> compact horizontal card
-    if (message.type === "post" && !message.postReference) {
-      const username = message.sender?.username || "";
+    if (message.postReference || message.type === "post") return <ChatContentPreview message={message} />;
 
-      return (
-        <Box
-          mt={2}
-          p={3}
-          borderRadius="12px"
-          bg={bgCard}
-          color={textCard}
-          boxShadow="sm"
-          border="1px solid"
-          borderColor={subtleBorder}
-          width="100%"
-          alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
-        >
-          <Flex align="center" gap={3}>
-            <Avatar size="md" src={message.sender?.profileImg} name={username} />
+    if (message.attachments?.length) return <ChatAlbum items={message.attachments} />;
 
-            <Box flex="1" minW={0}>
-              <Text fontSize="sm" fontWeight="bold" noOfLines={1} color={textCard}>
-                {message.sender?.username ?? "Unknown"}
-              </Text>
-
-              <Text fontSize="sm" noOfLines={2} color={muted} mt={1}>
-                Post unavailable — it may have been removed or is no longer accessible.
-              </Text>
-            </Box>
-
-            <Flex direction="column" align="flex-end" gap={2}>
-              <Text fontSize="xs" color={subtleText}>
-                Shared
-              </Text>
-            </Flex>
-          </Flex>
-        </Box>
-      );
-    }
-
-    // If postReference exists and is populated, render the post card
-    if (message.postReference || message.type === "post") {
-      const post = message.postReference;
-      if (post) {
-        return (
-          <Box
-            mt={2}
-            p={2}
-            borderRadius="10px"
-            bg={bgCard}
-            color={menuText}
-            cursor="pointer"
-            _hover={{ transform: "translateY(-2px)", transition: "150ms" }}
-            alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
-          >
-            <Flex align="center" mb={2}>
-              <Avatar size="sm" src={post.postedBy?.profileImg} name={post.postedBy?.username} mr={3} />
-              <Box>
-                <Text fontSize="sm" fontWeight="bold">
-                  {post.postedBy?.username || "Unknown"}
-                </Text>
-              </Box>
-            </Flex>
-
-            {post.images ? (
-              <Box borderRadius="8px" overflow="hidden" mb={2}>
-                <Image src={post.images} alt="Post image" objectFit="cover" w="100%" />
-              </Box>
-            ) : post.media?.[0]?.type === "video" ? (
-              <AdaptiveVideo src={post.media[0].url} streamUrl={post.media[0].streamUrl} width="100%" aria-label="Shared reel" />
-            ) : null}
-
-            {post.caption && (
-              <Text fontSize="sm" noOfLines={2}>
-                {post.caption}
-              </Text>
-            )}
-          </Box>
-        );
-      }
-    }
-
-    // regular img / video / audio
-    if (message.file) {
-      return <a href={message.file} target="_blank" rel="noreferrer">Open attachment</a>;
-    }
+    if (message.file) return <ChatAttachment url={message.file} attachment={message.attachment} />;
 
     if (message.img) {
       return <Image src={message.img} borderRadius="10px" maxW="100%" w="100%" alt="Shared content" />;
@@ -260,7 +200,7 @@ const Message = ({
   };
 
   // message content display: handle deleted, emoji-only (larger), edited
-  const content = useMemo(() => {
+  function messageContent() {
     if (isDeletedForMe) {
       return (
         <Text fontStyle="italic" fontSize="sm" color={secondaryText}>
@@ -268,14 +208,6 @@ const Message = ({
         </Text>
       );
     }
-    if (isDeletedForAll) {
-      return (
-        <Text fontStyle="italic" fontSize="sm" color={secondaryText}>
-          This message was deleted
-        </Text>
-      );
-    }
-
     if (isEditing) return null; // editing UI handled separately
 
     // emoji-only large rendering
@@ -287,24 +219,20 @@ const Message = ({
       );
     }
 
-    // If it's a post share and no text provided, show a short label
-    if (message.type === "post" && (!message.text || message.text.trim() === "")) {
-      return (
-        <Text color={isOwnMessage ? "blue.100" : "gray.200"} fontSize="sm" fontWeight="semibold">
-          Shared a post
-        </Text>
-      );
-    }
+    if (stickerLabel(message.text)) return <MessageSticker text={message.text} />;
+    if (message.type === "post" && message.text === "Shared a post") return null;
 
-    return message.text ? <Text color="inherit" fontSize="sm" wordBreak="break-word">{message.text}</Text> : null;
-  }, [message.text, isEditing, isDeletedForMe, isDeletedForAll, isOwnMessage, message.type, secondaryText]);
+    return message.text && message.type !== "location" ? <Text color="inherit" fontSize="sm" wordBreak="break-word">
+      {renderMentions(message.text, message.mentions, currentUser._id)}
+    </Text> : null;
+  }
 
   return (
     <MotionFlex
       direction="column"
       alignSelf={isOwnMessage ? "flex-end" : "flex-start"}
       minW="110px"
-      width={message.video || message.postReference || message.img || message.type === "poll" ? "min(100%, 440px)" : "fit-content"}
+      width={message.video || message.postReference || message.file || message.img || message.attachments?.length || message.type === "poll" ? "min(100%, 440px)" : "fit-content"}
       maxW="100%"
       py={2}
       pl={3}
@@ -350,7 +278,7 @@ const Message = ({
                 })()}
               </Text>
               <Text fontSize="sm" color={replyColor} noOfLines={2}>
-                {message.replyTo?.text}
+                {stickerLabel(message.replyTo?.text) || message.replyTo?.text}
               </Text>
             </Box>
             {(message.replyTo?.img || message.replyTo?.video) && (
@@ -363,6 +291,7 @@ const Message = ({
       )}
 
       {/* Editing UI */}
+      {!isDeletedForMe && (message.storyReference?.id || message.noteReply) && <ChatContentPreview message={message} />}
       {isEditing ? (
         <Box width="100%" mt={2}>
           <Textarea value={localEditingText} onChange={(e) => setLocalEditingText(e.target.value)} autoFocus mb={2} color="black" bg="white" />
@@ -378,15 +307,15 @@ const Message = ({
       ) : (
         <>
           {/* Text / Emoji / Deleted content */}
-          {content}
+          {messageContent()}
 
           {/* Media / Post Reference */}
-          {renderMedia()}
+          {!isDeletedForMe && renderMedia()}
         </>
       )}
 
       {/* Edited indicator */}
-      {!isEditing && message.edited && !isDeletedForMe && !isDeletedForAll && (
+      {!isEditing && message.edited && !isDeletedForMe && (
         <Text fontSize="xx-small" align="right" mt={1} color="inherit" opacity={0.72}>
           (edited)
         </Text>
@@ -402,15 +331,15 @@ const Message = ({
       {/* Menu Actions */}
       {!isEditing && !isDeletedForMe && (
         <Flex position="absolute" top={2} right={2}>
-          <Menu>
+          <Menu placement="top-end">
             <MenuButton as={IconButton} icon={<BsThreeDotsVertical />} variant="ghost" size="xs" aria-label="Message options" />
-            <MenuList borderRadius="md" boxShadow="lg" p={2} bg={menuSurface} color={menuText}>
-              {isOwnMessage && <MenuItem onClick={() => setEditingMessageId(message._id)}>Edit</MenuItem>}
+            <Portal><MenuList borderRadius="md" boxShadow="lg" p={2} bg={menuSurface} color={menuText}>
+              {isOwnMessage && !message.location && <MenuItem onClick={() => setEditingMessageId(message._id)}>Edit</MenuItem>}
               <MenuItem
                 onClick={() =>
                   handelselectedMsg({
                     id: message._id,
-                    text: message.text,
+                    text: stickerLabel(message.text) || message.text || (message.attachments?.length ? `${message.attachments.length} attachments` : ""),
                     media: message.img || message.video || message.audio,
                     mediaType: message.img ? "img" : message.video ? "video" : message.audio ? "audio" : null,
                     sender: isOwnMessage ? "you" : message.sender?.username,
@@ -420,7 +349,7 @@ const Message = ({
                 Reply
               </MenuItem>
               <MenuItem onClick={() => handleDelete(message._id)}>Delete</MenuItem>
-            </MenuList>
+            </MenuList></Portal>
           </Menu>
         </Flex>
       )}
@@ -438,4 +367,4 @@ const Message = ({
   );
 };
 
-export default React.memo(Message);
+export default memo(Message);

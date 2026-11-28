@@ -1,6 +1,6 @@
-import { atom } from "recoil";
+import { defineState } from "../state/store";
 
-const authScreenAtom = atom({
+const authScreenAtom = defineState({
 	key: "authScreenAtom",
 	default: "login",
 });

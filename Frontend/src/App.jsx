@@ -3,18 +3,23 @@ import React, { Suspense, useEffect } from "react";
 import { Container, Box, Spinner } from "@chakra-ui/react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import Header from "./components/Header";
-import { useRecoilValue, useSetRecoilState } from "recoil";
+import PageErrorBoundary from "./components/PageErrorBoundary";
+import { useAppValue, useSetAppValue } from "./state/store";
 import userAtom from "./atom/userAtom";
 import savedPostsAtom from "./atom/savedPostsAtom";
 import NotifyAtom from "./atom/notifyAtom";
 import { conversationsAtom, messagesAtom, selectedConversationAtom } from "./atom/messagesAtom";
 import { useSocket } from "./context/SocketContext";
+import { purgeComposerDrafts } from "./lib/composerDrafts";
+import useInboxUnread from "./hooks/useInboxUnread";
+import { clearEphemeralCache, notesPath, prefetchEphemeral, storyFeedPath } from "./lib/ephemeralCache";
 
 // Lazy-loaded components
 const Userpage = React.lazy(() => import("./Pages/Userpage"));
 const PostPage = React.lazy(() => import("./Pages/PostPage"));
 const AuthPage = React.lazy(() => import("./Pages/AuthPage"));
 const DiscoveryPage = React.lazy(() => import("./Pages/DiscoveryPage"));
+const ReelsPage = React.lazy(() => import("./Pages/ReelsPage"));
 const Home = React.lazy(() => import("./Pages/Home"));
 const SearchPage = React.lazy(() => import("./Pages/SearchPage"));
 const ChatPage = React.lazy(() => import("./Pages/ChatPage"));
@@ -23,19 +28,22 @@ const ResetPasswordForm = React.lazy(() => import("./components/ForgotpassCard")
 const CreatePost = React.lazy(() => import("./components/CreatePost"));
 const NotificationPage = React.lazy(() => import("./Pages/NotificationPage"));
 const AccountActivityPage = React.lazy(() => import("./Pages/AccountActivityPage"));
+const AdminPage = React.lazy(() => import("./Pages/AdminPage"));
 const SettingPage = React.lazy(() => import("./Pages/SettingPage"));
+const StoryPage = React.lazy(() => import("./Pages/StoryPage"));
 
 function App() {
   const { pathname } = useLocation();
-  const user = useRecoilValue(userAtom);
-  const setNotify = useSetRecoilState(NotifyAtom);
-  const setUser = useSetRecoilState(userAtom);
+  const user = useAppValue(userAtom);
+  const setNotify = useSetAppValue(NotifyAtom);
+  const setUser = useSetAppValue(userAtom);
   const userId = user?._id;
   const { socket } = useSocket();
-  const setSaved = useSetRecoilState(savedPostsAtom);
-  const setConversation = useSetRecoilState(selectedConversationAtom);
-  const setInbox = useSetRecoilState(conversationsAtom);
-  const setMessages = useSetRecoilState(messagesAtom);
+  useInboxUnread(userId, socket);
+  const setSaved = useSetAppValue(savedPostsAtom);
+  const setConversation = useSetAppValue(selectedConversationAtom);
+  const setInbox = useSetAppValue(conversationsAtom);
+  const setMessages = useSetAppValue(messagesAtom);
 
   useEffect(() => {
     const clear = () => setUser(null);
@@ -48,6 +56,24 @@ function App() {
     setInbox([]);
     setMessages([]);
   }, [userId, setConversation, setInbox, setMessages]);
+
+  useEffect(() => () => clearEphemeralCache(userId), [userId]);
+
+  useEffect(() => {
+    const sweep = () => void purgeComposerDrafts().catch(() => {});
+    sweep();
+    const timer = setInterval(sweep, 60_000);
+    window.addEventListener("focus", sweep);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", sweep);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pathname === "/chat") void prefetchEphemeral(userId, notesPath);
+    if (pathname === "/" || pathname.startsWith("/stories/")) void prefetchEphemeral(userId, storyFeedPath);
+  }, [pathname, userId]);
 
   useEffect(() => {
     if (!userId) {
@@ -100,16 +126,17 @@ function App() {
   }, [userId, setSaved]);
 
   return (
-    <Box className={user ? `dayline-shell${pathname === "/chat" ? " chat-shell" : ""}` : undefined}
+    <Box className={user ? `dayline-shell${pathname === "/chat" ? " chat-shell" : pathname === "/reels" ? " reels-shell" : ""}` : undefined}
       position={"relative"} w="full" minHeight="100vh">
       <Container
-        maxW={pathname === "/chat" ? "none" : pathname === "/activity" ? "1080px" : pathname === "/" ? "1120px" : pathname === "/auth" ? "960px" : "760px"}
+        maxW={["/chat", "/reels"].includes(pathname) ? "none" : pathname === "/activity" ? "1080px" : pathname === "/" ? "1120px" : pathname === "/auth" ? "960px" : "760px"}
         minHeight="100vh"
        
         display="flex"
         flexDirection="column"
       >
         <Header />
+        <PageErrorBoundary key={pathname}>
         <Suspense fallback={<Spinner mx="auto" my={12} aria-label="Loading page" />}>
           <Routes>
             <Route path="/" element={user ? <Home /> : <Navigate to="/auth" />} />
@@ -121,14 +148,17 @@ function App() {
             <Route path="/create" element={user ? <CreatePost page /> : <Navigate to="/auth" />} />
             <Route path="/discover" element={user ? <DiscoveryPage key="discover" /> : <Navigate to="/auth" />} />
             <Route path="/saved" element={user ? <DiscoveryPage key="saved" saved /> : <Navigate to="/auth" />} />
-            <Route path="/reels" element={user ? <DiscoveryPage key="reels" reels /> : <Navigate to="/auth" />} />
+            <Route path="/reels" element={user ? <ReelsPage /> : <Navigate to="/auth" />} />
             <Route path="/chat" element={user ? <ChatPage key={user._id} /> : <Navigate to="/auth" />} />
+            <Route path="/stories/:username" element={user ? <StoryPage user={user} /> : <Navigate to="/auth" />} />
             <Route path="/notifications" element={user ? <NotificationPage /> : <Navigate to="/auth" />} />
             <Route path="/activity" element={user ? <AccountActivityPage /> : <Navigate to="/auth" />} />
+            <Route path="/admin" element={user ? <AdminPage /> : <Navigate to="/auth" />} />
             <Route path="/settings" element={user ? <SettingPage /> : <Navigate to="/auth" />} />
             <Route path="/:username/post/:pid" element={<PostPage />} />
           </Routes>
         </Suspense>
+        </PageErrorBoundary>
       </Container>
     </Box>
   );

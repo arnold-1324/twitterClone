@@ -12,6 +12,11 @@ let ioInstance;
 const online = new Map();
 const userRoom = (id) => `account:${id}`;
 
+function rememberPresence(id) {
+  void User.updateOne({ _id: id }, { $max: { lastActiveAt: new Date() } }, { timestamps: false })
+    .catch((error) => console.error("Could not update chat presence:", error.message));
+}
+
 export async function belongsToConversation(conversationId, userId) {
   if (!mongoose.isObjectIdOrHexString(conversationId)) return false;
   const accountId = String(userId);
@@ -23,7 +28,7 @@ export async function belongsToConversation(conversationId, userId) {
   return Boolean(await Conversation.exists({ _id: conversationId, kind: { $ne: "group" }, participants: userId }));
 }
 
-export function setupSocket(server, origins) {
+export function setupSocket(server, origins, saveCallHistory) {
   const io = new Server(server, {
     maxHttpBufferSize: 32768,
     cors: { origin: origins, credentials: true },
@@ -33,7 +38,7 @@ export function setupSocket(server, origins) {
     },
   });
   ioInstance = io;
-  const bindCalls = createCallHandler(io, userRoom);
+  const bindCalls = createCallHandler(io, userRoom, saveCallHistory);
   io.engine.use(cookieParser());
 
   io.use(async (socket, next) => {
@@ -41,12 +46,13 @@ export function setupSocket(server, origins) {
       const claims = await readAccessSession(socket.request.cookies?.jwt);
       if (!claims) return next(new Error("Authentication required"));
       const { userId, sessionVersion, exp, sid } = claims;
-      const user = mongoose.isObjectIdOrHexString(userId) && await User.findById(userId).select("username sessionVersion").lean();
+      const user = mongoose.isObjectIdOrHexString(userId) && await User.findById(userId).select("username profileImg sessionVersion").lean();
       if (!user || (user.sessionVersion ?? 0) !== (sessionVersion ?? 0) || (online.get(String(userId))?.size ?? 0) >= 8) {
         return next(new Error("Authentication required"));
       }
       socket.data.userId = String(userId);
       socket.data.username = user.username;
+      socket.data.profileImg = user.profileImg;
       socket.data.exp = exp;
       socket.data.sid = sid;
       next();
@@ -82,7 +88,10 @@ export function setupSocket(server, origins) {
     const expires = socket.data.exp ? setTimeout(() => socket.disconnect(true), Math.max(0, socket.data.exp * 1000 - Date.now())) : null;
     expires?.unref();
     socket.emit("getOnlineUsers", [...online.keys()]);
-    if (connections.size === 1) publishPresence(userId);
+    if (connections.size === 1) {
+      rememberPresence(userId);
+      publishPresence(userId);
+    }
 
     let activeRoom;
     let requestedRoom;
@@ -167,6 +176,7 @@ export function setupSocket(server, origins) {
       connections.delete(socket.id);
       if (connections.size === 0) {
         online.delete(userId);
+        rememberPresence(userId);
         publishPresence(userId);
       }
     });

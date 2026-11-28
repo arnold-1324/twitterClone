@@ -9,7 +9,7 @@ import {
   WrapItem,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { useRecoilState, useRecoilValue } from "recoil";
+import { useAppState, useAppValue } from "../state/store";
 import userAtom from "../atom/userAtom";
 import { BsCheck2All, BsFillImageFill } from "react-icons/bs";
 import { selectedConversationAtom } from "../atom/messagesAtom";
@@ -17,8 +17,8 @@ import formatMessageTime from "../Utils/Timeformate";
 import { FaUsers } from "react-icons/fa";
 
 const Conversation = ({ conversation, onlineUsers }) => {
-  const currentUser = useRecoilValue(userAtom);
-  const [selectedConversation, setSelectedConversation] = useRecoilState(
+  const currentUser = useAppValue(userAtom);
+  const [selectedConversation, setSelectedConversation] = useAppState(
     selectedConversationAtom
   );
 

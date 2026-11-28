@@ -1,60 +1,58 @@
 import { Avatar, Button, Spinner } from "@chakra-ui/react";
-import { useState } from "react";
-import { FiArrowUpRight, FiCamera, FiEdit3 } from "react-icons/fi";
+import { FiArrowUpRight, FiHeart, FiPlus } from "react-icons/fi";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { useRecoilState, useRecoilValue } from "recoil";
+import { useAppState, useAppValue } from "../state/store";
 import Post from "../components/Post";
-import CreatePost from "../components/CreatePost";
+import StoryShelf from "../components/StoryShelf";
 import SuggestedUsers from "../components/SuggestedUsers";
 import postsAtom from "../atom/postsAtom";
 import usePostPages from "../hooks/usePostPages";
 import userAtom from "../atom/userAtom";
+import notifyAtom from "../atom/notifyAtom";
 
 export default function HomePage() {
-  const [posts, setPosts] = useRecoilState(postsAtom);
-  const user = useRecoilValue(userAtom);
-  const [filter, setFilter] = useState("all");
+  const [posts, setPosts] = useAppState(postsAtom);
+  const user = useAppValue(userAtom);
+  const { unreadCount } = useAppValue(notifyAtom);
   const { loading, error, cursor, retry, loadMore } = usePostPages("/api/posts/feed", setPosts);
+  const restored = useRef(false);
+  const scrollKey = `home-scroll:${user._id}`;
+  useLayoutEffect(() => {
+    if (restored.current || loading || !posts.length) return;
+    restored.current = true;
+    try { window.scrollTo(0, Number(sessionStorage.getItem(scrollKey)) || 0); }
+    catch { /* Browsing storage can be disabled. */ }
+  }, [loading, posts.length, scrollKey]);
 
-  const people = [...new Map([user, ...posts.map((post) => post.postedBy).filter((author) => author?._id)]
-    .map((person) => [person._id, person])).values()].slice(0, 8);
-  const items = filter === "photos" ? posts.filter((post) => post.imageUrl) : posts;
+  useEffect(() => () => {
+    if (!restored.current) return;
+    try { sessionStorage.setItem(scrollKey, String(window.scrollY)); }
+    catch { /* Browsing storage can be disabled. */ }
+  }, [scrollKey]);
 
   return (
     <main className="feed-layout">
-      <section aria-labelledby="feed-title">
-        <div className="feed-title">
-          <div className="discovery-header"><h1 id="feed-title">Your feed</h1><Link className="feed-permalink" to="/discover">Discover posts</Link></div>
-          <div className="feed-tabs" aria-label="Filter posts">
-            <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All posts</button>
-            <button type="button" aria-pressed={filter === "photos"} onClick={() => setFilter("photos")}><FiCamera /> Photos</button>
-          </div>
-        </div>
-        {people.length > 1 && <nav className="feed-people" aria-label="People in your feed">
-          {people.map((person) => (
-            <Link key={person._id} to={`/${person.username}`}>
-              <Avatar name={person.fullName} src={person.profileImg} size="md" />
-              <span>{person.username}</span>
-            </Link>
-          ))}
-        </nav>}
-        <div className="social-panel feed-composer">
-          <Avatar name={user.fullName} src={user.profileImg} size="sm" />
-          <CreatePost inline onCreated={() => setFilter("all")} />
-        </div>
-        {loading && <div className="feed-state" role="status"><Spinner /> Loading posts…</div>}
+      <section aria-label="Home feed">
+        <header className="home-stream-header">
+          <Link to="/create" aria-label="Create post"><FiPlus /><span>Create</span></Link>
+          <img src="/dark-logo-192.png" alt="" width="30" height="30" />
+          <Link to="/notifications" aria-label={unreadCount ? `Activity, ${unreadCount} unread` : "Activity"}>
+            <FiHeart />{unreadCount > 0 && <i aria-hidden="true" />}
+          </Link>
+        </header>
+        <StoryShelf user={user} />
+        {loading && !posts.length && <div className="feed-state" role="status"><Spinner /> Loading…</div>}
         {error && <div className="social-panel feed-state" role="alert">{error}
           <Button size="sm" variant="outline" onClick={retry}>Try again</Button>
         </div>}
-        {!loading && !error && items.length === 0 && (
-          <div className="social-panel feed-state">
-            <span className="feed-state-icon">{filter === "photos" ? <FiCamera /> : <FiEdit3 />}</span>
-            <h2>{filter === "photos" ? "No photos yet" : "Your feed starts here"}</h2>
-            <p>{filter === "photos" ? "Photo posts from you and the people you follow will appear here." : "Write your first post or follow someone to see their updates."}</p>
-          </div>
-        )}
-        {items.map((post) => <Post key={post._id} post={post} postedBy={post.postedBy} />)}
-        {cursor && <Button onClick={loadMore} isLoading={loading} variant="outline">Load older posts</Button>}
+        {!loading && !error && !posts.length && <div className="social-panel feed-state">
+          <p>Your feed is empty. Follow someone to see their posts here.</p>
+          <div className="feed-empty-actions"><Link to="/search">Find people</Link><Link to="/create">Create a post</Link></div>
+        </div>}
+        {posts.map((post, index) => <Post key={post._id} post={post} postedBy={post.postedBy}
+          playWhenVisible={post.kind === "reel"} showPermalink={false} priorityMedia={index === 0} />)}
+        {cursor && <Button onClick={loadMore} isLoading={loading} variant="outline">Load more</Button>}
       </section>
       <aside className="feed-sidebar" aria-label="People">
         <Link to={`/${user.username}`} className="social-panel feed-account">

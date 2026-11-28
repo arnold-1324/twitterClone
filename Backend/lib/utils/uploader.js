@@ -2,6 +2,39 @@ import multer from "multer";
 
 const storage = multer.memoryStorage();
 export const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024, files: 1, fields: 30 } });
+const messageLimit = 25 * 1024 * 1024;
+const messageBytes = Symbol("message bytes");
+const messageStorage = {
+  _handleFile(req, file, done) {
+    const chunks = [];
+    let size = 0;
+    let rejected = false;
+    file.stream.on("data", (chunk) => {
+      if (rejected) return;
+      req[messageBytes] = (req[messageBytes] || 0) + chunk.length;
+      if (req[messageBytes] > messageLimit) {
+        rejected = true;
+        chunks.length = 0;
+        done(new multer.MulterError("LIMIT_FILE_SIZE", file.fieldname));
+        return;
+      }
+      size += chunk.length;
+      chunks.push(chunk);
+    });
+    file.stream.on("end", () => {
+      if (!rejected) done(null, { buffer: Buffer.concat(chunks, size), size });
+    });
+  },
+  _removeFile(_req, file, done) {
+    delete file.buffer;
+    done(null);
+  },
+};
+export const uploadMessageMedia = multer({
+  storage: messageStorage,
+  limits: { fileSize: messageLimit + 1, files: 6, fields: 10, fieldSize: 24000, parts: 17 },
+}).array("media", 6);
+
 export const uploadPostImage = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 12, fieldSize: 16 * 1024, parts: 14 },
@@ -14,11 +47,11 @@ export const uploadPostImage = multer({
 });
 
 export const uploadCarousel = multer({
-  storage, limits: { fileSize: 4 * 1024 * 1024, files: 6, fields: 2, parts: 8, fieldSize: 4096 },
+  storage, limits: { fileSize: 4 * 1024 * 1024, files: 6, fields: 4, parts: 11, fieldSize: 4096 },
 }).fields([{ name: "image", maxCount: 1 }, { name: "media", maxCount: 6 }]);
 
 export const uploadReel = multer({
-  storage, limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 2, parts: 3, fieldSize: 4096 },
+  storage, limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 4, parts: 6, fieldSize: 4096 },
 }).single("video");
 
 export function isImage({ buffer, mimetype }) {
